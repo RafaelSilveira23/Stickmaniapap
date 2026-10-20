@@ -1,0 +1,69 @@
+{
+  "imagem": "jogador_azul.png",
+  "celula": [
+    64,
+    64
+  ],
+  "ancora_pes": [
+    32,
+    61
+  ],
+  "voltado_para": "direita",
+  "nota": "Todas as poses laterais estão voltadas para a DIREITA: para andar para a esquerda usa pygame.transform.flip(frame, True, False). fps = velocidade sugerida; loop = repete a animação",
+  "animacoes": {
+    "parado": {
+      "row": 0,
+      "frames": 3,
+      "fps": 6,
+      "loop": true
+    },
+    "correr_cima": {
+      "row": 1,
+      "frames": 3,
+      "fps": 8,
+      "loop": true
+    },
+    "correr_baixo": {
+      "row": 2,
+      "frames": 3,
+      "fps": 8,
+      "loop": true
+    },
+    "correr_esquerda": {
+      "row": 3,
+      "frames": 3,
+      "fps": 8,
+      "loop": true
+    },
+    "correr_direita": {
+      "row": 4,
+      "frames": 2,
+      "fps": 8,
+      "loop": true
+    },
+    "com_bola": {
+      "row": 5,
+      "frames": 4,
+      "fps": 8,
+      "loop": true
+    },
+    "passe": {
+      "row": 6,
+      "frames": 3,
+      "fps": 10,
+      "loop": false
+    },
+    "remate": {
+      "row": 7,
+      "frames": 2,
+      "fps": 10,
+      "loop": false
+    },
+    "colisao": {
+      "row": 8,
+      "frames": 3,
+      "fps": 6,
+      "loop": false
+    }
+  }
+}

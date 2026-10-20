@@ -1,0 +1,51 @@
+{
+  "imagem": "guarda_redes.png",
+  "celula": [
+    128,
+    128
+  ],
+  "ancora_pes": [
+    64,
+    125
+  ],
+  "voltado_para": "direita",
+  "nota": "Todas as poses laterais estão voltadas para a DIREITA: para andar para a esquerda usa pygame.transform.flip(frame, True, False). fps = velocidade sugerida; loop = repete a animação",
+  "animacoes": {
+    "parado": {
+      "row": 0,
+      "frames": 1,
+      "fps": 4,
+      "loop": true
+    },
+    "mover_cima": {
+      "row": 1,
+      "frames": 1,
+      "fps": 6,
+      "loop": true
+    },
+    "mover_baixo": {
+      "row": 2,
+      "frames": 1,
+      "fps": 6,
+      "loop": true
+    },
+    "mover_esquerda": {
+      "row": 3,
+      "frames": 1,
+      "fps": 6,
+      "loop": true
+    },
+    "mover_direita": {
+      "row": 4,
+      "frames": 1,
+      "fps": 6,
+      "loop": true
+    },
+    "defender": {
+      "row": 5,
+      "frames": 2,
+      "fps": 6,
+      "loop": false
+    }
+  }
+}
