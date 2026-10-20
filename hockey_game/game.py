@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""game.py - game loop com IA real, posicionamento tático e seleção automática de jogador."""
+"""game.py - game loop com IA real, posicionamento tático, mini-mapa e cartão de jogador."""
 import os
 import math
 import pygame
@@ -9,6 +9,7 @@ from player import Player
 from ball import Ball
 from ai import AgentIA
 from goalkeeper import Goalkeeper
+from ui import HUDController
 
 DURACAO_PARTE = 60 * 5   # 5 minutos por parte
 
@@ -20,21 +21,12 @@ class Game:
         pygame.display.set_caption(TITLE)
         self.clock = pygame.time.Clock()
 
-        self.font_hud = pygame.font.SysFont("Arial", 22, bold=True)
-        self.font_num = pygame.font.SysFont("Arial", 13, bold=True)
-        self.font_big = pygame.font.SysFont("Arial", 48, bold=True)
-        self.font_med = pygame.font.SysFont("Arial", 28, bold=True)
+        self.font_num = pygame.font.SysFont("Arial", 12, bold=True)
+        self.font_big = pygame.font.SysFont("Arial", 44, bold=True)
+        self.font_med = pygame.font.SysFont("Arial", 26, bold=True)
 
         self.rink = Rink()
-
-        # Marcador UI
-        _ui = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                           "..", "sprites_v2", "extras_ui")
-        raw_marc = pygame.image.load(os.path.join(_ui, "marcador_ui.png")).convert_alpha()
-        marc_h = HUD_H - 8
-        marc_w = int(raw_marc.get_width() * marc_h / raw_marc.get_height())
-        self._marcador_ui   = pygame.transform.scale(raw_marc, (marc_w, marc_h))
-        self._marcador_rect = self._marcador_ui.get_rect(center=(WIDTH // 2, HUD_H // 2))
+        self.hud  = HUDController()
 
         # ── Criar jogadores e agentes IA ─────────────────────────────────
         self._criar_equipas()
@@ -48,6 +40,7 @@ class Game:
         # Jogador humano começa com a bola
         self.bola.definir_dono(self.jogador_humano)
         self.jogador_humano.tem_bola = True
+        self.bola.seguir_jogador(self.jogador_humano)
 
         # ── Estado do jogo ───────────────────────────────────────────────
         self.golos_azul     = 0
@@ -63,47 +56,44 @@ class Game:
         self.show_debug = False
 
     # ================================================================== #
-    # Criação das equipas com posições táticas                            #
+    # Criação das equipas com posições táticas e atributos                #
     # ================================================================== #
 
     def _criar_equipas(self):
         cx = RINK_X + RINK_W // 2
         cy = RINK_Y + RINK_H // 2
+        r  = self.rink
 
-        r = self.rink
-        # Balizas: azul ataca à direita, vermelho ataca à esquerda
-        # (a equipa azul começa no lado direito)
-        bal_azul_ataca   = r.baliza_dir   # azul tenta marcar aqui? NÃO —
-        # Azul joga da direita para a esquerda:
-        #   baliza própria = direita, baliza adversária = esquerda
-        # Vermelho: baliza própria = esquerda, adversária = direita
-        bal_prop_azul  = r.baliza_dir
-        bal_adv_azul   = r.baliza_esq
-        bal_prop_verm  = r.baliza_esq
-        bal_adv_verm   = r.baliza_dir
+        bal_prop_azul = r.baliza_dir
+        bal_adv_azul  = r.baliza_esq
+        bal_prop_verm = r.baliza_esq
+        bal_adv_verm  = r.baliza_dir
 
-        # ── Equipa azul (lado direito do campo) ──────────────────────────
-        # Formato: [avançado, avançado, médio, defesa, defesa]
-        # Posições: x > cx (lado direito)
+        # ── Equipa Azul (FC Porto) — lado direito ────────────────────────
+        # (pos, papel, numero, nome, (vel, rem, pas, def))
         dados_azul = [
-            # (pos_inicial, papel, numero, nome)
-            ((cx + 80,  cy),       "avancado", 10, "Silva"),
-            ((cx + 240, cy - 110), "avancado",  9, "Costa"),
-            ((cx + 240, cy + 110), "medio",     8, "Ramos"),
-            ((cx + 400, cy - 80),  "defesa",    4, "Faria"),
-            ((cx + 400, cy + 80),  "defesa",    5, "Neves"),
+            ((cx + 70,  cy),       "avancado", 10, "Silva", (88, 85, 76, 58)),
+            ((cx + 200, cy - 90),  "avancado",  9, "Costa", (84, 88, 72, 55)),
+            ((cx + 200, cy + 90),  "medio",     8, "Ramos", (80, 78, 88, 74)),
+            ((cx + 360, cy - 70),  "defesa",    4, "Faria", (76, 68, 78, 87)),
+            ((cx + 360, cy + 70),  "defesa",    5, "Neves", (74, 62, 74, 90)),
         ]
 
-        self.equipa_azul  = pygame.sprite.Group()
-        self.agentes_azul = []
+        self.equipa_azul    = pygame.sprite.Group()
+        self.agentes_azul   = []
         self.jogador_humano = None
 
-        for i, (pos, papel, num, nome) in enumerate(dados_azul):
+        for i, (pos, papel, num, nome, stats) in enumerate(dados_azul):
             humano = (i == 0)
             p = Player("azul", pos, numero=num, nome=nome, humano=humano, teclas="wasd")
-            p.papel = papel
-            pos_base = self._pos_tatica_azul(papel, pos)
-            p.pos_tatica = pos_base
+            p.papel           = papel
+            p.stat_velocidade = stats[0]
+            p.stat_remate     = stats[1]
+            p.stat_passe      = stats[2]
+            p.stat_defesa     = stats[3]
+            pos_base          = self._pos_tatica_azul(papel, pos)
+            p.pos_tatica      = pos_base
+
             self.equipa_azul.add(p)
             if humano:
                 self.jogador_humano = p
@@ -113,23 +103,30 @@ class Game:
                                  bal_prop_azul, bal_adv_azul)
                 self.agentes_azul.append(agente)
 
-        # ── Equipa vermelha (lado esquerdo do campo) — toda IA ──────────
+        # ── Equipa Vermelha (Riba d'Ave) — lado esquerdo (toda IA) ───────
         dados_verm = [
-            ((cx - 80,  cy),       "avancado",  9, "López"),
-            ((cx - 240, cy - 110), "avancado", 10, "García"),
-            ((cx - 240, cy + 110), "medio",     8, "Martín"),
-            ((cx - 400, cy - 80),  "defesa",    4, "Pérez"),
-            ((cx - 400, cy + 80),  "defesa",    5, "Ruiz"),
+            ((cx - 70,  cy),       "avancado",  9, "López",  (86, 86, 74, 56)),
+            ((cx - 200, cy - 90),  "avancado", 10, "García", (83, 87, 70, 54)),
+            ((cx - 200, cy + 90),  "medio",     8, "Martín", (79, 76, 85, 72)),
+            ((cx - 360, cy - 70),  "defesa",    4, "Pérez",  (75, 66, 76, 86)),
+            ((cx - 360, cy + 70),  "defesa",    5, "Ruiz",   (73, 60, 72, 88)),
         ]
 
         self.equipa_vermelha   = pygame.sprite.Group()
         self.agentes_vermelhos = []
-        self.jogador_humano2   = None   # sem jogador 2
+        self.jogador_humano2   = None
 
-        for pos, papel, num, nome in dados_verm:
+        for pos, papel, num, nome, stats in dados_verm:
             p = Player("vermelho", pos, numero=num, nome=nome, humano=False)
+            p.papel           = papel
+            p.stat_velocidade = stats[0]
+            p.stat_remate     = stats[1]
+            p.stat_passe      = stats[2]
+            p.stat_defesa     = stats[3]
+            pos_base          = self._pos_tatica_verm(papel, pos)
+            p.pos_tatica      = pos_base
+
             self.equipa_vermelha.add(p)
-            pos_base = self._pos_tatica_verm(papel, pos)
             agente = AgentIA(p, papel, "vermelho", pos_base,
                              bal_prop_verm, bal_adv_verm)
             self.agentes_vermelhos.append(agente)
@@ -138,52 +135,44 @@ class Game:
             *self.equipa_azul, *self.equipa_vermelha
         )
 
-        # ── Guarda-redes ─────────────────────────────────────────────────
-        cy_rink = RINK_Y + RINK_H // 2
-        r = self.rink
-
-        # GR azul: defende a baliza direita, fica ligeiramente dentro do campo
+        # ── Guarda-redes (posicionados sobre as linhas de golo) ──────────
         self.gr_azul = Goalkeeper(
             equipa="azul", lado="dir",
             baliza_rect=r.zona_gr_dir,
-            pos_x_fixo=r.rect.right - 18
+            pos_x_fixo=r.linha_golo_dir_x - 4
         )
-        # GR vermelho: defende a baliza esquerda
         self.gr_vermelho = Goalkeeper(
             equipa="vermelho", lado="esq",
             baliza_rect=r.zona_gr_esq,
-            pos_x_fixo=r.rect.left + 18
+            pos_x_fixo=r.linha_golo_esq_x + 4
         )
         self.grupo_gr = pygame.sprite.Group(self.gr_azul, self.gr_vermelho)
 
     def _pos_tatica_azul(self, papel: str, pos_inicial: tuple) -> tuple:
-        """Posição tática de referência para a IA azul."""
         cx = RINK_X + RINK_W // 2
-        cy = RINK_Y + RINK_H // 2
         if papel == "avancado":
-            return (cx + 120, pos_inicial[1])
+            return (cx + 90, pos_inicial[1])
         elif papel == "medio":
-            return (cx + 280, pos_inicial[1])
-        else:  # defesa
-            return (cx + 400, pos_inicial[1])
+            return (cx + 220, pos_inicial[1])
+        else:
+            return (cx + 360, pos_inicial[1])
 
     def _pos_tatica_verm(self, papel: str, pos_inicial: tuple) -> tuple:
         cx = RINK_X + RINK_W // 2
-        cy = RINK_Y + RINK_H // 2
         if papel == "avancado":
-            return (cx - 120, pos_inicial[1])
+            return (cx - 90, pos_inicial[1])
         elif papel == "medio":
-            return (cx - 280, pos_inicial[1])
+            return (cx - 220, pos_inicial[1])
         else:
-            return (cx - 400, pos_inicial[1])
+            return (cx - 360, pos_inicial[1])
 
     # ================================================================== #
-    # Game loop                                                            #
+    # Game Loop                                                            #
     # ================================================================== #
 
     def run(self):
         while self.running:
-            dt = min(self.clock.tick(FPS) / 1000, 0.05)
+            dt = min(self.clock.tick(FPS) / 1000.0, 0.05)
             self.handle_events()
             self.update(dt)
             self.draw()
@@ -206,13 +195,26 @@ class Game:
                     self._acao_passe()
                 elif event.key == pygame.K_x:
                     self._acao_remate()
-                elif event.key == pygame.K_TAB:
+                elif event.key in (pygame.K_TAB, pygame.K_c, pygame.K_SPACE):
                     self._selecionar_jogador_proximo()
                 elif event.key == pygame.K_r and self.fim_jogo:
                     self.__init__()
+            elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                self._tratar_clique_botoes(event.pos)
+
+    def _tratar_clique_botoes(self, pos):
+        for chave, btn in self.hud.btn_rects.items():
+            if btn["rect"].collidepoint(pos):
+                if chave == "passe":
+                    self._acao_passe()
+                elif chave == "remate":
+                    self._acao_remate()
+                elif chave in ("defender", "acelerar"):
+                    self._selecionar_jogador_proximo()
+                return
 
     # ================================================================== #
-    # Ações do humano                                                      #
+    # Ações do Jogador Humano                                              #
     # ================================================================== #
 
     def _direcao_vec(self, jogador=None) -> pygame.math.Vector2:
@@ -221,7 +223,7 @@ class Game:
         if hasattr(jogador, "vetor_direcao") and jogador.vetor_direcao.length_squared() > 0:
             return pygame.math.Vector2(jogador.vetor_direcao)
         mapa = {"direita":(1,0),"esquerda":(-1,0),"cima":(0,-1),"baixo":(0,1)}
-        return pygame.math.Vector2(mapa.get(jogador.direcao, (1, 0)))
+        return pygame.math.Vector2(mapa.get(jogador.direcao, (-1, 0)))
 
     def _acao_passe(self):
         if self.jogador_humano.tem_bola and self.jogo_ativo:
@@ -236,9 +238,9 @@ class Game:
                 to_j = pygame.math.Vector2(j.pos_x - self.jogador_humano.pos_x,
                                            j.pos_y - self.jogador_humano.pos_y)
                 dist = to_j.length()
-                if 30 < dist < 480:
+                if 30 < dist < 500:
                     dot = direcao.dot(to_j.normalize())
-                    if dot > 0.35:  # no cone da direção apontada
+                    if dot > 0.35:
                         score = dot * (1.0 - (dist / 1200.0))
                         if score > melhor_score:
                             melhor_score = score
@@ -255,16 +257,8 @@ class Game:
         if self.jogador_humano.tem_bola and self.jogo_ativo:
             self.jogador_humano.fazer_remate(self.bola, self._direcao_vec(self.jogador_humano))
 
-    def _acao_passe2(self):
-        if self.jogador_humano2 and self.jogador_humano2.tem_bola and self.jogo_ativo:
-            self.jogador_humano2.fazer_passe(self.bola, self._direcao_vec(self.jogador_humano2))
-
-    def _acao_remate2(self):
-        if self.jogador_humano2 and self.jogador_humano2.tem_bola and self.jogo_ativo:
-            self.jogador_humano2.fazer_remate(self.bola, self._direcao_vec(self.jogador_humano2))
-
     def _selecionar_jogador_proximo(self):
-        """TAB: passa o controlo para o jogador azul mais perto da bola."""
+        """TAB / C: passa o controlo para o jogador azul mais perto da bola."""
         melhor = None
         melhor_dist = float("inf")
         for j in self.equipa_azul:
@@ -278,7 +272,6 @@ class Game:
             self._trocar_humano(melhor)
 
     def _trocar_humano(self, novo: Player):
-        """Troca o jogador controlado pelo humano mantendo os papéis táticos corretos."""
         if novo == self.jogador_humano:
             return
 
@@ -287,14 +280,12 @@ class Game:
         antigo.selecionado = False
         antigo.set_target(0.0, 0.0)
 
-        # Preserva o papel tático e posição de referência original do jogador anterior
         papel    = getattr(antigo, "papel", "avancado")
         pos_base = getattr(antigo, "pos_tatica", self._pos_tatica_azul(papel, (antigo.pos_x, antigo.pos_y)))
         agente   = AgentIA(antigo, papel, "azul", pos_base,
                            self.rink.baliza_dir, self.rink.baliza_esq)
         self.agentes_azul.append(agente)
 
-        # Ativa o controlo humano no novo jogador
         self.agentes_azul = [a for a in self.agentes_azul if a.jogador != novo]
         novo.humano      = True
         novo.selecionado = True
@@ -314,62 +305,51 @@ class Game:
             self._fim_de_parte()
             return
 
-        # Seleção automática: se a bola estiver livre, seleciona o azul mais perto
+        # Auto-seleção inteligente
         self._auto_selecionar()
 
-        # IA vermelha
+        # IA Vermelha
         lista_verm = list(self.equipa_vermelha)
         lista_azul = list(self.equipa_azul)
         for agente in self.agentes_vermelhos:
             colegas = [j for j in lista_verm if j != agente.jogador]
             agente.update(dt, self.bola, colegas, lista_azul)
 
-        # IA azul (jogadores não humanos)
+        # IA Azul (colegas de equipa)
         for agente in self.agentes_azul:
-            # Incluir o jogador humano na lista de "colegas" para o cálculo de quem persegue
             colegas_com_humano = [j for j in lista_azul if j != agente.jogador]
             agente.update(dt, self.bola, colegas_com_humano, lista_verm)
 
-        # Update de todos os jogadores (movimento + animação)
+        # Atualizar todos os jogadores (com colisão contra as balizas do campo)
         for j in self.todos_jogadores:
-            j.update(dt, self.rink.rect, self.bola)
+            j.update(dt, self.rink.rect, self.bola, self.rink)
 
-        # Colisões entre jogadores (separação física)
+        # Colisões físicas entre jogadores (separação + perda de bola)
         todos = list(self.todos_jogadores)
         for i in range(len(todos)):
             for k in range(i + 1, len(todos)):
                 todos[i].empurrar_separar(todos[k], self.bola)
 
-        # Bola
-        resultado = self.bola.update(
-            dt, self.rink.rect,
-            self.rink.baliza_esq, self.rink.baliza_dir,
-            todos_jogadores=todos
-        )
+        # Atualizar bola (com física de tabelas e balizas)
+        resultado = self.bola.update(dt, self.rink, todos_jogadores=todos)
 
-        # Guarda-redes: update + bloquear bola
+        # Guarda-redes
         self.gr_azul.update(dt, self.bola)
         self.gr_vermelho.update(dt, self.bola)
         self.gr_azul.bloquear_bola(self.bola)
         self.gr_vermelho.bloquear_bola(self.bola)
 
-        # A baliza direita é do Azul (logo golo da equipa Vermelha)
-        # A baliza esquerda é do Vermelho (logo golo da equipa Azul)
-        if resultado == "golo_dir":
-            self._golo("vermelho")
-        elif resultado == "golo_esq":
+        # Golos
+        if resultado == "golo_azul":
             self._golo("azul")
+        elif resultado == "golo_vermelho":
+            self._golo("vermelho")
 
         if self._msg_timer > 0:
             self._msg_timer -= dt
 
     def _auto_selecionar(self):
-        """
-        Gere a troca de controlo do jogador azul:
-        1. Se um colega azul tem a bola, o humano passa a controlá-lo de imediato.
-        2. Se a bola está livre e lenta, seleciona o jogador azul mais próximo sem oscilação.
-        """
-        # Se a bola está com um colega azul, passa o controlo imediatamente para ele
+        # Se um colega apanhou a bola, passa o controlo imediatamente para ele
         if self.bola.dono is not None:
             if self.bola.dono in self.equipa_azul and self.bola.dono != self.jogador_humano:
                 self._trocar_humano(self.bola.dono)
@@ -378,7 +358,7 @@ class Game:
         if self.jogador_humano.tem_bola:
             return
 
-        # Durante um remate/passe veloz, não muda de jogador no meio da trajetória
+        # Durante um remate ou passe rápido, não troca a meio da trajetória
         if self.bola.vel.length() > 220:
             return
 
@@ -392,45 +372,44 @@ class Game:
             if j == self.jogador_humano:
                 continue
             d = math.hypot(j.pos_x - self.bola.pos_x, j.pos_y - self.bola.pos_y)
-            if d < melhor_dist - 80:   # margem para evitar alternâncias bruscas
+            if d < melhor_dist - 80:
                 melhor_dist = d
                 melhor = j
         if melhor != self.jogador_humano:
             self._trocar_humano(melhor)
 
     # ------------------------------------------------------------------ #
-    # Golos e partes                                                       #
+    # Golos e Fim de Parte                                                #
     # ------------------------------------------------------------------ #
 
     def _golo(self, equipa: str):
         if equipa == "azul":
             self.golos_azul += 1
-            self._msg_texto = "GOLO!  Equipa Azul"
+            self._msg_texto = "GOLO!  FC PORTO"
         else:
             self.golos_vermelho += 1
-            self._msg_texto = "GOLO!  Equipa Vermelha"
+            self._msg_texto = "GOLO!  RIBA D'AVE"
         self._msg_timer = 2.5
         self._repor_posicoes()
 
     def _repor_posicoes(self):
-        """Volta todos ao centro após golo."""
         cx = RINK_X + RINK_W // 2
         cy = RINK_Y + RINK_H // 2
         self.bola.repor((cx, cy))
 
         posicoes_azul = [
-            (cx + 80,  cy),
-            (cx + 240, cy - 110),
-            (cx + 240, cy + 110),
-            (cx + 400, cy - 80),
-            (cx + 400, cy + 80),
+            (cx + 70,  cy),
+            (cx + 200, cy - 90),
+            (cx + 200, cy + 90),
+            (cx + 360, cy - 70),
+            (cx + 360, cy + 70),
         ]
         posicoes_verm = [
-            (cx - 80,  cy),
-            (cx - 240, cy - 110),
-            (cx - 240, cy + 110),
-            (cx - 400, cy - 80),
-            (cx - 400, cy + 80),
+            (cx - 70,  cy),
+            (cx - 200, cy - 90),
+            (cx - 200, cy + 90),
+            (cx - 360, cy - 70),
+            (cx - 360, cy + 70),
         ]
         for j, pos in zip(list(self.equipa_azul), posicoes_azul):
             j.pos_x, j.pos_y = float(pos[0]), float(pos[1])
@@ -446,14 +425,14 @@ class Game:
             j.rect.center = pos
             j.tem_bola = False
 
-        # Dá a bola ao jogador humano e posiciona-a de imediato
+        # Dá a bola ao jogador humano
         self.bola.definir_dono(self.jogador_humano)
         self.jogador_humano.tem_bola = True
         self.bola.seguir_jogador(self.jogador_humano)
 
-        # Repor guarda-redes ao centro das balizas
-        self.gr_azul.pos_y     = float(self.rink.baliza_dir.centery)
-        self.gr_vermelho.pos_y = float(self.rink.baliza_esq.centery)
+        # Repor guarda-redes
+        self.gr_azul.pos_y     = float(self.rink.rect.centery)
+        self.gr_vermelho.pos_y = float(self.rink.rect.centery)
 
     def _fim_de_parte(self):
         if self.parte == 1:
@@ -467,27 +446,38 @@ class Game:
             self.fim_jogo   = True
 
     # ================================================================== #
-    # Desenho                                                              #
+    # Desenho Principal                                                    #
     # ================================================================== #
 
     def draw(self):
         self.screen.fill(COR_FUNDO)
+
+        # 1. Ringue e Balizas traseiras
         self.rink.draw(self.screen)
 
-        # Guarda-redes atrás das balizas frontais mas à frente do campo
+        # 2. Guarda-redes
         self.grupo_gr.draw(self.screen)
 
+        # 3. Jogadores de campo e bola
         self.todos_jogadores.draw(self.screen)
         self.sprites_bola.draw(self.screen)
+
+        # 4. Postes frontais e travessas das balizas
         self.rink.draw_frente(self.screen)
 
+        # 5. Indicadores por cima dos jogadores
         for j in self.todos_jogadores:
-            j.draw_extra(self.screen, self.font_num)
+            j.draw_extra(self.screen, self.font_num, self.show_debug)
         for gr in self.grupo_gr:
             gr.draw_extra(self.screen, self.font_num)
 
-        self._draw_hud()
+        # 6. Marcador Superior do Mockup
+        self.hud.draw_top_bar(self.screen, self)
 
+        # 7. Painel Inferior (Mini-mapa, Cartão de Jogador e Controlos)
+        self.hud.draw_bottom_panel(self.screen, self)
+
+        # 8. Mensagens de Golo / Fim de Jogo
         if self._msg_timer > 0:
             self._draw_mensagem(self._msg_texto)
         if self.fim_jogo:
@@ -497,102 +487,14 @@ class Game:
 
         pygame.display.flip()
 
-    # ------------------------------------------------------------------ #
-    # HUD                                                                  #
-    # ------------------------------------------------------------------ #
-
-    def _draw_hud(self):
-        # ── Fundo da barra ───────────────────────────────────────────────
-        pygame.draw.rect(self.screen, (15, 22, 45), (0, 0, WIDTH, HUD_H))
-        pygame.draw.line(self.screen, (40, 65, 140), (0, HUD_H), (WIDTH, HUD_H), 2)
-
-        # ── Layout do marcador (igual ao mockup) ─────────────────────────
-        # Bloco central do marcador: começa a 300px da esquerda, 980px de largura
-        marc_x  = 260
-        marc_w  = WIDTH - 520
-        linha_h = HUD_H // 2   # cada linha tem metade da altura do HUD
-
-        # Linha 1 — Equipa Azul (casa)  ─────────────────────────────────
-        cor_azul = (40, 90, 190)
-        pygame.draw.rect(self.screen, cor_azul,
-                         (marc_x, 0, marc_w, linha_h))
-
-        # Linha 2 — Equipa Vermelha (fora) ──────────────────────────────
-        cor_verm = (160, 25, 25)
-        pygame.draw.rect(self.screen, cor_verm,
-                         (marc_x, linha_h, marc_w, linha_h))
-
-        # Separador horizontal entre as duas linhas
-        pygame.draw.line(self.screen, (0,0,0,80),
-                         (marc_x, linha_h), (marc_x + marc_w, linha_h), 1)
-
-        # ── Quadrado colorido (escudo placeholder) ───────────────────────
-        esc_w = 28
-        pygame.draw.rect(self.screen, (200, 210, 255),
-                         (marc_x + 8, 6, esc_w, linha_h - 12), border_radius=3)
-        pygame.draw.rect(self.screen, (220, 60, 60),
-                         (marc_x + 8, linha_h + 6, esc_w, linha_h - 12), border_radius=3)
-
-        # ── Nomes das equipas ────────────────────────────────────────────
-        font_nome = pygame.font.SysFont("Arial", 15, bold=True)
-        t = font_nome.render("Equipa Azul", True, (255, 255, 255))
-        self.screen.blit(t, (marc_x + 8 + esc_w + 6, linha_h // 2 - t.get_height() // 2))
-        t = font_nome.render("Equipa Vermelha", True, (255, 255, 255))
-        self.screen.blit(t, (marc_x + 8 + esc_w + 6, linha_h + linha_h // 2 - t.get_height() // 2))
-
-        # ── Resultado (grande, no lado direito do bloco) ─────────────────
-        font_golo = pygame.font.SysFont("Arial", 32, bold=True)
-        res_x = marc_x + marc_w - 60
-
-        t_az = font_golo.render(str(self.golos_azul), True, (255, 255, 255))
-        self.screen.blit(t_az, (res_x - t_az.get_width() // 2,
-                                 linha_h // 2 - t_az.get_height() // 2))
-
-        t_vm = font_golo.render(str(self.golos_vermelho), True, (255, 255, 255))
-        self.screen.blit(t_vm, (res_x - t_vm.get_width() // 2,
-                                 linha_h + linha_h // 2 - t_vm.get_height() // 2))
-
-        # ── Cronómetro + Parte (à direita do bloco central) ──────────────
-        mins = max(0, int(self.tempo_restante)) // 60
-        segs = max(0, int(self.tempo_restante)) % 60
-        cx_time = marc_x + marc_w + 80
-
-        font_time = pygame.font.SysFont("Arial", 28, bold=True)
-        t_time = font_time.render(f"{mins:02d}:{segs:02d}", True, (255, 255, 255))
-        self.screen.blit(t_time, (cx_time - t_time.get_width() // 2, 12))
-
-        font_parte = pygame.font.SysFont("Arial", 13)
-        t_parte = font_parte.render(f"{self.parte}.ª Parte", True, (160, 180, 220))
-        self.screen.blit(t_parte, (cx_time - t_parte.get_width() // 2,
-                                    HUD_H - t_parte.get_height() - 8))
-
-        # ── Controlos (canto inferior esquerdo do ecrã) ──────────────────
-        font_ctrl = pygame.font.SysFont("Arial", 12)
-        for i, txt in enumerate(["WASD / Setas  Mover",
-                                  "SHIFT  Sprint",
-                                  "Z  Passe    X  Remate",
-                                  "TAB  Trocar jogador"]):
-            t = font_ctrl.render(txt, True, (100, 125, 165))
-            self.screen.blit(t, (10, HEIGHT - (4 - i) * 16))
-
-        # ── Jogador controlado ────────────────────────────────────────────
-        font_ctrl2 = pygame.font.SysFont("Arial", 13, bold=True)
-        j1 = self.jogador_humano
-        t1 = font_ctrl2.render(f"#{j1.numero} {j1.nome}", True, (180, 210, 255))
-        self.screen.blit(t1, (WIDTH - t1.get_width() - 12, HEIGHT - 18))
-
-    # ------------------------------------------------------------------ #
-    # Mensagens                                                            #
-    # ------------------------------------------------------------------ #
-
     def _draw_mensagem(self, texto: str):
         ov = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
         ov.fill((0, 0, 0, 110))
         self.screen.blit(ov, (0, 0))
-        for cor, off in [((0,0,0), 3), ((255,220,50), 0)]:
+        for cor, off in [((0,0,0), 3), ((255, 220, 50), 0)]:
             t = self.font_big.render(texto, True, cor)
-            self.screen.blit(t, (WIDTH//2 - t.get_width()//2 + off,
-                                  HEIGHT//2 - t.get_height()//2 + off))
+            self.screen.blit(t, (WIDTH // 2 - t.get_width() // 2 + off,
+                                  RINK_Y + RINK_H // 2 - t.get_height() // 2 + off))
 
     def _draw_fim_jogo(self):
         ov = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
@@ -600,25 +502,25 @@ class Game:
         self.screen.blit(ov, (0, 0))
 
         if self.golos_azul > self.golos_vermelho:
-            txt_v, cor = "Vitória da Equipa Azul!", (100,160,255)
+            txt_v, cor = "Vitória do FC Porto!", (100, 170, 255)
         elif self.golos_vermelho > self.golos_azul:
-            txt_v, cor = "Vitória da Equipa Vermelha!", (255,80,80)
+            txt_v, cor = "Vitória do Riba d'Ave!", (255, 80, 80)
         else:
-            txt_v, cor = "Empate!", (255,220,50)
+            txt_v, cor = "Empate!", (255, 220, 50)
 
         linhas = [
-            (self.font_big.render("FIM DO JOGO", True, (255,255,255))),
+            (self.font_big.render("FIM DO JOGO", True, (255, 255, 255))),
             (self.font_big.render(txt_v, True, cor)),
-            (self.font_med.render(f"{self.golos_azul} — {self.golos_vermelho}", True, (255,255,255))),
-            (self.font_num.render("Prima  R  para recomeçar", True, (180,180,180))),
+            (self.font_med.render(f"{self.golos_azul} — {self.golos_vermelho}", True, (255, 255, 255))),
+            (self.font_num.render("Prima  R  para recomeçar", True, (180, 180, 180))),
         ]
         for i, t in enumerate(linhas):
-            self.screen.blit(t, (WIDTH//2 - t.get_width()//2, HEIGHT//2 - 90 + i*55))
+            self.screen.blit(t, (WIDTH // 2 - t.get_width() // 2,
+                                  RINK_Y + 70 + i * 50))
 
     def _draw_debug(self):
-        fps = self.font_num.render(f"FPS: {self.clock.get_fps():.0f}", True, (255,255,100))
-        self.screen.blit(fps, (WIDTH - 80, 4))
-        # Mostrar dono da bola
+        fps = self.font_num.render(f"FPS: {self.clock.get_fps():.0f}", True, (255, 255, 100))
+        self.screen.blit(fps, (WIDTH - 120, HUD_H + 8))
         dono = self.bola.dono.nome if self.bola.dono else "livre"
-        db = self.font_num.render(f"Bola: {dono}", True, (200,255,200))
-        self.screen.blit(db, (WIDTH - 150, 20))
+        db = self.font_num.render(f"Bola: {dono}", True, (200, 255, 200))
+        self.screen.blit(db, (WIDTH - 120, HUD_H + 24))

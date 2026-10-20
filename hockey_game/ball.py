@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""ball.py - bola com fisica realista."""
+"""ball.py - bola com física realista de hóquei em patins (ressaltos, tabelas e balizas)."""
 import os
 import pygame
 from settings import *
@@ -8,13 +8,13 @@ BOLA_SIZE        = 14
 ATRITO           = 0.988
 RESSALTO         = 0.72
 VEL_MINIMA       = 8.0
-VEL_RESSALTO     = 60.0
+VEL_RESSALTO     = 55.0
 OFFSET_BOLA      = 28
 PASSE_FORCA      = 400
 REMATE_FORCA     = 650
 RAIO_COLISAO     = 20
 PICK_UP_DIST     = 32
-COOLDOWN_RECOLHA = 0.35  # tempo que o rematador/passador não pode reabsorver a bola
+COOLDOWN_RECOLHA = 0.35
 
 
 def _pasta_extras():
@@ -26,11 +26,9 @@ class Ball(pygame.sprite.Sprite):
     def __init__(self, pos: tuple):
         super().__init__()
 
-        # Carregar sprite original
         caminho = os.path.join(_pasta_extras(), "bola.png")
         img = pygame.image.load(caminho).convert_alpha()
         self.image = pygame.transform.scale(img, (BOLA_SIZE, BOLA_SIZE))
-        # Rect centrado exatamente no tamanho real da bola
         self.rect = self.image.get_rect(center=pos)
 
         self.pos_x = float(pos[0])
@@ -58,7 +56,7 @@ class Ball(pygame.sprite.Sprite):
         self.vel.update(velocidade)
 
     def seguir_jogador(self, jogador):
-        # A bola segue o jogador na direção exata para onde ele está voltado (incluindo diagonais)
+        # A bola segue à frente do stick do jogador (suporta todas as diagonais)
         if hasattr(jogador, "vetor_direcao") and jogador.vetor_direcao.length_squared() > 0:
             offset = jogador.vetor_direcao * OFFSET_BOLA
             self.pos_x = jogador.pos_x + offset.x
@@ -77,8 +75,8 @@ class Ball(pygame.sprite.Sprite):
 
     # ------------------------------------------------------------------ #
 
-    def update(self, dt, rink_rect, baliza_esq, baliza_dir, todos_jogadores=None):
-        # Cooldown
+    def update(self, dt, rink, todos_jogadores=None):
+        # Temporizador de imunidade para quem acabou de rematar/passar
         if self._cooldown_timer > 0:
             self._cooldown_timer -= dt
             if self._cooldown_timer <= 0:
@@ -93,19 +91,22 @@ class Ball(pygame.sprite.Sprite):
         self.pos_x += self.vel.x * dt
         self.pos_y += self.vel.y * dt
 
-        # Golo
-        resultado = self._verificar_golo(baliza_esq, baliza_dir)
+        # Verificar se é Golo
+        resultado = self._verificar_golo(rink)
         if resultado:
             return resultado
 
-        # Paredes
-        self._colisao_paredes(rink_rect)
+        # Colisão com as Balizas (ressalto nos postes e rede exterior)
+        self._colisao_balizas(rink)
 
-        # Ressalto em jogadores (so bola rapida)
+        # Colisão com as Paredes exteriores do ringue
+        self._colisao_paredes(rink.rect)
+
+        # Ressalto em jogadores (bola veloz)
         if todos_jogadores and self.vel.length() >= VEL_RESSALTO:
             self._colisao_jogadores(todos_jogadores)
 
-        # Atrito
+        # Atrito com o ringue de madeira
         self.vel *= ATRITO
         if self.vel.length() < VEL_MINIMA:
             self.vel.update(0, 0)
@@ -121,12 +122,37 @@ class Ball(pygame.sprite.Sprite):
         elif self.pos_x + r > rink_rect.right:
             self.pos_x = rink_rect.right - r
             self.vel.x = -abs(self.vel.x) * RESSALTO
+
         if self.pos_y - r < rink_rect.top:
             self.pos_y = rink_rect.top + r
             self.vel.y = abs(self.vel.y) * RESSALTO
         elif self.pos_y + r > rink_rect.bottom:
             self.pos_y = rink_rect.bottom - r
             self.vel.y = -abs(self.vel.y) * RESSALTO
+
+    def _colisao_balizas(self, rink):
+        """Ressalto nos postes ou na rede traseira/lateral das balizas."""
+        r = BOLA_SIZE // 2
+        for obs in (rink.obstaculo_baliza_esq, rink.obstaculo_baliza_dir):
+            if obs.collidepoint(self.pos_x, self.pos_y):
+                dx_left   = abs(self.pos_x - obs.left)
+                dx_right  = abs(self.pos_x - obs.right)
+                dy_top    = abs(self.pos_y - obs.top)
+                dy_bottom = abs(self.pos_y - obs.bottom)
+                min_dist = min(dx_left, dx_right, dy_top, dy_bottom)
+
+                if min_dist == dx_left:
+                    self.pos_x = obs.left - r
+                    self.vel.x = -abs(self.vel.x) * RESSALTO
+                elif min_dist == dx_right:
+                    self.pos_x = obs.right + r
+                    self.vel.x = abs(self.vel.x) * RESSALTO
+                elif min_dist == dy_top:
+                    self.pos_y = obs.top - r
+                    self.vel.y = -abs(self.vel.y) * RESSALTO
+                else:
+                    self.pos_y = obs.bottom + r
+                    self.vel.y = abs(self.vel.y) * RESSALTO
 
     def _colisao_jogadores(self, jogadores):
         for j in jogadores:
@@ -147,11 +173,20 @@ class Ball(pygame.sprite.Sprite):
                     self.pos_y += ny * (RAIO_COLISAO - dist + 1)
                 break
 
-    def _verificar_golo(self, baliza_esq, baliza_dir):
-        if baliza_esq.collidepoint(self.pos_x, self.pos_y):
-            return "golo_esq"
-        if baliza_dir.collidepoint(self.pos_x, self.pos_y):
-            return "golo_dir"
+    def _verificar_golo(self, rink):
+        """Verifica se a bola cruzou a linha de golo pela frente."""
+        # Baliza Esquerda (defendida por Vermelho): azul marca ao rematar para a esquerda
+        if self.vel.x < 0:
+            if (self.pos_x <= rink.linha_golo_esq_x) and (self.pos_x >= rink.linha_golo_esq_x - 35):
+                if rink.baliza_topo_y <= self.pos_y <= rink.baliza_base_y:
+                    return "golo_azul"
+
+        # Baliza Direita (defendida por Azul): vermelho marca ao rematar para a direita
+        if self.vel.x > 0:
+            if (self.pos_x >= rink.linha_golo_dir_x) and (self.pos_x <= rink.linha_golo_dir_x + 35):
+                if rink.baliza_topo_y <= self.pos_y <= rink.baliza_base_y:
+                    return "golo_vermelho"
+
         return None
 
     def repor(self, pos):

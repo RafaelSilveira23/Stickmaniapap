@@ -95,12 +95,12 @@ class Player(pygame.sprite.Sprite):
     # Update principal                                                     #
     # ================================================================== #
 
-    def update(self, dt: float, rink_rect: pygame.Rect, bola=None):
+    def update(self, dt: float, rink_rect: pygame.Rect, bola=None, rink=None):
         if self.humano:
             self._input_humano()
 
         self._aplicar_inercia(dt)
-        self._mover(dt, rink_rect)
+        self._mover(dt, rink_rect, rink)
         self._gerir_bola(bola)
         self._atualizar_animacao(dt)
 
@@ -170,7 +170,7 @@ class Player(pygame.sprite.Sprite):
     # Movimento e colisão com paredes                                      #
     # ------------------------------------------------------------------ #
 
-    def _mover(self, dt: float, rink_rect: pygame.Rect):
+    def _mover(self, dt: float, rink_rect: pygame.Rect, rink=None):
         self.pos_x += self.vel_x * dt
         self.pos_y += self.vel_y * dt
 
@@ -179,6 +179,25 @@ class Player(pygame.sprite.Sprite):
 
         self.pos_x = max(rink_rect.left  + mx, min(rink_rect.right  - mx, self.pos_x))
         self.pos_y = max(rink_rect.top   + my, min(rink_rect.bottom - my, self.pos_y))
+
+        # Não atravessar a estrutura e redes das balizas (permite patinar livremente atrás delas)
+        if rink is not None:
+            for obs in (rink.obstaculo_baliza_esq, rink.obstaculo_baliza_dir):
+                if obs.collidepoint(self.pos_x, self.pos_y):
+                    dx_left   = abs(self.pos_x - obs.left)
+                    dx_right  = abs(self.pos_x - obs.right)
+                    dy_top    = abs(self.pos_y - obs.top)
+                    dy_bottom = abs(self.pos_y - obs.bottom)
+                    min_dist = min(dx_left, dx_right, dy_top, dy_bottom)
+
+                    if min_dist == dx_left:
+                        self.pos_x = obs.left - mx
+                    elif min_dist == dx_right:
+                        self.pos_x = obs.right + mx
+                    elif min_dist == dy_top:
+                        self.pos_y = obs.top - my
+                    else:
+                        self.pos_y = obs.bottom + my
 
         self.rect.center = (round(self.pos_x), round(self.pos_y))
 
@@ -311,7 +330,7 @@ class Player(pygame.sprite.Sprite):
     # Desenho extra                                                        #
     # ------------------------------------------------------------------ #
 
-    def draw_extra(self, screen: pygame.Surface, font: pygame.font.Font):
+    def draw_extra(self, screen: pygame.Surface, font: pygame.font.Font, show_debug: bool = False):
         if self.selecionado:
             cx = self.rect.centerx
             ty = self.rect.top - 6
@@ -321,8 +340,9 @@ class Player(pygame.sprite.Sprite):
             pygame.draw.polygon(screen, (10, 20, 50), pts_borda)
             pygame.draw.polygon(screen, (30, 140, 255), pts_cor)
 
-        # Número com sombra
-        for cor, off in [((0,0,0), 1), ((255,255,255), 0)]:
-            t = font.render(str(self.numero), True, cor)
-            screen.blit(t, (self.rect.centerx - t.get_width()//2 + off,
-                            self.rect.top - t.get_height() - 2 + off))
+        if show_debug:
+            # Número apenas em modo debug
+            for cor, off in [((0,0,0), 1), ((255,255,255), 0)]:
+                t = font.render(str(self.numero), True, cor)
+                screen.blit(t, (self.rect.centerx - t.get_width()//2 + off,
+                                self.rect.top - t.get_height() - 2 + off))
