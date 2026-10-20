@@ -25,7 +25,10 @@ class Game:
         self.font_big = pygame.font.SysFont("Arial", 44, bold=True)
         self.font_med = pygame.font.SysFont("Arial", 26, bold=True)
 
-        self.rink = Rink()
+        self.equipa_casa_id = "fc_porto"
+        self.equipa_fora_id = "riba_dave"
+
+        self.rink = Rink(equipa_casa=self.equipa_casa_id)
         self.hud  = HUDController()
 
         # ── Criar jogadores e agentes IA ─────────────────────────────────

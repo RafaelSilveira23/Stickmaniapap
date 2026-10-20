@@ -10,13 +10,14 @@ Desenvolvido para corresponder à interface moderna do mockup:
 import math
 import pygame
 from settings import *
+from team import carregar_logo_equipa, obter_info_equipa
 
 
 class HUDController:
     def __init__(self):
-        self.font_time = pygame.font.SysFont("Arial", 26, bold=True)
-        self.font_title = pygame.font.SysFont("Arial", 16, bold=True)
-        self.font_score = pygame.font.SysFont("Arial", 28, bold=True)
+        self.font_time = pygame.font.SysFont("Arial", 19, bold=True)
+        self.font_title = pygame.font.SysFont("Arial", 14, bold=True)
+        self.font_score = pygame.font.SysFont("Arial", 20, bold=True)
         self.font_card_nome = pygame.font.SysFont("Arial", 18, bold=True)
         self.font_card_role = pygame.font.SysFont("Arial", 11, bold=True)
         self.font_stat = pygame.font.SysFont("Arial", 12, bold=True)
@@ -54,69 +55,104 @@ class HUDController:
             }
 
     # ================================================================== #
-    # Marcador Superior (Top Bar)                                         #
+    # Marcador Superior Idêntico ao Mockup                                #
     # ================================================================== #
 
     def draw_top_bar(self, screen: pygame.Surface, game):
-        # Fundo da barra superior
-        pygame.draw.rect(screen, (10, 16, 32), (0, 0, WIDTH, HUD_H))
-        pygame.draw.line(screen, (35, 60, 120), (0, HUD_H), (WIDTH, HUD_H), 2)
+        # O marcador fica sobreposto à bancada de público no canto superior esquerdo
+        sc_x = 28
+        sc_y = 12
+        card_w = 230
+        timer_w = 95
+        total_h = 52
+        linha_h = total_h // 2
 
-        # ── Bloco Central do Marcador ────────────────────────────────────
-        marc_x = 240
-        marc_w = 420
-        linha_h = HUD_H // 2
+        info_casa = obter_info_equipa(getattr(game, "equipa_casa_id", "fc_porto"))
+        info_fora = obter_info_equipa(getattr(game, "equipa_fora_id", "riba_dave"))
 
-        # Linha 1: Equipa da Casa (FC Porto / Azul)
-        pygame.draw.rect(screen, (30, 75, 170), (marc_x, 0, marc_w, linha_h))
-        # Linha 2: Equipa Visitante (Riba d'Ave / Vermelho)
-        pygame.draw.rect(screen, (170, 30, 30), (marc_x, linha_h, marc_w, linha_h))
+        # ── 1. Linha da Equipa da Casa (Topo - Azul) ─────────────────────
+        cor_casa = info_casa.get("cor_primaria", (15, 60, 160))
+        r_casa = pygame.Rect(sc_x, sc_y, card_w, linha_h)
+        pygame.draw.rect(screen, cor_casa, r_casa, border_top_left_radius=8)
 
-        # Divisória horizontal
-        pygame.draw.line(screen, (15, 25, 50), (marc_x, linha_h), (marc_x + marc_w, linha_h), 2)
+        # Logótipo da equipa da casa
+        self._desenhar_logo_placar(screen, info_casa["id"], sc_x + 8, sc_y + 2, info_casa)
 
-        # Emblemas simplificados
-        self._desenhar_emblema(screen, marc_x + 10, 6, (230, 240, 255), (20, 60, 180), "FCP")
-        self._desenhar_emblema(screen, marc_x + 10, linha_h + 6, (255, 220, 220), (180, 20, 20), "RDA")
+        # Nome da equipa
+        t_casa = self.font_title.render(info_casa["nome"], True, (255, 255, 255))
+        screen.blit(t_casa, (sc_x + 38, sc_y + 4))
 
-        # Nomes das equipas
-        t_azul = self.font_title.render("FC Porto", True, (255, 255, 255))
-        t_verm = self.font_title.render("Riba d'Ave", True, (255, 255, 255))
-        screen.blit(t_azul, (marc_x + 48, linha_h // 2 - t_azul.get_height() // 2))
-        screen.blit(t_verm, (marc_x + 48, linha_h + linha_h // 2 - t_verm.get_height() // 2))
+        # Resultado da equipa da casa
+        g_casa = self.font_score.render(str(game.golos_azul), True, (255, 255, 255))
+        screen.blit(g_casa, (sc_x + card_w - 24, sc_y + 2))
 
-        # Golos
-        g_az = self.font_score.render(str(game.golos_azul), True, (255, 255, 255))
-        g_vm = self.font_score.render(str(game.golos_vermelho), True, (255, 255, 255))
-        screen.blit(g_az, (marc_x + marc_w - 40, linha_h // 2 - g_az.get_height() // 2))
-        screen.blit(g_vm, (marc_x + marc_w - 40, linha_h + linha_h // 2 - g_vm.get_height() // 2))
+        # ── 2. Linha da Equipa Visitante (Fundo - Vermelho) ─────────────
+        cor_fora = info_fora.get("cor_primaria", (135, 20, 25))
+        r_fora = pygame.Rect(sc_x, sc_y + linha_h, card_w, linha_h)
+        pygame.draw.rect(screen, cor_fora, r_fora, border_bottom_left_radius=8)
 
-        # ── Cronómetro e Parte ───────────────────────────────────────────
-        time_x = marc_x + marc_w + 30
+        # Logótipo da equipa visitante
+        self._desenhar_logo_placar(screen, info_fora["id"], sc_x + 8, sc_y + linha_h + 2, info_fora)
+
+        # Nome da equipa
+        t_fora = self.font_title.render(info_fora["nome"], True, (255, 255, 255))
+        screen.blit(t_fora, (sc_x + 38, sc_y + linha_h + 4))
+
+        # Resultado da equipa visitante
+        g_fora = self.font_score.render(str(game.golos_vermelho), True, (255, 255, 255))
+        screen.blit(g_fora, (sc_x + card_w - 24, sc_y + linha_h + 2))
+
+        # Divisória subtil entre as duas linhas
+        pygame.draw.line(screen, (0, 0, 0, 100), (sc_x, sc_y + linha_h), (sc_x + card_w, sc_y + linha_h), 1)
+
+        # ── 3. Bloco do Cronómetro e Parte (à direita do placar) ────────
+        time_x = sc_x + card_w
+        r_timer = pygame.Rect(time_x, sc_y, timer_w, total_h)
+        # Fundo azul escuro translúcido com cantos direitos arredondados
+        surf_timer = pygame.Surface((timer_w, total_h), pygame.SRCALPHA)
+        pygame.draw.rect(surf_timer, (10, 18, 36, 235), (0, 0, timer_w, total_h),
+                         border_top_right_radius=8, border_bottom_right_radius=8)
+        screen.blit(surf_timer, (time_x, sc_y))
+
+        # Tempo (ex: 12:34)
         mins = max(0, int(game.tempo_restante)) // 60
         segs = max(0, int(game.tempo_restante)) % 60
         t_cron = self.font_time.render(f"{mins:02d}:{segs:02d}", True, (255, 255, 255))
-        screen.blit(t_cron, (time_x, 10))
+        screen.blit(t_cron, (time_x + timer_w // 2 - t_cron.get_width() // 2, sc_y + 4))
 
-        font_sub = pygame.font.SysFont("Arial", 12, bold=True)
-        t_parte = font_sub.render(f"{game.parte}.ª Parte", True, (150, 180, 230))
-        screen.blit(t_parte, (time_x + 8, 38))
+        # Parte (ex: 1.ª Parte / 2.ª Parte)
+        f_parte = pygame.font.SysFont("Arial", 11, bold=True)
+        t_parte = f_parte.render(f"{game.parte}.ª Parte", True, (160, 190, 230))
+        screen.blit(t_parte, (time_x + timer_w // 2 - t_parte.get_width() // 2, sc_y + 28))
 
-        # ── Botão de Pausa (canto superior direito) ──────────────────────
-        pause_r = pygame.Rect(WIDTH - 50, 14, 34, 34)
-        pygame.draw.rect(screen, (25, 40, 80), pause_r, border_radius=6)
-        pygame.draw.rect(screen, (50, 90, 180), pause_r, 1, border_radius=6)
-        # Símbolo ||
-        pygame.draw.rect(screen, (240, 245, 255), (WIDTH - 42, 22, 5, 18), border_radius=2)
-        pygame.draw.rect(screen, (240, 245, 255), (WIDTH - 33, 22, 5, 18), border_radius=2)
+        # Moldura exterior do placar completo
+        placar_completo = pygame.Rect(sc_x, sc_y, card_w + timer_w, total_h)
+        pygame.draw.rect(screen, (40, 75, 140), placar_completo, 1, border_radius=8)
 
-    def _desenhar_emblema(self, surf, x, y, cor_bg, cor_fg, sigla):
-        r = pygame.Rect(x, y, 28, 20)
-        pygame.draw.rect(surf, cor_bg, r, border_radius=4)
-        pygame.draw.rect(surf, cor_fg, r, 2, border_radius=4)
-        f = pygame.font.SysFont("Arial", 9, bold=True)
-        t = f.render(sigla, True, cor_fg)
-        surf.blit(t, (r.centerx - t.get_width() // 2, r.centery - t.get_height() // 2))
+        # ── 4. Botão de Pausa (canto superior direito) ──────────────────
+        pause_r = pygame.Rect(WIDTH - 52, 14, 38, 38)
+        pygame.draw.rect(screen, (16, 26, 52), pause_r, border_radius=6)
+        pygame.draw.rect(screen, (40, 80, 160), pause_r, 1, border_radius=6)
+        # Ícone ||
+        pygame.draw.rect(screen, (240, 245, 255), (WIDTH - 44, 23, 6, 20), border_radius=2)
+        pygame.draw.rect(screen, (240, 245, 255), (WIDTH - 34, 23, 6, 20), border_radius=2)
+
+    def _desenhar_logo_placar(self, surf, equipa_id: str, x: int, y: int, info: dict):
+        """Desenha o logótipo oficial ou um emblema estilizado se a imagem não existir."""
+        logo = carregar_logo_equipa(equipa_id, (22, 22))
+        if logo is not None:
+            surf.blit(logo, (x, y))
+        else:
+            # Emblema de recurso com escudo circular
+            cor_bg = info.get("cor_secundaria", (255, 255, 255))
+            cor_fg = info.get("cor_primaria", (20, 60, 180))
+            r = pygame.Rect(x, y, 22, 22)
+            pygame.draw.circle(surf, cor_bg, r.center, 10)
+            pygame.draw.circle(surf, cor_fg, r.center, 10, 2)
+            f = pygame.font.SysFont("Arial", 8, bold=True)
+            sigla = info.get("sigla", "FCP")
+            t = f.render(sigla[:3], True, cor_fg)
+            surf.blit(t, (r.centerx - t.get_width() // 2, r.centery - t.get_height() // 2))
 
     # ================================================================== #
     # Painel Inferior (Bottom Dashboard)                                  #

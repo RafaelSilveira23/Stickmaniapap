@@ -3,6 +3,7 @@
 import os
 import pygame
 from settings import *
+from team import carregar_logo_equipa, obter_info_equipa
 
 
 def _pasta_ui():
@@ -11,7 +12,8 @@ def _pasta_ui():
 
 
 class Rink:
-    def __init__(self):
+    def __init__(self, equipa_casa: str = "fc_porto"):
+        self.equipa_casa = equipa_casa
         self.rect = pygame.Rect(RINK_X, RINK_Y, RINK_W, RINK_H)
         cy = self.rect.centery
 
@@ -118,8 +120,8 @@ class Rink:
         r    = self.rect
         muro = r.inflate(MURO * 2, MURO * 2)
 
-        # Bancada com público no topo
-        self._tile_faixa(surf, muro.left, muro.right, 0, muro.top)
+        # Bancada com público no topo a toda a largura
+        self._tile_faixa(surf, 0, WIDTH, 0, muro.top)
 
         # Sombra da tabela
         pygame.draw.rect(surf, COR_MURO_SOMBRA, muro.move(0, 4), border_radius=CANTO + MURO)
@@ -180,13 +182,19 @@ class Rink:
         return surf
 
     def _desenhar_centro_emblema(self, surf, cx, cy):
-        """Emblema discreto de hóquei no centro do campo como no mockup."""
-        # Pequeno círculo dourado/azul
-        pygame.draw.circle(surf, (30, 75, 160), (cx, cy), 22)
-        pygame.draw.circle(surf, (220, 180, 50), (cx, cy), 22, 2)
-        f = pygame.font.SysFont("Arial", 8, bold=True)
-        t = f.render("F C P", True, (255, 255, 255))
-        surf.blit(t, (cx - t.get_width() // 2, cy - t.get_height() // 2))
+        """Emblema da equipa da casa no centro do campo como no mockup."""
+        logo_centro = carregar_logo_equipa(self.equipa_casa, (80, 80))
+        if logo_centro is not None:
+            surf.blit(logo_centro, (cx - 40, cy - 40))
+        else:
+            info = obter_info_equipa(self.equipa_casa)
+            cor = info.get("cor_primaria", (20, 60, 160))
+            sigla = info.get("sigla", "FCP")
+            pygame.draw.circle(surf, cor, (cx, cy), 24)
+            pygame.draw.circle(surf, (230, 200, 60), (cx, cy), 24, 2)
+            f = pygame.font.SysFont("Arial", 9, bold=True)
+            t = f.render(sigla, True, (255, 255, 255))
+            surf.blit(t, (cx - t.get_width() // 2, cy - t.get_height() // 2))
 
     def _desenhar_placards(self, surf, muro):
         """Faixa publicitária estilizada ao longo da tabela superior."""
