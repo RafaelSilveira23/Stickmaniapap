@@ -1,13 +1,17 @@
 # -*- coding: utf-8 -*-
 """ball.py - bola com física realista de hóquei em patins (ressaltos, tabelas e balizas)."""
 import os
+import random
 import pygame
 from settings import *
 
 BOLA_SIZE        = 14
-ATRITO           = 0.988
-RESSALTO         = 0.72
-VEL_MINIMA       = 8.0
+ATRITO           = 0.988          # atrito base (mantido para compatibilidade)
+ATRITO_BASE      = 0.991          # atrito quando a bola está rápida (menos resistência)
+ATRITO_LENTO     = 0.975          # atrito quando a bola está lenta (mais resistência)
+VEL_TRANSICAO    = 120            # px/s — abaixo disto aplica ATRITO_LENTO
+RESSALTO         = 0.78           # coeficiente de ressalto (era 0.72 → agora 0.78)
+VEL_MINIMA       = 8.0            # velocidade abaixo da qual a bola para
 VEL_RESSALTO     = 55.0
 OFFSET_BOLA      = 28
 PASSE_FORCA      = 400
@@ -15,6 +19,8 @@ REMATE_FORCA     = 650
 RAIO_COLISAO     = 20
 PICK_UP_DIST     = 32
 COOLDOWN_RECOLHA = 0.35
+SPIN_FACTOR      = 0.08           # componente lateral no ressalto (simula rotação/efeito)
+SPIN_RATE        = 0.3            # graus por px/s — rotação visual da bola
 
 
 def _pasta_extras():
@@ -28,7 +34,8 @@ class Ball(pygame.sprite.Sprite):
 
         caminho = os.path.join(_pasta_extras(), "bola.png")
         img = pygame.image.load(caminho).convert_alpha()
-        self.image = pygame.transform.scale(img, (BOLA_SIZE, BOLA_SIZE))
+        self._imagem_base = pygame.transform.scale(img, (BOLA_SIZE, BOLA_SIZE))
+        self.image = self._imagem_base.copy()
         self.rect = self.image.get_rect(center=pos)
 
         self.pos_x = float(pos[0])
@@ -38,6 +45,9 @@ class Ball(pygame.sprite.Sprite):
 
         self._cooldown_dono  = None
         self._cooldown_timer = 0.0
+
+        # Spin visual
+        self._angulo = 0.0   # graus de rotação acumulados
 
     # ------------------------------------------------------------------ #
 
@@ -91,6 +101,13 @@ class Ball(pygame.sprite.Sprite):
         self.pos_x += self.vel.x * dt
         self.pos_y += self.vel.y * dt
 
+        # Spin visual — rotação proporcional à velocidade actual
+        vel_atual = self.vel.length()
+        self._angulo += vel_atual * dt * SPIN_RATE
+        self._angulo %= 360.0
+        self.image = pygame.transform.rotate(self._imagem_base, self._angulo)
+        self.rect  = self.image.get_rect(center=(round(self.pos_x), round(self.pos_y)))
+
         # Verificar se é Golo
         resultado = self._verificar_golo(rink)
         if resultado:
@@ -106,29 +123,63 @@ class Ball(pygame.sprite.Sprite):
         if todos_jogadores and self.vel.length() >= VEL_RESSALTO:
             self._colisao_jogadores(todos_jogadores)
 
-        # Atrito com o ringue de madeira
-        self.vel *= ATRITO
-        if self.vel.length() < VEL_MINIMA:
-            self.vel.update(0, 0)
+        # Atrito variável: rápida → ATRITO_BASE; lenta → ATRITO_LENTO
+        vel_atual = self.vel.length()
+        if vel_atual > VEL_TRANSICAO:
+            self.vel *= ATRITO_BASE
+        else:
+            self.vel *= ATRITO_LENTO
+
+        # Arrasto progressivo — fade gradual nos últimos VEL_MINIMA px/s
+        vel_atual = self.vel.length()
+        if vel_atual < VEL_MINIMA:
+            if vel_atual < 1.0:
+                self.vel.update(0, 0)
+            else:
+                # Fade gradual em vez de corte abrupto
+                fator = vel_atual / VEL_MINIMA
+                self.vel *= fator * 0.85
 
         self.rect.center = (round(self.pos_x), round(self.pos_y))
         return None
 
     def _colisao_paredes(self, rink_rect):
         r = BOLA_SIZE // 2
+        parede_x = False
+        parede_y = False
+
         if self.pos_x - r < rink_rect.left:
             self.pos_x = rink_rect.left + r
             self.vel.x = abs(self.vel.x) * RESSALTO
+            parede_x = True
         elif self.pos_x + r > rink_rect.right:
             self.pos_x = rink_rect.right - r
             self.vel.x = -abs(self.vel.x) * RESSALTO
+            parede_x = True
 
         if self.pos_y - r < rink_rect.top:
             self.pos_y = rink_rect.top + r
             self.vel.y = abs(self.vel.y) * RESSALTO
+            parede_y = True
         elif self.pos_y + r > rink_rect.bottom:
             self.pos_y = rink_rect.bottom - r
             self.vel.y = -abs(self.vel.y) * RESSALTO
+            parede_y = True
+
+        # Ressalto com spin — componente lateral ligeira ao bater numa parede em ângulo
+        if parede_x and not parede_y:
+            # Bate numa parede lateral → adiciona spin no eixo Y
+            self.vel.y += self.vel.y * SPIN_FACTOR * (1.0 if self.vel.y >= 0 else -1.0)
+        elif parede_y and not parede_x:
+            # Bate numa parede topo/base → adiciona spin no eixo X
+            self.vel.x += self.vel.x * SPIN_FACTOR * (1.0 if self.vel.x >= 0 else -1.0)
+        elif parede_x and parede_y:
+            # Canto — desvio suave em vez de "teleportar"/travar abruptamente
+            angulo_desvio = random.uniform(-15.0, 15.0)
+            comprimento = self.vel.length()
+            if comprimento > 0:
+                self.vel = self.vel.rotate(angulo_desvio)
+                self.vel.scale_to_length(comprimento * RESSALTO)
 
     def _colisao_balizas(self, rink):
         """Ressalto nos postes ou na rede traseira/lateral das balizas."""
@@ -165,10 +216,22 @@ class Ball(pygame.sprite.Sprite):
                 nx = dx / dist
                 ny = dy / dist
                 dot = self.vel.x * nx + self.vel.y * ny
+
                 if dot < 0:
-                    self.vel.x -= 2 * dot * nx
-                    self.vel.y -= 2 * dot * ny
+                    # Velocidade relativa do jogador → transferência de momentum mais realista
+                    vel_jogador = pygame.math.Vector2(
+                        getattr(j, "vel_x", 0.0),
+                        getattr(j, "vel_y", 0.0)
+                    )
+                    vel_relativa = self.vel - vel_jogador
+                    dot_rel = vel_relativa.x * nx + vel_relativa.y * ny
+
+                    # Aplicar impulso baseado na velocidade relativa
+                    self.vel.x -= 2 * dot_rel * nx
+                    self.vel.y -= 2 * dot_rel * ny
+                    # Absorção de energia no impacto
                     self.vel   *= 0.75
+                    # Transferir parte do impulso ao jogador (se aplicável)
                     self.pos_x += nx * (RAIO_COLISAO - dist + 1)
                     self.pos_y += ny * (RAIO_COLISAO - dist + 1)
                 break
@@ -196,6 +259,8 @@ class Ball(pygame.sprite.Sprite):
         self.dono = None
         self._cooldown_dono  = None
         self._cooldown_timer = 0.0
+        self._angulo = 0.0
+        self.image = self._imagem_base.copy()
         self.rect.center = pos
 
     def pode_ser_apanhada_por(self, jogador):

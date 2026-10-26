@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """player.py - jogador com inércia, colisões entre jogadores e pick-up correto."""
 import os
+import random
 import pygame
 from settings import *
 from animation import AnimationController, load_animation_from_folder
@@ -12,6 +13,17 @@ PLAYER_SIZE    = (52, 52)
 PICK_UP_DIST   = 30
 ACELERACAO     = 2000
 SEP_JOGADORES  = 38
+
+# Constantes de animação
+_BLEND_DURACAO  = 0.08    # segundos de transição suave entre estados
+_FPS_ANIM_BASE  = 6.0     # fps de animação mínimo (parado)
+_FPS_ANIM_MAX   = 12.0    # fps de animação máximo (correr a fundo)
+_FPS_SPRINT_ADD = 3.0     # fps extra durante sprint
+_FPS_COM_BOLA_IDLE = 1.5  # fps de animação quando tem bola e está parado
+
+# Duração e intensidade do shake de colisão
+_SHAKE_DURACAO  = 0.20    # segundos de shake após colisão
+_SHAKE_AMP      = 2       # amplitude do shake em px
 
 
 def _lerp_fixo(atual: float, alvo: float, max_step: float) -> float:
@@ -91,6 +103,17 @@ class Player(pygame.sprite.Sprite):
         self._estado_action = None
         self._action_timer  = 0.0
 
+        # --- Estado de animação com transição suave ---
+        self._estado_anterior = None   # último estado antes da mudança
+        self._blend_timer     = 0.0    # temporizador de blend (0.08s)
+
+        # Sprint activo (guardado para FPS dinâmico)
+        self._sprint_ativo = False
+
+        # Shake de colisão
+        self._shake_timer  = 0.0       # tempo restante de shake
+        self._shake_offset = (0, 0)    # offset actual aplicado ao desenho
+
     # ================================================================== #
     # Update principal                                                     #
     # ================================================================== #
@@ -125,6 +148,7 @@ class Player(pygame.sprite.Sprite):
             if keys[pygame.K_k]: vy += 1
             sprint = keys[pygame.K_RSHIFT]
 
+        self._sprint_ativo = bool(sprint)
         spd = PLAYER_SPRINT if sprint else PLAYER_SPEED
 
         if vx != 0 and vy != 0:
@@ -137,10 +161,12 @@ class Player(pygame.sprite.Sprite):
         # Direção guardada para o passe/remate (suporta 8 direções incluindo diagonais)
         if vx != 0 or vy != 0:
             self.vetor_direcao = pygame.math.Vector2(vx, vy).normalize()
-            if abs(vx) >= abs(vy):
-                self.direcao = "direita" if vx > 0 else "esquerda"
-            else:
+            # Detecção de 8 direções mais precisa usando ângulo do vetor
+            ax, ay = abs(vx), abs(vy)
+            if ay > ax * 1.5:
                 self.direcao = "baixo" if vy > 0 else "cima"
+            else:
+                self.direcao = "direita" if vx > 0 else "esquerda"
 
     # ------------------------------------------------------------------ #
     # Inércia: suaviza a mudança de velocidade                            #
@@ -292,6 +318,8 @@ class Player(pygame.sprite.Sprite):
                     v = pygame.math.Vector2(60, 60)
                 bola.libertar(v, dono_anterior=self)
         self._comecar_acao("colisao", 0.5)
+        # Activar shake visual durante 0.2s
+        self._shake_timer = _SHAKE_DURACAO
 
     def _comecar_acao(self, acao: str, duracao: float):
         self._estado_action = acao
@@ -303,6 +331,18 @@ class Player(pygame.sprite.Sprite):
     # ------------------------------------------------------------------ #
 
     def _atualizar_animacao(self, dt: float):
+        # Atualizar shake de colisão
+        if self._shake_timer > 0:
+            self._shake_timer -= dt
+            if self._shake_timer > 0:
+                self._shake_offset = (
+                    random.randint(-_SHAKE_AMP, _SHAKE_AMP),
+                    random.randint(-_SHAKE_AMP, _SHAKE_AMP)
+                )
+            else:
+                self._shake_timer  = 0.0
+                self._shake_offset = (0, 0)
+
         if self._estado_action is not None:
             self._action_timer -= dt
             if self._action_timer <= 0 or self._anim.finished:
@@ -310,18 +350,59 @@ class Player(pygame.sprite.Sprite):
 
         if self._estado_action is None:
             em_movimento = abs(self.vel_x) > 8 or abs(self.vel_y) > 8
+
             if self.tem_bola:
-                self._anim.estado = "com_bola"
+                novo_estado = "com_bola"
             elif em_movimento:
-                # Direção baseada na VELOCIDADE REAL (não no input)
-                # Assim "correr para trás" mostra a animação correta
-                if abs(self.vel_x) >= abs(self.vel_y):
-                    dir_anim = "direita" if self.vel_x > 0 else "esquerda"
-                else:
+                # Detecção de 8 direções mais precisa — baseada na velocidade real
+                ax, ay = abs(self.vel_x), abs(self.vel_y)
+                if ay > ax * 1.5:
                     dir_anim = "baixo" if self.vel_y > 0 else "cima"
-                self._anim.estado = f"correr_{dir_anim}"
+                else:
+                    dir_anim = "direita" if self.vel_x > 0 else "esquerda"
+                novo_estado = f"correr_{dir_anim}"
             else:
-                self._anim.estado = "parado"
+                novo_estado = "parado"
+
+            # Transição suave — blend_timer evita pop visual entre estados
+            estado_atual = self._anim.estado
+            if novo_estado != estado_atual:
+                if self._blend_timer <= 0:
+                    # Iniciar período de blend: mantém o frame anterior por 0.08s
+                    self._estado_anterior = estado_atual
+                    self._blend_timer     = _BLEND_DURACAO
+                # Durante o blend, não muda ainda
+            else:
+                # Mesmo estado → cancelar qualquer blend pendente
+                self._blend_timer = 0.0
+
+            if self._blend_timer > 0:
+                self._blend_timer -= dt
+                if self._blend_timer <= 0:
+                    # Blend concluído → aplicar novo estado
+                    self._blend_timer = 0.0
+                    self._anim.estado = novo_estado
+                # Enquanto blend ativo, manter estado anterior (já está definido)
+            else:
+                self._anim.estado = novo_estado
+
+            # FPS dinâmico conforme velocidade actual
+            vel_atual = (self.vel_x ** 2 + self.vel_y ** 2) ** 0.5
+            fps_anim  = _FPS_ANIM_BASE + (vel_atual / PLAYER_SPEED) * (_FPS_ANIM_MAX - _FPS_ANIM_BASE)
+            if self._sprint_ativo:
+                fps_anim += _FPS_SPRINT_ADD
+
+            # Quando parado com bola → fps lento (idle com bola)
+            if self.tem_bola and not em_movimento:
+                fps_anim = _FPS_COM_BOLA_IDLE
+
+            # Aplicar FPS dinâmico à animação de corrida/com_bola
+            # (não tocar em passe/remate/colisao que têm fps fixo)
+            estado_anim_atual = self._anim.estado
+            if estado_anim_atual in self._anim._anims:
+                anim_obj = self._anim._anims[estado_anim_atual]
+                if hasattr(anim_obj, "frame_time") and estado_anim_atual not in ("passe", "remate", "colisao", "parado"):
+                    anim_obj.frame_time = 1.0 / max(fps_anim, 0.5)
 
         self._anim.update(dt)
         self.image = self._anim.imagem
