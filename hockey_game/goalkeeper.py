@@ -54,7 +54,8 @@ class Goalkeeper(pygame.sprite.Sprite):
     """
 
     def __init__(self, equipa: str, lado: str,
-                 baliza_rect: pygame.Rect, pos_x_fixo: float):
+                 baliza_rect: pygame.Rect, pos_x_fixo: float,
+                 dificuldade: str = "normal"):
         super().__init__()
 
         self.equipa = equipa
@@ -88,6 +89,19 @@ class Goalkeeper(pygame.sprite.Sprite):
 
         # Cooldown da animação de defesa
         self._defender_timer = 0.0
+        self.definir_dificuldade(dificuldade)
+
+    def definir_dificuldade(self, nivel: str):
+        self.dificuldade = nivel
+        if nivel == "facil":
+            self.speed = 170
+            self.alerta_dist = 175
+        elif nivel == "dificil":
+            self.speed = 310
+            self.alerta_dist = 280
+        else:
+            self.speed = 240
+            self.alerta_dist = 220
 
     # ================================================================== #
     # Update principal (chamado pelo game.py)                             #
@@ -113,7 +127,7 @@ class Goalkeeper(pygame.sprite.Sprite):
 
         # Ativar animação de defender quando a bola se aproxima
         dist = math.hypot(bola.pos_x - self.pos_x, bola.pos_y - self.pos_y)
-        if dist < GR_ALERTA and self._defender_timer <= 0:
+        if dist < self.alerta_dist and self._defender_timer <= 0:
             self._defender_timer = 0.4   # mostra animação de defender por 0.4s
 
     # ------------------------------------------------------------------ #
@@ -130,7 +144,7 @@ class Goalkeeper(pygame.sprite.Sprite):
         else:
             # Aceleração proporcional à distância (mais rápido quando longe)
             vel_desejada = math.copysign(
-                min(GR_SPEED, abs(dy) * 4),   # proporcional mas limitada
+                min(self.speed, abs(dy) * 4),   # proporcional mas limitada
                 dy
             )
             self.vel_y = vel_desejada
@@ -156,7 +170,11 @@ class Goalkeeper(pygame.sprite.Sprite):
             self._anim.estado = "parado"
 
         self._anim.update(dt)
-        self.image = self._anim.imagem
+        img = self._anim.imagem
+        if self.lado == "dir":
+            self.image = pygame.transform.flip(img, True, False)
+        else:
+            self.image = img
 
     # ------------------------------------------------------------------ #
     # Bloquear a bola (chamado por game.py após update da bola)           #

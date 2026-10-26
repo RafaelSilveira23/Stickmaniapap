@@ -252,6 +252,12 @@ class Ball(pygame.sprite.Sprite):
 
         return None
 
+    def parar(self):
+        self.vel.update(0, 0)
+        self.dono = None
+        self._cooldown_dono = None
+        self._cooldown_timer = 0.0
+
     def repor(self, pos):
         self.pos_x = float(pos[0])
         self.pos_y = float(pos[1])

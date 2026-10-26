@@ -29,6 +29,7 @@ class Game:
 
         self.equipa_casa_id = "fc_porto"
         self.equipa_fora_id = "riba_dave"
+        self.dificuldade    = "normal"
 
         self.rink = Rink(equipa_casa=self.equipa_casa_id)
         self.hud  = HUDController()
@@ -59,6 +60,19 @@ class Game:
         self.fim_jogo       = False
         self._msg_texto     = ""
         self._msg_timer     = 0.0
+
+        # ── Sistema de Faltas e Disciplina ─────────────────────────────
+        self.faltas_azul     = 0
+        self.faltas_vermelho = 0
+        self._falta_ativa    = False
+        self._falta_timer    = 0.0
+        self._falta_cooldown = 0.0
+        self._msg_falta      = ""
+        self._msg_falta_sub  = ""
+        self._falta_tipo     = "livre"     # "livre", "livre_direto", "penalti"
+
+        # ── Dificuldade da IA ──────────────────────────────────────────
+        self.dificuldade     = "normal"    # "facil", "normal", "dificil"
 
         # ── Sistema de Mira de Remate ────────────────────────────────────
         self._mira_ativa        = False      # True quando está em modo de mira
@@ -117,7 +131,8 @@ class Game:
                 p.selecionado = True
             else:
                 agente = AgentIA(p, papel, "azul", pos_base,
-                                 bal_prop_azul, bal_adv_azul)
+                                 bal_prop_azul, bal_adv_azul,
+                                 dificuldade=self.dificuldade)
                 self.agentes_azul.append(agente)
 
         # ── Equipa Vermelha (Riba d'Ave) — lado esquerdo (toda IA) ───────
@@ -146,7 +161,8 @@ class Game:
 
             self.equipa_vermelha.add(p)
             agente = AgentIA(p, papel, "vermelho", pos_base,
-                             bal_prop_verm, bal_adv_verm)
+                             bal_prop_verm, bal_adv_verm,
+                             dificuldade=self.dificuldade)
             self.agentes_vermelhos.append(agente)
 
         self.todos_jogadores = pygame.sprite.Group(
@@ -157,12 +173,14 @@ class Game:
         self.gr_azul = Goalkeeper(
             equipa="azul", lado="dir",
             baliza_rect=r.zona_gr_dir,
-            pos_x_fixo=r.linha_golo_dir_x - 4
+            pos_x_fixo=r.linha_golo_dir_x - 4,
+            dificuldade=self.dificuldade
         )
         self.gr_vermelho = Goalkeeper(
             equipa="vermelho", lado="esq",
             baliza_rect=r.zona_gr_esq,
-            pos_x_fixo=r.linha_golo_esq_x + 4
+            pos_x_fixo=r.linha_golo_esq_x + 4,
+            dificuldade=self.dificuldade
         )
         self.grupo_gr = pygame.sprite.Group(self.gr_azul, self.gr_vermelho)
 
@@ -206,7 +224,8 @@ class Game:
                 res = self.menu.handle_event(event)
                 if res == "iniciar":
                     c_id, f_id = self.menu.get_equipas()
-                    self.iniciar_partida(c_id, f_id)
+                    dif = getattr(self.menu, "get_dificuldade", lambda: "normal")()
+                    self.iniciar_partida(c_id, f_id, dificuldade=dif)
                 elif res == "sair":
                     self.running = False
             return
@@ -219,6 +238,12 @@ class Game:
                     self.voltar_ao_menu()
                 elif event.key == pygame.K_F3:
                     self.show_debug = not self.show_debug
+                elif event.key == pygame.K_F4:
+                    # Alternar dificuldade em jogo
+                    ordem_dif = ["facil", "normal", "dificil"]
+                    idx_dif = ordem_dif.index(self.dificuldade) if self.dificuldade in ordem_dif else 1
+                    prox_dif = ordem_dif[(idx_dif + 1) % len(ordem_dif)]
+                    self.definir_dificuldade(prox_dif)
                 elif event.key == pygame.K_z:
                     self._acao_passe()
                 elif event.key == pygame.K_x:
@@ -372,7 +397,8 @@ class Game:
         papel    = getattr(antigo, "papel", "avancado")
         pos_base = getattr(antigo, "pos_tatica", self._pos_tatica_azul(papel, (antigo.pos_x, antigo.pos_y)))
         agente   = AgentIA(antigo, papel, "azul", pos_base,
-                           self.rink.baliza_dir, self.rink.baliza_esq)
+                           self.rink.baliza_dir, self.rink.baliza_esq,
+                           dificuldade=self.dificuldade)
         self.agentes_azul.append(agente)
 
         self.agentes_azul = [a for a in self.agentes_azul if a.jogador != novo]
@@ -439,11 +465,25 @@ class Game:
         for j in self.todos_jogadores:
             j.update(dt, self.rink.rect, self.bola, self.rink)
 
-        # Colisões físicas entre jogadores (separação + perda de bola)
+        # Gestão de timers de falta
+        if self._falta_cooldown > 0:
+            self._falta_cooldown = max(0.0, self._falta_cooldown - dt)
+        if self._falta_timer > 0:
+            self._falta_timer = max(0.0, self._falta_timer - dt)
+            if self._falta_timer <= 0:
+                self._falta_ativa = False
+
+        # Colisões físicas entre jogadores (separação, desarmes limpos e faltas)
         todos = list(self.todos_jogadores)
+        falta_detetada = None
         for i in range(len(todos)):
             for k in range(i + 1, len(todos)):
-                todos[i].empurrar_separar(todos[k], self.bola)
+                evento = todos[i].empurrar_separar(todos[k], self.bola)
+                if evento and evento.get("tipo") == "falta" and not falta_detetada and self._falta_cooldown <= 0:
+                    falta_detetada = evento
+
+        if falta_detetada and self.jogo_ativo:
+            self.assinalar_falta(falta_detetada["infrator"], falta_detetada["vitima"], falta_detetada.get("pos"))
 
         # Atualizar bola (com física de tabelas e balizas)
         resultado = self.bola.update(dt, self.rink, todos_jogadores=todos)
@@ -497,10 +537,19 @@ class Game:
     # Gestão e Alternância de Equipas                                     #
     # ------------------------------------------------------------------ #
 
-    def iniciar_partida(self, casa_id: str, fora_id: str):
-        """Inicia uma partida completa com as equipas selecionadas no menu."""
+    def iniciar_partida(self, casa_id: str, fora_id: str, dificuldade: str = None):
+        """Inicia uma partida completa com as equipas selecionadas no menu e nível de IA."""
         self.equipa_casa_id = casa_id
         self.equipa_fora_id = fora_id
+        if dificuldade:
+            self.dificuldade = dificuldade
+
+        # Reiniciar contadores de faltas
+        self.faltas_azul     = 0
+        self.faltas_vermelho = 0
+        self._falta_ativa    = False
+        self._falta_timer    = 0.0
+        self._falta_cooldown = 0.0
 
         # Atualizar o ringue com o emblema oficial da equipa da casa
         self.rink.definir_equipa_casa(self.equipa_casa_id)
@@ -529,6 +578,116 @@ class Game:
         info_f = obter_info_equipa(fora_id)
         self._msg_texto     = f"{info_c['nome']}  vs  {info_f['nome']}"
         self._msg_timer     = 2.5
+
+    def definir_dificuldade(self, nivel: str):
+        """Define e propaga a dificuldade para todos os jogadores e guarda-redes da IA."""
+        self.dificuldade = nivel
+        for agente in self.agentes_vermelhos:
+            agente.definir_dificuldade(nivel)
+        for agente in self.agentes_azul:
+            agente.definir_dificuldade(nivel)
+        if hasattr(self, "gr_azul"):
+            self.gr_azul.definir_dificuldade(nivel)
+        if hasattr(self, "gr_vermelho"):
+            self.gr_vermelho.definir_dificuldade(nivel)
+
+        nomes = {"facil": "FÁCIL", "normal": "NORMAL", "dificil": "DIFÍCIL"}
+        self._msg_texto = f"Dificuldade da IA: {nomes.get(nivel, nivel.upper())}"
+        self._msg_timer = 2.0
+
+    def assinalar_falta(self, infrator, vitima, pos=None):
+        """Assinala falta com apito oficial, registo no placar e reposição de posse."""
+        if self._falta_cooldown > 0 or not self.jogo_ativo:
+            return
+
+        self._falta_cooldown = 3.2
+        self._falta_timer    = 2.2
+        self._falta_ativa    = True
+
+        # Incrementar faltas da equipa infratora
+        if infrator.equipa == "azul":
+            self.faltas_azul += 1
+            total_faltas = self.faltas_azul
+            info_infrator = obter_info_equipa(self.equipa_casa_id)
+            info_vitima   = obter_info_equipa(self.equipa_fora_id)
+        else:
+            self.faltas_vermelho += 1
+            total_faltas = self.faltas_vermelho
+            info_infrator = obter_info_equipa(self.equipa_fora_id)
+            info_vitima   = obter_info_equipa(self.equipa_casa_id)
+
+        cx = RINK_X + RINK_W // 2
+        cy = RINK_Y + RINK_H // 2
+        r = self.rink
+
+        f_x = pos[0] if pos else vitima.pos_x
+        f_y = pos[1] if pos else vitima.pos_y
+
+        # Verificar se ocorreu na grande área adversária (Penálti)
+        is_penalti = False
+        if vitima.equipa == "azul":
+            if f_x < r.linha_golo_esq_x + 130 and abs(f_y - cy) < 100:
+                is_penalti = True
+        else:
+            if f_x > r.linha_golo_dir_x - 130 and abs(f_y - cy) < 100:
+                is_penalti = True
+
+        is_livre_direto = (total_faltas >= 10 and (total_faltas == 10 or total_faltas % 5 == 0))
+
+        if is_penalti:
+            self._falta_tipo = "penalti"
+            self._msg_falta = "GRANDE PENALIDADE  •  PENÁLTI!"
+            self._msg_falta_sub = f"Falta cometida por {infrator.nome} ({info_infrator['sigla']}) dentro da área"
+            pos_bola = (r.linha_golo_esq_x + 95 if vitima.equipa == 'azul' else r.linha_golo_dir_x - 95, cy)
+        elif is_livre_direto:
+            self._falta_tipo = "livre_direto"
+            self._msg_falta = f"{total_faltas}.ª FALTA DE EQUIPA  •  LIVRE DIRETO!"
+            self._msg_falta_sub = f"Livre Direto para {info_vitima['nome']} (limite de 10 faltas atingido)"
+            pos_bola = (cx - 150 if vitima.equipa == 'azul' else cx + 150, cy)
+        else:
+            self._falta_tipo = "livre"
+            self._msg_falta = f"FALTA!  LIVRE: {info_vitima['nome'].upper()}"
+            self._msg_falta_sub = f"Infração de {infrator.nome} ({info_infrator['sigla']})  •  Faltas de Equipa: {total_faltas}"
+            # Clampar bola dentro do campo de jogo
+            pos_bola = (max(r.rect.left + 70, min(r.rect.right - 70, f_x)),
+                        max(r.rect.top + 45,  min(r.rect.bottom - 45, f_y)))
+
+        # Repor a bola no ponto do livre
+        self.bola.parar()
+        self.bola.pos_x = float(pos_bola[0])
+        self.bola.pos_y = float(pos_bola[1])
+        self.bola.rect.center = (round(self.bola.pos_x), round(self.bola.pos_y))
+
+        # Atribuir posse de bola à equipa que sofreu a falta
+        if vitima.equipa == "azul":
+            self._trocar_humano(vitima)
+            self.jogador_humano.pos_x = float(pos_bola[0])
+            self.jogador_humano.pos_y = float(pos_bola[1])
+            self.jogador_humano.rect.center = (round(self.jogador_humano.pos_x), round(self.jogador_humano.pos_y))
+            self.jogador_humano.set_target(0.0, 0.0)
+            self.bola.definir_dono(self.jogador_humano)
+            self.jogador_humano.tem_bola = True
+            self.bola.seguir_jogador(self.jogador_humano)
+        else:
+            vitima.pos_x = float(pos_bola[0])
+            vitima.pos_y = float(pos_bola[1])
+            vitima.rect.center = (round(vitima.pos_x), round(vitima.pos_y))
+            vitima.set_target(0.0, 0.0)
+            self.bola.definir_dono(vitima)
+            vitima.tem_bola = True
+            self.bola.seguir_jogador(vitima)
+
+        # Afastar os defesas adversários para a distância regulamentar (mínimo 90px)
+        for j in self.todos_jogadores:
+            if j.equipa == infrator.equipa:
+                dist = math.hypot(j.pos_x - pos_bola[0], j.pos_y - pos_bola[1])
+                if dist < 90 and dist > 0.1:
+                    nx = (j.pos_x - pos_bola[0]) / dist
+                    ny = (j.pos_y - pos_bola[1]) / dist
+                    j.pos_x = pos_bola[0] + nx * 105
+                    j.pos_y = pos_bola[1] + ny * 105
+                    j.rect.center = (round(j.pos_x), round(j.pos_y))
+                    j.set_target(0.0, 0.0)
 
     def voltar_ao_menu(self):
         """Pausa o jogo e regressa ao ecrã de seleção de equipas."""
@@ -666,6 +825,7 @@ class Game:
         # 6. Marcador Superior do Mockup
         self._draw_mira()
         self.hud.draw_top_bar(self.screen, self)
+        self.hud.draw_foul_banner(self.screen, self)
 
         # 7. Painel Inferior (Mini-mapa, Cartão de Jogador e Controlos)
         self.hud.draw_bottom_panel(self.screen, self)

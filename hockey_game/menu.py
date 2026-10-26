@@ -8,6 +8,7 @@ import math
 import pygame
 from settings import WIDTH, HEIGHT, TITLE
 from team import EQUIPAS_LISTA, obter_info_equipa, carregar_logo_equipa
+from ai import DIFICULDADES
 
 
 class TeamSelectMenu:
@@ -15,6 +16,7 @@ class TeamSelectMenu:
         self.screen = screen
         self.casa_idx = EQUIPAS_LISTA.index(casa_id) if casa_id in EQUIPAS_LISTA else 0
         self.fora_idx = EQUIPAS_LISTA.index(fora_id) if fora_id in EQUIPAS_LISTA else 1
+        self.dificuldade = "normal"  # "facil", "normal", "dificil"
 
         # Fontes
         self.font_header = pygame.font.SysFont("Arial", 32, bold=True)
@@ -33,29 +35,36 @@ class TeamSelectMenu:
 
     def _setup_rects(self):
         # Cartão Equipa da Casa
-        self.rect_casa = pygame.Rect(180, 115, 360, 260)
-        self.btn_casa_prev = pygame.Rect(self.rect_casa.left + 16, self.rect_casa.top + 105, 36, 44)
-        self.btn_casa_next = pygame.Rect(self.rect_casa.right - 52, self.rect_casa.top + 105, 36, 44)
+        self.rect_casa = pygame.Rect(180, 95, 360, 245)
+        self.btn_casa_prev = pygame.Rect(self.rect_casa.left + 16, self.rect_casa.top + 98, 36, 44)
+        self.btn_casa_next = pygame.Rect(self.rect_casa.right - 52, self.rect_casa.top + 98, 36, 44)
 
         # Cartão Equipa Visitante
-        self.rect_fora = pygame.Rect(740, 115, 360, 260)
-        self.btn_fora_prev = pygame.Rect(self.rect_fora.left + 16, self.rect_fora.top + 105, 36, 44)
-        self.btn_fora_next = pygame.Rect(self.rect_fora.right - 52, self.rect_fora.top + 105, 36, 44)
-
-        # Botão Jogar
-        self.btn_jogar = pygame.Rect(WIDTH // 2 - 140, 622, 280, 52)
+        self.rect_fora = pygame.Rect(740, 95, 360, 245)
+        self.btn_fora_prev = pygame.Rect(self.rect_fora.left + 16, self.rect_fora.top + 98, 36, 44)
+        self.btn_fora_next = pygame.Rect(self.rect_fora.right - 52, self.rect_fora.top + 98, 36, 44)
 
         # Grelha de Equipas (8 equipas)
-        card_w, card_h = 118, 92
+        card_w, card_h = 118, 86
         gap = 14
         total_w = len(EQUIPAS_LISTA) * card_w + (len(EQUIPAS_LISTA) - 1) * gap
         start_x = (WIDTH - total_w) // 2
-        grid_y = 485
+        grid_y = 380
 
         self.grid_rects = []
         for i, eq_id in enumerate(EQUIPAS_LISTA):
             rx = start_x + i * (card_w + gap)
             self.grid_rects.append((eq_id, i, pygame.Rect(rx, grid_y, card_w, card_h)))
+
+        # Botões de Seleção de Dificuldade da IA
+        dif_w, dif_h = 135, 36
+        dif_cx = WIDTH // 2
+        self.btn_dif_facil   = pygame.Rect(dif_cx - 215, 508, dif_w, dif_h)
+        self.btn_dif_normal  = pygame.Rect(dif_cx - 68,  508, dif_w + 1, dif_h)
+        self.btn_dif_dificil = pygame.Rect(dif_cx + 80,  508, dif_w, dif_h)
+
+        # Botão Iniciar Partida
+        self.btn_jogar = pygame.Rect(WIDTH // 2 - 140, 592, 280, 50)
 
     def mudar_casa(self, delta: int):
         self.casa_idx = (self.casa_idx + delta) % len(EQUIPAS_LISTA)
@@ -72,6 +81,14 @@ class TeamSelectMenu:
     def get_equipas(self) -> tuple[str, str]:
         return EQUIPAS_LISTA[self.casa_idx], EQUIPAS_LISTA[self.fora_idx]
 
+    def get_dificuldade(self) -> str:
+        return self.dificuldade
+
+    def ciclar_dificuldade(self):
+        ordem = ["facil", "normal", "dificil"]
+        idx = ordem.index(self.dificuldade) if self.dificuldade in ordem else 1
+        self.dificuldade = ordem[(idx + 1) % len(ordem)]
+
     def handle_event(self, event: pygame.event.Event) -> str | None:
         """
         Retorna 'iniciar' se o utilizador confirmou a partida,
@@ -83,14 +100,22 @@ class TeamSelectMenu:
         if event.type == pygame.KEYDOWN:
             if event.key in (pygame.K_RETURN, pygame.K_SPACE, pygame.K_KP_ENTER):
                 return "iniciar"
-            elif event.key == pygame.K_LEFT or event.key == pygame.K_a:
+            elif event.key in (pygame.K_LEFT, pygame.K_a):
                 self.mudar_casa(-1)
-            elif event.key == pygame.K_RIGHT or event.key == pygame.K_d:
+            elif event.key in (pygame.K_RIGHT, pygame.K_d):
                 self.mudar_casa(1)
-            elif event.key == pygame.K_UP or event.key == pygame.K_w:
+            elif event.key in (pygame.K_UP, pygame.K_w):
                 self.mudar_fora(-1)
-            elif event.key == pygame.K_DOWN or event.key == pygame.K_s:
+            elif event.key in (pygame.K_DOWN, pygame.K_s):
                 self.mudar_fora(1)
+            elif event.key == pygame.K_TAB:
+                self.ciclar_dificuldade()
+            elif event.key in (pygame.K_f, pygame.K_F1):
+                self.dificuldade = "facil"
+            elif event.key in (pygame.K_n, pygame.K_F2):
+                self.dificuldade = "normal"
+            elif event.key in (pygame.K_g, pygame.K_F3):
+                self.dificuldade = "dificil"
             elif event.key in (pygame.K_1, pygame.K_2, pygame.K_3, pygame.K_4,
                                pygame.K_5, pygame.K_6, pygame.K_7, pygame.K_8):
                 idx = event.key - pygame.K_1
@@ -104,8 +129,16 @@ class TeamSelectMenu:
             if self.btn_jogar.collidepoint(mpos) and event.button == 1:
                 return "iniciar"
 
+            # Botões de Dificuldade
+            if self.btn_dif_facil.collidepoint(mpos) and event.button == 1:
+                self.dificuldade = "facil"
+            elif self.btn_dif_normal.collidepoint(mpos) and event.button == 1:
+                self.dificuldade = "normal"
+            elif self.btn_dif_dificil.collidepoint(mpos) and event.button == 1:
+                self.dificuldade = "dificil"
+
             # Setas Equipa Casa
-            if self.btn_casa_prev.collidepoint(mpos):
+            elif self.btn_casa_prev.collidepoint(mpos):
                 self.mudar_casa(-1)
             elif self.btn_casa_next.collidepoint(mpos):
                 self.mudar_casa(1)
@@ -181,7 +214,7 @@ class TeamSelectMenu:
 
         # ── 3. Grelha Inferior de Todas as Equipas ──────────────────────
         sub_grid = self.font_card_title.render("TODAS AS EQUIPAS DISPONÍVEIS (Clica com o rato para selecionar):", True, (170, 200, 255))
-        screen.blit(sub_grid, (WIDTH // 2 - sub_grid.get_width() // 2, 458))
+        screen.blit(sub_grid, (WIDTH // 2 - sub_grid.get_width() // 2, 355))
 
         mpos = pygame.mouse.get_pos()
         for eq_id, idx, r in self.grid_rects:
@@ -232,7 +265,49 @@ class TeamSelectMenu:
                 tag = self.font_hint.render(f"#{idx+1}", True, (90, 120, 170))
                 screen.blit(tag, (r.centerx - tag.get_width() // 2, r.bottom - 16))
 
-        # ── 4. Botão Grande Iniciar Partida ─────────────────────────────
+        # ── 4. Seletor de Dificuldade da IA ─────────────────────────────
+        t_dif_label = self.font_card_title.render("DIFICULDADE DA IA ADVERSÁRIA:", True, (200, 220, 255))
+        screen.blit(t_dif_label, (WIDTH // 2 - t_dif_label.get_width() // 2, 482))
+
+        difs = [
+            ("facil",   "FÁCIL",   self.btn_dif_facil,   (40, 180, 90),  (25, 90, 50)),
+            ("normal",  "NORMAL",  self.btn_dif_normal,  (50, 140, 255), (20, 60, 120)),
+            ("dificil", "DIFÍCIL", self.btn_dif_dificil, (255, 70, 70),  (130, 30, 30)),
+        ]
+
+        for dif_id, label, r_btn, cor_ativa, cor_inativa in difs:
+            is_active = (self.dificuldade == dif_id)
+            hover = r_btn.collidepoint(mpos)
+
+            if is_active:
+                bg = cor_ativa
+                borda = (255, 255, 255)
+                b_w = 2
+                t_cor = (255, 255, 255)
+            elif hover:
+                bg = (30, 48, 90)
+                borda = cor_ativa
+                b_w = 2
+                t_cor = (220, 235, 255)
+            else:
+                bg = (16, 26, 50)
+                borda = (40, 65, 120)
+                b_w = 1
+                t_cor = (160, 185, 225)
+
+            pygame.draw.rect(screen, bg, r_btn, border_radius=8)
+            pygame.draw.rect(screen, borda, r_btn, b_w, border_radius=8)
+
+            txt = self.font_btn.render(label, True, t_cor)
+            screen.blit(txt, (r_btn.centerx - txt.get_width() // 2, r_btn.centery - txt.get_height() // 2))
+
+        # Descrição da dificuldade ativa
+        cfg_dif = DIFICULDADES.get(self.dificuldade, {})
+        desc_dif = cfg_dif.get("descricao", "")
+        t_desc = self.font_hint.render(desc_dif, True, (160, 195, 240))
+        screen.blit(t_desc, (WIDTH // 2 - t_desc.get_width() // 2, 554))
+
+        # ── 5. Botão Grande Iniciar Partida ─────────────────────────────
         hover_jogar = self.btn_jogar.collidepoint(mpos)
         if hover_jogar:
             cor_btn_bg = (30, 160, 80)
@@ -249,8 +324,8 @@ class TeamSelectMenu:
                               self.btn_jogar.centery - t_jogar.get_height() // 2))
 
         # Atalhos rápidos de teclado
-        hint = self.font_hint.render("Atalhos: [A/D ou Setas Esq/Dir] Muda Casa  |  [W/S ou Setas Cima/Baixo] Muda Fora  |  [ENTER] Começar", True, (120, 150, 200))
-        screen.blit(hint, (WIDTH // 2 - hint.get_width() // 2, 686))
+        hint = self.font_hint.render("Atalhos: [TAB ou F/N/G] Dificuldade  |  [A/D] Equipa Casa  |  [W/S] Equipa Fora  |  [ENTER] Começar", True, (120, 150, 200))
+        screen.blit(hint, (WIDTH // 2 - hint.get_width() // 2, 656))
 
     def _desenhar_card_equipa(self, rect: pygame.Rect, titulo: str, info: dict,
                               btn_prev: pygame.Rect, btn_next: pygame.Rect, is_casa: bool):

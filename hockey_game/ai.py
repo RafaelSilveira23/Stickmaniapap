@@ -19,7 +19,7 @@ import pygame
 import math
 import random
 
-# Velocidades da IA (um pouco abaixo do humano para ser jogável)
+# Velocidades base da IA (ajustadas dinamicamente pelo perfil de dificuldade)
 VEL_NORMAL  = 175
 VEL_SPRINT  = 270
 VEL_DEFESA  = 155
@@ -29,6 +29,55 @@ RAIO_PERSEGUIR = 180
 
 # Distância mínima entre jogadores da mesma equipa (separação)
 SEP_MIN = 45
+
+# ── Perfis de Dificuldade da IA ─────────────────────────────────────────
+DIFICULDADES = {
+    "facil": {
+        "id": "facil",
+        "nome": "Fácil",
+        "vel_normal": 140,
+        "vel_sprint": 205,
+        "vel_defesa": 120,
+        "raio_perseguir": 135,
+        "remate_cooldown": 2.2,
+        "passe_cooldown": 1.8,
+        "dist_remate": 170,
+        "erro_mira": 0.22,           # ~12.5 graus de dispersão
+        "agressividade": 0.30,
+        "descricao": "IA mais calma, velocidade moderada e desarme suave",
+        "cor": (80, 200, 120),
+    },
+    "normal": {
+        "id": "normal",
+        "nome": "Normal",
+        "vel_normal": 175,
+        "vel_sprint": 265,
+        "vel_defesa": 150,
+        "raio_perseguir": 190,
+        "remate_cooldown": 1.4,
+        "passe_cooldown": 1.0,
+        "dist_remate": 225,
+        "erro_mira": 0.08,           # ~4.5 graus de dispersão
+        "agressividade": 0.60,
+        "descricao": "IA equilibrada com boa ocupação de espaços e pressão moderada",
+        "cor": (60, 160, 255),
+    },
+    "dificil": {
+        "id": "dificil",
+        "nome": "Difícil",
+        "vel_normal": 215,
+        "vel_sprint": 320,
+        "vel_defesa": 185,
+        "raio_perseguir": 265,
+        "remate_cooldown": 0.75,
+        "passe_cooldown": 0.5,
+        "dist_remate": 290,
+        "erro_mira": 0.02,           # remates cirúrgicos
+        "agressividade": 0.90,
+        "descricao": "IA veloz, pressão agressiva, passes rápidos e pontaria de elite",
+        "cor": (255, 75, 75),
+    }
+}
 
 
 class AgentIA:
@@ -48,13 +97,17 @@ class AgentIA:
     def __init__(self, jogador, papel: str, equipa: str,
                  pos_base: tuple,
                  baliza_propria: pygame.Rect,
-                 baliza_adversaria: pygame.Rect):
+                 baliza_adversaria: pygame.Rect,
+                 dificuldade: str = "normal"):
         self.jogador = jogador
         self.papel = papel
         self.equipa = equipa
         self.pos_base = pos_base
         self.baliza_propria = baliza_propria
         self.baliza_adversaria = baliza_adversaria
+
+        self.dificuldade = dificuldade
+        self.cfg = DIFICULDADES.get(dificuldade, DIFICULDADES["normal"])
 
         # Pequena variação aleatória para evitar que todos façam o mesmo
         self._offset_x = random.uniform(-20, 20)
@@ -63,6 +116,12 @@ class AgentIA:
         # Cooldown para o remate (evita rematar 60x por segundo)
         self._remate_cooldown = 0.0
         self._passe_cooldown  = 0.0
+
+    def definir_dificuldade(self, nivel: str):
+        """Atualiza a dificuldade e recalibra parâmetros táticos da IA."""
+        if nivel in DIFICULDADES:
+            self.dificuldade = nivel
+            self.cfg = DIFICULDADES[nivel]
 
     # ------------------------------------------------------------------ #
     # Update principal — chamado cada frame                                #
@@ -112,13 +171,19 @@ class AgentIA:
         # Verifica se há adversário à frente (para decidir passar ou rematar)
         adversario_bloqueio = self._adversario_no_caminho(adversarios)
 
-        if dist_baliza < 200 and self._remate_cooldown <= 0:
-            # Remata!
+        dist_max_remate = self.cfg.get("dist_remate", 225)
+
+        if dist_baliza < dist_max_remate and self._remate_cooldown <= 0:
+            # Remata com desvio/imprecisão conforme a dificuldade configurada
             v = pygame.math.Vector2(dx, dy)
             if v.length() > 0:
                 v.normalize_ip()
+                erro = self.cfg.get("erro_mira", 0.08)
+                if erro > 0:
+                    ang_erro = random.uniform(-erro, erro)
+                    v = v.rotate_rad(ang_erro)
             j.fazer_remate(bola, v)
-            self._remate_cooldown = 1.5
+            self._remate_cooldown = self.cfg.get("remate_cooldown", 1.4)
 
         elif adversario_bloqueio and self._passe_cooldown <= 0 and colegas:
             # Passa para o colega mais bem posicionado
@@ -129,54 +194,58 @@ class AgentIA:
                 v = pygame.math.Vector2(vx, vy)
                 if v.length() > 0:
                     v.normalize_ip()
+                    erro = self.cfg.get("erro_mira", 0.08) * 0.5
+                    if erro > 0:
+                        v = v.rotate_rad(random.uniform(-erro, erro))
                 j.fazer_passe(bola, v)
-                self._passe_cooldown = 1.0
+                self._passe_cooldown = self.cfg.get("passe_cooldown", 1.0)
 
         else:
-            # Avança para a baliza
-            self._mover_para(bx + self._offset_x, by + self._offset_y, VEL_SPRINT)
+            # Avança para a baliza com velocidade de sprint configurada
+            spd = self.cfg.get("vel_sprint", VEL_SPRINT)
+            self._mover_para(bx + self._offset_x, by + self._offset_y, spd)
 
     def _estado_defender(self, dt, bola):
         """Adversário tem a bola — volta à zona defensiva ou pressiona a bola."""
         j = self.jogador
+        vel_norm = self.cfg.get("vel_normal", VEL_NORMAL)
+        vel_def  = self.cfg.get("vel_defesa", VEL_DEFESA)
+        vel_spr  = self.cfg.get("vel_sprint", VEL_SPRINT)
+        agressiva = self.cfg.get("agressividade", 0.6)
 
         # Avançados pressionam a bola; defesas voltam para casa
         if self.papel == 'avancado':
-            # Pressiona a bola mas não abandona completamente o meio-campo
             tx = bola.pos_x
             ty = bola.pos_y
-            # Limite de até onde o avançado vai perseguir
             limite_x = self.baliza_adversaria.centerx
             if self.equipa == 'vermelho':
-                tx = max(tx, limite_x - 200)
+                tx = max(tx, limite_x - 240)
             else:
-                tx = min(tx, limite_x + 200)
-            self._mover_para(tx, ty, VEL_NORMAL)
+                tx = min(tx, limite_x + 240)
+            spd = vel_spr if agressiva >= 0.8 else vel_norm
+            self._mover_para(tx, ty, spd)
 
         elif self.papel == 'medio':
-            # Vai para posição entre a bola e a baliza própria
             tx = (bola.pos_x + self.pos_base[0]) / 2
             ty = (bola.pos_y + self.pos_base[1]) / 2
-            self._mover_para(tx + self._offset_x, ty + self._offset_y, VEL_NORMAL)
+            self._mover_para(tx + self._offset_x, ty + self._offset_y, vel_norm)
 
         else:  # defesa
-            # Fica na zona, entre a bola e a baliza
             tx = self.pos_base[0] + self._offset_x
             ty = self.pos_base[1] + self._offset_y
             dist_bola = math.hypot(bola.pos_x - j.pos_x, bola.pos_y - j.pos_y)
-            if dist_bola < 120:
-                # Se a bola estiver perto, vai buscar
-                self._mover_para(bola.pos_x, bola.pos_y, VEL_DEFESA)
+            raio_intervencao = 150 if agressiva >= 0.75 else 115
+            if dist_bola < raio_intervencao:
+                self._mover_para(bola.pos_x, bola.pos_y, vel_def * 1.15)
             else:
-                self._mover_para(tx, ty, VEL_DEFESA)
+                self._mover_para(tx, ty, vel_def)
 
     def _estado_apoiar(self, dt, bola, colegas):
         """Colega tem a bola — posiciona-se para receber passe."""
         j = self.jogador
-        # Vai para posição tática com offset para espaçar
         tx = self.pos_base[0] + self._offset_x
         ty = self.pos_base[1] + self._offset_y
-        self._mover_para(tx, ty, VEL_NORMAL)
+        self._mover_para(tx, ty, self.cfg.get("vel_normal", VEL_NORMAL))
 
     def _estado_perseguir(self, dt, bola, colegas):
         """
@@ -185,8 +254,8 @@ class AgentIA:
         """
         j = self.jogador
         dist_propria = math.hypot(bola.pos_x - j.pos_x, bola.pos_y - j.pos_y)
+        raio_max = self.cfg.get("raio_perseguir", RAIO_PERSEGUIR)
 
-        # Distância do colega mais perto
         if colegas:
             dist_min_colega = min(
                 math.hypot(bola.pos_x - c.pos_x, bola.pos_y - c.pos_y)
@@ -195,21 +264,17 @@ class AgentIA:
         else:
             dist_min_colega = float("inf")
 
-        # Só persegue se for claramente o mais perto (margem de 40px)
-        e_o_mais_perto = dist_propria < dist_min_colega - 40
+        # Só persegue se for o mais perto e estiver dentro do alcance de perseguição
+        e_o_mais_perto = (dist_propria < dist_min_colega - 35) and (dist_propria < raio_max + 90)
 
         if e_o_mais_perto:
-            self._mover_para(bola.pos_x, bola.pos_y, VEL_SPRINT)
+            self._mover_para(bola.pos_x, bola.pos_y, self.cfg.get("vel_sprint", VEL_SPRINT))
         else:
             self._mover_para(
                 self.pos_base[0] + self._offset_x,
                 self.pos_base[1] + self._offset_y,
-                VEL_NORMAL
+                self.cfg.get("vel_normal", VEL_NORMAL)
             )
-
-    # ------------------------------------------------------------------ #
-    # Utilitários                                                          #
-    # ------------------------------------------------------------------ #
 
     def _mover_para(self, tx: float, ty: float, velocidade: float):
         """Define a velocidade alvo com inércia para mover o jogador em direção a (tx, ty)."""

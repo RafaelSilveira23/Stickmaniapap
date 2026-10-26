@@ -29,20 +29,15 @@ class Rink:
         # ── Gerar Piso de Madeira Real (Tábua Corrida / Parquet de Hóquei) ──
         self._campo = self._gerar_piso_madeira(RINK_W, RINK_H)
 
-        # ── Balizas Proporcionais Alinhadas ao Pixel ─────────────────────
+        # ── Balizas Proporcionais Oficiais ────────────────────────────────
         BSH = 88
-        fw, fh = frente_raw.get_size()     # 69, 89
+        fw, fh = frente_raw.get_size()     # 69, 89 (Baliza Esquerda: boca à direita)
         self.BSW_FRENTE = int(fw * BSH / fh)    # ~68
-        aw, ah = atras_raw.get_size()     # 61, 86
+        aw, ah = atras_raw.get_size()     # 61, 86 (Baliza Direita: boca à esquerda)
         self.BSW_ATRAS  = int(aw * BSH / ah)    # ~62
 
-        atras_s  = pygame.transform.scale(atras_raw,  (self.BSW_ATRAS,  BSH))
-        frente_s = pygame.transform.scale(frente_raw, (self.BSW_FRENTE, BSH))
-
-        self._bal_atras_esq  = atras_s
-        self._bal_frente_esq = frente_s
-        self._bal_atras_dir  = pygame.transform.flip(atras_s,  True, False)
-        self._bal_frente_dir = pygame.transform.flip(frente_s, True, False)
+        self._bal_esq = pygame.transform.scale(frente_raw, (self.BSW_FRENTE, BSH))
+        self._bal_dir = pygame.transform.scale(atras_raw,  (self.BSW_ATRAS,  BSH))
 
         # ── Linhas de Golo e Posições (Espaço atrás da baliza para patinar) ──
         self.linha_golo_esq_x = self.rect.left + BALIZA_OFFSET       # X ~ 185
@@ -53,13 +48,10 @@ class Rink:
         self.baliza_base_y = cy + self.baliza_boca_h // 2
 
         # Posições de desenho perfeitamente alinhadas com a linha de golo
-        # Esquerda: os postes frontais terminam exatamente em linha_golo_esq_x
-        self._pos_frente_esq = (self.linha_golo_esq_x - self.BSW_FRENTE, cy - BSH // 2)
-        self._pos_atras_esq  = (self.linha_golo_esq_x - self.BSW_ATRAS,  cy - BSH // 2)
-
-        # Direita: os postes frontais começam exatamente em linha_golo_dir_x
-        self._pos_frente_dir = (self.linha_golo_dir_x, cy - BSH // 2)
-        self._pos_atras_dir  = (self.linha_golo_dir_x, cy - BSH // 2)
+        # Esquerda: os postes frontais alinham exatamente com linha_golo_esq_x
+        self._pos_baliza_esq = (self.linha_golo_esq_x - self.BSW_FRENTE, cy - BSH // 2)
+        # Direita: os postes frontais alinham exatamente com linha_golo_dir_x
+        self._pos_baliza_dir = (self.linha_golo_dir_x, cy - BSH // 2)
 
         # Retângulos interiores de golo
         gw = 32
@@ -67,18 +59,17 @@ class Rink:
         self.baliza_dir = pygame.Rect(self.linha_golo_dir_x,     self.baliza_topo_y, gw, self.baliza_boca_h)
 
         # Obstáculos físicos das redes (jogadores patinam à volta sem atravessar a rede)
-        prof_obs = 46
         self.obstaculo_baliza_esq = pygame.Rect(
-            self.linha_golo_esq_x - prof_obs,
-            cy - BSH // 2 + 8,
-            prof_obs,
-            BSH - 16
+            self.linha_golo_esq_x - self.BSW_FRENTE + 4,
+            cy - BSH // 2 + 10,
+            self.BSW_FRENTE - 8,
+            BSH - 20
         )
         self.obstaculo_baliza_dir = pygame.Rect(
-            self.linha_golo_dir_x,
-            cy - BSH // 2 + 8,
-            prof_obs,
-            BSH - 16
+            self.linha_golo_dir_x + 4,
+            cy - BSH // 2 + 10,
+            self.BSW_ATRAS - 8,
+            BSH - 20
         )
 
         # Zonas de defesa dos Guarda-Redes (sobre a linha de golo)
@@ -175,24 +166,31 @@ class Rink:
                         pygame.Rect(self.linha_golo_dir_x, cy - 45, 65, 90),
                         -1.57, 1.57, 2)
 
-        # Balizas (parte de trás da rede)
-        surf.blit(self._bal_atras_esq, self._pos_atras_esq)
-        surf.blit(self._bal_atras_dir, self._pos_atras_dir)
+        # Balizas Oficiais (desenhadas com nitidez sem duplicidade)
+        surf.blit(self._bal_esq, self._pos_baliza_esq)
+        surf.blit(self._bal_dir, self._pos_baliza_dir)
 
         return surf
 
+    def definir_equipa_casa(self, equipa_id: str):
+        """Atualiza a equipa da casa e recria a superfície do campo com o novo emblema."""
+        if self.equipa_casa != equipa_id:
+            self.equipa_casa = equipa_id
+            self._surf = self._construir()
+
     def _desenhar_centro_emblema(self, surf, cx, cy):
-        """Emblema da equipa da casa no centro do campo como no mockup."""
-        logo_centro = carregar_logo_equipa(self.equipa_casa, (80, 80))
+        """Emblema oficial da equipa da casa no centro do campo como no mockup."""
+        logo_centro = carregar_logo_equipa(self.equipa_casa, (96, 96))
         if logo_centro is not None:
-            surf.blit(logo_centro, (cx - 40, cy - 40))
+            lw, lh = logo_centro.get_size()
+            surf.blit(logo_centro, (cx - lw // 2, cy - lh // 2))
         else:
             info = obter_info_equipa(self.equipa_casa)
             cor = info.get("cor_primaria", (20, 60, 160))
             sigla = info.get("sigla", "FCP")
-            pygame.draw.circle(surf, cor, (cx, cy), 24)
-            pygame.draw.circle(surf, (230, 200, 60), (cx, cy), 24, 2)
-            f = pygame.font.SysFont("Arial", 9, bold=True)
+            pygame.draw.circle(surf, cor, (cx, cy), 28)
+            pygame.draw.circle(surf, (230, 200, 60), (cx, cy), 28, 2)
+            f = pygame.font.SysFont("Arial", 11, bold=True)
             t = f.render(sigla, True, (255, 255, 255))
             surf.blit(t, (cx - t.get_width() // 2, cy - t.get_height() // 2))
 
@@ -238,6 +236,5 @@ class Rink:
         screen.blit(self._surf, (0, 0))
 
     def draw_frente(self, screen):
-        """Desenha os postes frontais e a travessa por cima dos jogadores e da bola."""
-        screen.blit(self._bal_frente_esq, self._pos_frente_esq)
-        screen.blit(self._bal_frente_dir, self._pos_frente_dir)
+        """Não sobrepõe a rede opaca sobre o guarda-redes e a bola."""
+        pass

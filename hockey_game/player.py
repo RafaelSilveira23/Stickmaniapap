@@ -2,6 +2,7 @@
 """player.py - jogador com inércia, colisões entre jogadores e pick-up correto."""
 import os
 import random
+import math
 import pygame
 from settings import *
 from animation import AnimationController, load_animation_from_folder
@@ -114,11 +115,23 @@ class Player(pygame.sprite.Sprite):
         self._shake_timer  = 0.0       # tempo restante de shake
         self._shake_offset = (0, 0)    # offset actual aplicado ao desenho
 
+        # Estabilidade física e gestão de quedas/faltas
+        self._imunidade_queda_timer = 0.0   # tempo restante de imunidade a nova queda
+        self._desestabilizado_timer = 0.0   # tempo de ligeiro desequilíbrio após desarme limpo
+        self._cooldown_desarme      = 0.0   # cooldown entre desarmes para evitar perda instantânea
+
     # ================================================================== #
     # Update principal                                                     #
     # ================================================================== #
 
     def update(self, dt: float, rink_rect: pygame.Rect, bola=None, rink=None):
+        if self._imunidade_queda_timer > 0:
+            self._imunidade_queda_timer = max(0.0, self._imunidade_queda_timer - dt)
+        if self._desestabilizado_timer > 0:
+            self._desestabilizado_timer = max(0.0, self._desestabilizado_timer - dt)
+        if self._cooldown_desarme > 0:
+            self._cooldown_desarme = max(0.0, self._cooldown_desarme - dt)
+
         if self.humano:
             self._input_humano()
 
@@ -179,6 +192,10 @@ class Player(pygame.sprite.Sprite):
         if self._estado_action in ("remate", "colisao"):
             self.vel_x = _lerp_fixo(self.vel_x, 0.0,            taxa * 0.8)
             self.vel_y = _lerp_fixo(self.vel_y, 0.0,            taxa * 0.8)
+        elif self._desestabilizado_timer > 0:
+            # Jogador desestabilizado após toque tem velocidade temporariamente reduzida
+            self.vel_x = _lerp_fixo(self.vel_x, self._target_vx * 0.65, taxa)
+            self.vel_y = _lerp_fixo(self.vel_y, self._target_vy * 0.65, taxa)
         else:
             self.vel_x = _lerp_fixo(self.vel_x, self._target_vx, taxa)
             self.vel_y = _lerp_fixo(self.vel_y, self._target_vy, taxa)
@@ -231,32 +248,108 @@ class Player(pygame.sprite.Sprite):
     # Colisões entre jogadores (separação física)                         #
     # ------------------------------------------------------------------ #
 
-    def empurrar_separar(self, outro: "Player", bola=None):
+    def empurrar_separar(self, outro: "Player", bola=None) -> dict | None:
         """
         Se dois jogadores se sobrepõem, empurra-os para fora um do outro.
-        Chamado pelo game.py para cada par de jogadores.
+        Gera desarmes limpos (sem queda) na maioria das disputas, e quedas/faltas
+        apenas em choques a alta velocidade ou cargas por trás.
+        Retorna dicionário com dados da falta ou None.
         """
         dx = self.pos_x - outro.pos_x
         dy = self.pos_y - outro.pos_y
         dist = (dx * dx + dy * dy) ** 0.5
 
-        if dist < SEP_JOGADORES and dist > 0.1:
-            # Sobreposição → empurrar metade cada
-            overlap = (SEP_JOGADORES - dist) / 2
-            nx = dx / dist
-            ny = dy / dist
-            self.pos_x  += nx * overlap
-            self.pos_y  += ny * overlap
-            outro.pos_x -= nx * overlap
-            outro.pos_y -= ny * overlap
-            self.rect.center  = (round(self.pos_x),  round(self.pos_y))
-            outro.rect.center = (round(outro.pos_x), round(outro.pos_y))
+        if dist >= SEP_JOGADORES or dist <= 0.1:
+            return None
 
-            # Se o adversário colidiu com quem tem a bola → perde a bola (solta sem congelar)
-            if outro.tem_bola and self.equipa != outro.equipa:
-                outro.sofrer_colisao(bola, direcao_impacto=pygame.math.Vector2(-nx, -ny))
-            elif self.tem_bola and self.equipa != outro.equipa:
-                self.sofrer_colisao(bola, direcao_impacto=pygame.math.Vector2(nx, ny))
+        # Sobreposição física → empurrar metade cada
+        overlap = (SEP_JOGADORES - dist) / 2
+        nx = dx / dist
+        ny = dy / dist
+        self.pos_x  += nx * overlap
+        self.pos_y  += ny * overlap
+        outro.pos_x -= nx * overlap
+        outro.pos_y -= ny * overlap
+        self.rect.center  = (round(self.pos_x),  round(self.pos_y))
+        outro.rect.center = (round(outro.pos_x), round(outro.pos_y))
+
+        # Se pertencerem à mesma equipa, não há desarme nem falta
+        if self.equipa == outro.equipa:
+            return None
+
+        # Determinar quem é o portador e o defensor
+        portador = None
+        defensor = None
+        dir_impacto = None
+
+        if outro.tem_bola:
+            portador = outro
+            defensor = self
+            dir_impacto = pygame.math.Vector2(-nx, -ny)
+        elif self.tem_bola:
+            portador = self
+            defensor = outro
+            dir_impacto = pygame.math.Vector2(nx, ny)
+
+        if not portador:
+            return None
+
+        # Cooldown para não processar múltiplos desarmes consecutivos
+        if portador._cooldown_desarme > 0:
+            return None
+
+        portador._cooldown_desarme = 0.40
+
+        # Velocidade e agressividade da abordagem
+        vel_def = math.hypot(defensor.vel_x, defensor.vel_y)
+        is_sprint = getattr(defensor, "_sprint_ativo", False) or (vel_def > 210)
+
+        # Verificar se a carga foi por trás
+        carga_por_tras = False
+        if hasattr(portador, "vetor_direcao") and portador.vetor_direcao.length_squared() > 0:
+            v_def_vec = pygame.math.Vector2(defensor.vel_x, defensor.vel_y)
+            if v_def_vec.length_squared() > 0:
+                dot = portador.vetor_direcao.dot(v_def_vec.normalize())
+                if dot > 0.50 and vel_def > 130:
+                    carga_por_tras = True
+
+        # Decisão de Queda vs Desarme Limpo:
+        # Jogadores caem MUITO MENOS, apenas sob choque violento!
+        deve_cair = False
+        if portador._imunidade_queda_timer <= 0:
+            if is_sprint and vel_def > 200:
+                deve_cair = (random.random() < 0.28)
+            elif carga_por_tras:
+                deve_cair = (random.random() < 0.40)
+            elif vel_def > 250:
+                deve_cair = (random.random() < 0.32)
+
+        if deve_cair:
+            # Queda espetacular com falta
+            portador.sofrer_queda(bola, dir_impacto)
+            portador._imunidade_queda_timer = 2.5
+            return {
+                "tipo": "falta",
+                "infrator": defensor,
+                "vitima": portador,
+                "queda": True,
+                "pos": (portador.pos_x, portador.pos_y)
+            }
+        else:
+            # Desarme limpo: a bola solta-se mas o jogador FICA EM PÉ!
+            portador.desarme_limpo(bola, dir_impacto)
+
+            # Pequena probabilidade de falta por obstrução em cargas rápidas mesmo sem queda
+            if (is_sprint or carga_por_tras) and random.random() < 0.12:
+                return {
+                    "tipo": "falta",
+                    "infrator": defensor,
+                    "vitima": portador,
+                    "queda": False,
+                    "pos": (portador.pos_x, portador.pos_y)
+                }
+
+            return None
 
     # ------------------------------------------------------------------ #
     # Interação com a bola                                                 #
@@ -318,18 +411,37 @@ class Player(pygame.sprite.Sprite):
             direcao_vec = pygame.math.Vector2(1, 0)
         bola.libertar(direcao_vec.normalize() * forca, dono_anterior=self)
 
-    def sofrer_colisao(self, bola=None, direcao_impacto=None):
+    def desarme_limpo(self, bola=None, direcao_impacto=None):
+        """Desarme ou perda de posse normal: o jogador NÃO cai ao chão e continua a patinar."""
         if self.tem_bola:
             self.tem_bola = False
             if bola is not None:
                 if direcao_impacto and direcao_impacto.length_squared() > 0:
-                    v = direcao_impacto.normalize() * 120
+                    v = direcao_impacto.normalize() * 95
                 else:
-                    v = pygame.math.Vector2(60, 60)
+                    v = pygame.math.Vector2(50, 50)
                 bola.libertar(v, dono_anterior=self)
-        self._comecar_acao("colisao", 0.5)
-        # Activar shake visual durante 0.2s
+
+        # Apenas um pequeno tremor e abrandamento momentâneo (sem animação de queda!)
+        self._shake_timer = 0.12
+        self._desestabilizado_timer = 0.22
+
+    def sofrer_queda(self, bola=None, direcao_impacto=None):
+        """Queda ao chão após carga violenta ou falta sofrida."""
+        if self.tem_bola:
+            self.tem_bola = False
+            if bola is not None:
+                if direcao_impacto and direcao_impacto.length_squared() > 0:
+                    v = direcao_impacto.normalize() * 130
+                else:
+                    v = pygame.math.Vector2(65, 65)
+                bola.libertar(v, dono_anterior=self)
+        self._comecar_acao("colisao", 0.65)
         self._shake_timer = _SHAKE_DURACAO
+
+    def sofrer_colisao(self, bola=None, direcao_impacto=None):
+        """Compatibilidade: chamada genérica usa desarme limpo."""
+        self.desarme_limpo(bola, direcao_impacto)
 
     def _comecar_acao(self, acao: str, duracao: float):
         self._estado_action = acao

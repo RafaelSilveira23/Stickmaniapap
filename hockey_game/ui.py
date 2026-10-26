@@ -82,7 +82,12 @@ class HUDController:
         t_casa = self.font_title.render(info_casa["nome"], True, (255, 255, 255))
         screen.blit(t_casa, (sc_x + 38, sc_y + 4))
 
-        # Resultado da equipa da casa
+        # Faltas e Resultado da equipa da casa
+        f_casa = getattr(game, "faltas_azul", 0)
+        cor_f_c = (255, 195, 60) if f_casa >= 8 else (190, 215, 255)
+        t_f_casa = self.font_key.render(f"F:{f_casa}", True, cor_f_c)
+        screen.blit(t_f_casa, (sc_x + card_w - 58, sc_y + 8))
+
         g_casa = self.font_score.render(str(game.golos_azul), True, (255, 255, 255))
         screen.blit(g_casa, (sc_x + card_w - 24, sc_y + 2))
 
@@ -98,7 +103,12 @@ class HUDController:
         t_fora = self.font_title.render(info_fora["nome"], True, (255, 255, 255))
         screen.blit(t_fora, (sc_x + 38, sc_y + linha_h + 4))
 
-        # Resultado da equipa visitante
+        # Faltas e Resultado da equipa visitante
+        f_fora = getattr(game, "faltas_vermelho", 0)
+        cor_f_f = (255, 195, 60) if f_fora >= 8 else (190, 215, 255)
+        t_f_fora = self.font_key.render(f"F:{f_fora}", True, cor_f_f)
+        screen.blit(t_f_fora, (sc_x + card_w - 58, sc_y + linha_h + 8))
+
         g_fora = self.font_score.render(str(game.golos_vermelho), True, (255, 255, 255))
         screen.blit(g_fora, (sc_x + card_w - 24, sc_y + linha_h + 2))
 
@@ -129,7 +139,24 @@ class HUDController:
         placar_completo = pygame.Rect(sc_x, sc_y, card_w + timer_w, total_h)
         pygame.draw.rect(screen, (40, 75, 140), placar_completo, 1, border_radius=8)
 
-        # ── 4. Botão de Pausa (canto superior direito) ──────────────────
+        # ── 4. Badge de Dificuldade da IA ──────────────────────────────
+        dif_str = getattr(game, "dificuldade", "normal").lower()
+        nomes_dif = {"facil": "FÁCIL", "normal": "NORMAL", "dificil": "DIFÍCIL"}
+        cores_dif = {"facil": (60, 210, 110), "normal": (70, 160, 255), "dificil": (255, 75, 75)}
+        lbl_dif = nomes_dif.get(dif_str, "NORMAL")
+        cor_badge = cores_dif.get(dif_str, (70, 160, 255))
+
+        f_badge = pygame.font.SysFont("Arial", 10, bold=True)
+        txt_b = f_badge.render(f"IA: {lbl_dif}", True, (255, 255, 255))
+        bw = txt_b.get_width() + 16
+        bh = 22
+        bx = time_x + timer_w + 10
+        by = sc_y + (total_h - bh) // 2
+        pygame.draw.rect(screen, (12, 22, 42), (bx, by, bw, bh), border_radius=5)
+        pygame.draw.rect(screen, cor_badge, (bx, by, bw, bh), 1, border_radius=5)
+        screen.blit(txt_b, (bx + 8, by + 4))
+
+        # ── 5. Botão de Pausa (canto superior direito) ──────────────────
         pause_r = pygame.Rect(WIDTH - 52, 14, 38, 38)
         pygame.draw.rect(screen, (16, 26, 52), pause_r, border_radius=6)
         pygame.draw.rect(screen, (40, 80, 160), pause_r, 1, border_radius=6)
@@ -395,3 +422,52 @@ class HUDController:
             # Escudo de defesa
             pts = [(cx, cy - 9), (cx + 8, cy - 6), (cx + 7, cy + 3), (cx, cy + 9), (cx - 7, cy + 3), (cx - 8, cy - 6)]
             pygame.draw.polygon(screen, cor, pts, 2)
+
+    def draw_foul_banner(self, screen: pygame.Surface, game):
+        """Desenha a notificação oficial quando é assinalada uma falta, livre ou penálti."""
+        if not getattr(game, "_falta_ativa", False) or getattr(game, "_falta_timer", 0.0) <= 0:
+            return
+
+        tipo = getattr(game, "_falta_tipo", "livre")
+        bw = 540
+        bh = 72
+        bx = (WIDTH - bw) // 2
+        by = RINK_Y + 16
+
+        if tipo == "penalti":
+            cor_borda = (255, 70, 70)
+            cor_bg = (55, 12, 18, 235)
+            cor_titulo = (255, 110, 110)
+        elif tipo == "livre_direto":
+            cor_borda = (255, 185, 30)
+            cor_bg = (52, 38, 10, 235)
+            cor_titulo = (255, 220, 60)
+        else:
+            cor_borda = (245, 205, 55)
+            cor_bg = (18, 32, 60, 235)
+            cor_titulo = (255, 235, 80)
+
+        surf = pygame.Surface((bw, bh), pygame.SRCALPHA)
+        pygame.draw.rect(surf, cor_bg, (0, 0, bw, bh), border_radius=10)
+        pygame.draw.rect(surf, cor_borda, (0, 0, bw, bh), 2, border_radius=10)
+        screen.blit(surf, (bx, by))
+
+        # Ícone de Apito / Alerta
+        cx_ico = bx + 36
+        cy_ico = by + bh // 2
+        pygame.draw.circle(screen, cor_borda, (cx_ico, cy_ico), 18)
+        f_ico = pygame.font.SysFont("Arial", 18, bold=True)
+        t_ico = f_ico.render("!", True, (10, 16, 32))
+        screen.blit(t_ico, (cx_ico - t_ico.get_width() // 2, cy_ico - t_ico.get_height() // 2))
+
+        # Título da Falta
+        f_tit = pygame.font.SysFont("Arial", 17, bold=True)
+        msg_tit = getattr(game, "_msg_falta", "FALTA!")
+        t_tit = f_tit.render(msg_tit, True, cor_titulo)
+        screen.blit(t_tit, (bx + 66, by + 12))
+
+        # Subtítulo com detalhes
+        f_sub = pygame.font.SysFont("Arial", 12)
+        msg_sub = getattr(game, "_msg_falta_sub", "")
+        t_sub = f_sub.render(msg_sub, True, (220, 235, 255))
+        screen.blit(t_sub, (bx + 66, by + 40))
