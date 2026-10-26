@@ -13,7 +13,7 @@ VEL_TRANSICAO    = 120            # px/s — abaixo disto aplica ATRITO_LENTO
 RESSALTO         = 0.78           # coeficiente de ressalto (era 0.72 → agora 0.78)
 VEL_MINIMA       = 8.0            # velocidade abaixo da qual a bola para
 VEL_RESSALTO     = 55.0
-OFFSET_BOLA      = 28
+OFFSET_BOLA      = 22
 PASSE_FORCA      = 400
 REMATE_FORCA     = 650
 RAIO_COLISAO     = 20
@@ -70,15 +70,15 @@ class Ball(pygame.sprite.Sprite):
         if hasattr(jogador, "vetor_direcao") and jogador.vetor_direcao.length_squared() > 0:
             offset = jogador.vetor_direcao * OFFSET_BOLA
             self.pos_x = jogador.pos_x + offset.x
-            self.pos_y = jogador.pos_y + offset.y
+            self.pos_y = jogador.pos_y + offset.y - 6  # stick fica ligeiramente acima do centro
         else:
             offsets = {
-                "direita":   ( OFFSET_BOLA, 0),
-                "esquerda":  (-OFFSET_BOLA, 0),
-                "cima":      (0, -OFFSET_BOLA),
-                "baixo":     (0,  OFFSET_BOLA),
+                "direita":   ( OFFSET_BOLA,  -6),
+                "esquerda":  (-OFFSET_BOLA,  -6),
+                "cima":      (0, -OFFSET_BOLA - 6),
+                "baixo":     (0,  OFFSET_BOLA - 6),
             }
-            dx, dy = offsets.get(jogador.direcao, (0, OFFSET_BOLA))
+            dx, dy = offsets.get(jogador.direcao, (0, OFFSET_BOLA - 6))
             self.pos_x = jogador.pos_x + dx
             self.pos_y = jogador.pos_y + dy
         self.rect.center = (round(self.pos_x), round(self.pos_y))

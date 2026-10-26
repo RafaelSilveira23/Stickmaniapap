@@ -308,6 +308,16 @@ class Player(pygame.sprite.Sprite):
             direcao_vec = pygame.math.Vector2(1, 0)
         bola.libertar(direcao_vec.normalize() * REMATE_FORCA, dono_anterior=self)
 
+    def fazer_remate_com_forca(self, bola, direcao_vec: pygame.math.Vector2, forca: float):
+        """Remata com uma força específica (em px/s) em vez da força padrão."""
+        if not self.tem_bola or bola is None:
+            return
+        self._comecar_acao("remate", 0.30)
+        self.tem_bola = False
+        if direcao_vec.length_squared() == 0:
+            direcao_vec = pygame.math.Vector2(1, 0)
+        bola.libertar(direcao_vec.normalize() * forca, dono_anterior=self)
+
     def sofrer_colisao(self, bola=None, direcao_impacto=None):
         if self.tem_bola:
             self.tem_bola = False

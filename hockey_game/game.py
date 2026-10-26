@@ -60,6 +60,14 @@ class Game:
         self._msg_texto     = ""
         self._msg_timer     = 0.0
 
+        # ── Sistema de Mira de Remate ────────────────────────────────────
+        self._mira_ativa        = False      # True quando está em modo de mira
+        self._mira_forca        = 0.0       # 0.0 a 1.0 — posição atual da barra
+        self._mira_forca_dir    = 1.0       # direção da oscilação (+1 ou -1)
+        self._mira_vel          = 1.2       # velocidade de oscilação da barra (ciclos/s)
+        self._mira_direcao      = pygame.math.Vector2(1, 0)  # direção apontada
+        self._mira_confirmada   = False
+
         self.running    = True
         self.show_debug = False
 
@@ -215,6 +223,8 @@ class Game:
                     self._acao_passe()
                 elif event.key == pygame.K_x:
                     self._acao_remate()
+                elif event.key == pygame.K_ESCAPE and self._mira_ativa:
+                    self._mira_ativa = False  # cancelar mira sem rematar
                 elif event.key in (pygame.K_TAB, pygame.K_c, pygame.K_SPACE):
                     self._selecionar_jogador_proximo()
                 elif event.key == pygame.K_r and self.fim_jogo:
@@ -229,6 +239,16 @@ class Game:
                     if 0 <= idx < len(EQUIPAS_LISTA):
                         self.mudar_equipa_casa(EQUIPAS_LISTA[idx])
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                # Confirmar mira com clique esquerdo
+                if self._mira_ativa and event.button == 1:
+                    mpos = pygame.mouse.get_pos()
+                    bx = round(self.jogador_humano.pos_x)
+                    by = round(self.jogador_humano.pos_y)
+                    v = pygame.math.Vector2(mpos[0] - bx, mpos[1] - by)
+                    if v.length_squared() > 0:
+                        self._mira_direcao = v.normalize()
+                    self._confirmar_remate()
+                    continue  # não processar clique noutros elementos
                 # Botão de pausa superior direito (volta ao menu de seleção)
                 if event.pos[0] >= WIDTH - 56 and event.pos[1] <= 56:
                     self.voltar_ao_menu()
@@ -287,8 +307,44 @@ class Game:
                 self.jogador_humano.fazer_passe(self.bola, direcao)
 
     def _acao_remate(self):
-        if self.jogador_humano.tem_bola and self.jogo_ativo:
-            self.jogador_humano.fazer_remate(self.bola, self._direcao_vec(self.jogador_humano))
+        """Ao premir X: entra em modo de mira. Ao premir novamente: confirma e remata."""
+        if not self.jogo_ativo:
+            return
+        if not self.jogador_humano.tem_bola:
+            return
+
+        if not self._mira_ativa:
+            # Entrar em modo de mira
+            self._mira_ativa     = True
+            self._mira_forca     = 0.3
+            self._mira_forca_dir = 1.0
+            # Direção inicial: para a baliza adversária
+            bx = self.jogador_humano.pos_x
+            by = self.jogador_humano.pos_y
+            # Equipa azul ataca para a esquerda; outros para a direita
+            if self.jogador_humano.equipa == "azul":
+                alvo_x = self.rink.linha_golo_esq_x
+            else:
+                alvo_x = self.rink.linha_golo_dir_x
+            alvo_y = (self.rink.baliza_topo_y + self.rink.baliza_base_y) / 2
+            v = pygame.math.Vector2(alvo_x - bx, alvo_y - by)
+            if v.length_squared() > 0:
+                self._mira_direcao = v.normalize()
+        else:
+            # Confirmar remate
+            self._confirmar_remate()
+
+    def _confirmar_remate(self):
+        if not self._mira_ativa:
+            return
+        self._mira_ativa = False
+        from ball import REMATE_FORCA
+        # Força entre 30% e 100% da força máxima
+        forca_real = (0.30 + self._mira_forca * 0.70) * REMATE_FORCA
+        vec = pygame.math.Vector2(self._mira_direcao)
+        if vec.length_squared() == 0:
+            vec = pygame.math.Vector2(1, 0)
+        self.jogador_humano.fazer_remate_com_forca(self.bola, vec.normalize(), forca_real)
 
     def _selecionar_jogador_proximo(self):
         """TAB / C: passa o controlo para o jogador azul mais perto da bola."""
@@ -341,6 +397,28 @@ class Game:
         if self.tempo_restante <= 0:
             self._fim_de_parte()
             return
+
+        # Modo de mira ativa: slow-motion e atualizar direção pelo rato
+        if self._mira_ativa:
+            dt_real = dt
+            dt = dt_real * 0.15  # slow-motion durante a mira
+
+            # Atualizar direção pelo rato em tempo real
+            mpos = pygame.mouse.get_pos()
+            bx = round(self.jogador_humano.pos_x)
+            by = round(self.jogador_humano.pos_y)
+            v = pygame.math.Vector2(mpos[0] - bx, mpos[1] - by)
+            if v.length_squared() > 10:
+                self._mira_direcao = v.normalize()
+
+            # Oscilar a barra de força
+            self._mira_forca += self._mira_forca_dir * self._mira_vel * dt_real
+            if self._mira_forca >= 1.0:
+                self._mira_forca = 1.0
+                self._mira_forca_dir = -1.0
+            elif self._mira_forca <= 0.0:
+                self._mira_forca = 0.0
+                self._mira_forca_dir = 1.0
 
         # Auto-seleção inteligente
         self._auto_selecionar()
@@ -586,6 +664,7 @@ class Game:
             gr.draw_extra(self.screen, self.font_num)
 
         # 6. Marcador Superior do Mockup
+        self._draw_mira()
         self.hud.draw_top_bar(self.screen, self)
 
         # 7. Painel Inferior (Mini-mapa, Cartão de Jogador e Controlos)
@@ -641,3 +720,74 @@ class Game:
         dono = self.bola.dono.nome if self.bola.dono else "livre"
         db = self.font_num.render(f"Bola: {dono}", True, (200, 255, 200))
         self.screen.blit(db, (WIDTH - 120, HUD_H + 24))
+
+    def _draw_mira(self):
+        """Desenha a linha de mira e barra de força estilo 8 Ball Pool."""
+        if not self._mira_ativa or not self.jogador_humano.tem_bola:
+            return
+
+        screen = self.screen
+        bx = round(self.jogador_humano.pos_x)
+        by = round(self.jogador_humano.pos_y)
+        direc = self._mira_direcao
+
+        # ── 1. Linha tracejada de trajetória ──────────────────────────────
+        comprimento_linha = 220
+        num_tracos = 14
+        taco = comprimento_linha / (num_tracos * 2)
+        surf_linha = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+
+        for i in range(num_tracos):
+            t_ini = (i * 2)       * taco
+            t_fim = (i * 2 + 1.2) * taco
+            px_ini = bx + direc.x * t_ini
+            py_ini = by + direc.y * t_ini
+            px_fim = bx + direc.x * t_fim
+            py_fim = by + direc.y * t_fim
+            # Cor varia com a força: verde (fraco) → amarelo → vermelho (forte)
+            f = self._mira_forca
+            r = int(255 * min(f * 2, 1.0))
+            g = int(255 * min((1 - f) * 2, 1.0))
+            cor_linha = (r, g, 30, 210)
+            pygame.draw.line(surf_linha, cor_linha,
+                             (int(px_ini), int(py_ini)),
+                             (int(px_fim), int(py_fim)), 3)
+
+        screen.blit(surf_linha, (0, 0))
+
+        # ── 2. Círculo de mira no fim da linha ────────────────────────────
+        alvo_x = int(bx + direc.x * comprimento_linha)
+        alvo_y = int(by + direc.y * comprimento_linha)
+        pygame.draw.circle(screen, (255, 255, 100, 180), (alvo_x, alvo_y), 8, 2)
+
+        # ── 3. Barra de Força (estilo 8 Ball Pool) ────────────────────────
+        bar_x  = bx - 60
+        bar_y  = by + 36
+        bar_w  = 120
+        bar_h  = 14
+
+        # Fundo da barra
+        pygame.draw.rect(screen, (20, 20, 20), (bar_x - 2, bar_y - 2, bar_w + 4, bar_h + 4), border_radius=8)
+        pygame.draw.rect(screen, (50, 50, 60), (bar_x, bar_y, bar_w, bar_h), border_radius=6)
+
+        # Preenchimento da barra com gradiente de cor
+        fill_w = int(bar_w * self._mira_forca)
+        if fill_w > 0:
+            f = self._mira_forca
+            r = int(255 * min(f * 2, 1.0))
+            g = int(255 * min((1 - f) * 2, 1.0))
+            pygame.draw.rect(screen, (r, g, 20), (bar_x, bar_y, fill_w, bar_h), border_radius=6)
+
+        # Borda da barra
+        pygame.draw.rect(screen, (200, 200, 200), (bar_x, bar_y, bar_w, bar_h), 1, border_radius=6)
+
+        # Texto "FORÇA"
+        f_txt = pygame.font.SysFont("Arial", 11, bold=True)
+        pct = int(self._mira_forca * 100)
+        t = f_txt.render(f"FORÇA  {pct}%", True, (255, 255, 255))
+        screen.blit(t, (bar_x + bar_w // 2 - t.get_width() // 2, bar_y - 18))
+
+        # ── 4. Instrução ──────────────────────────────────────────────────
+        fi = pygame.font.SysFont("Arial", 13, bold=True)
+        ti = fi.render("[X] ou Clique para rematar  •  [ESC] para cancelar", True, (220, 220, 100))
+        screen.blit(ti, (WIDTH // 2 - ti.get_width() // 2, HEIGHT - 30))
