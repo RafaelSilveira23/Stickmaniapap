@@ -141,7 +141,8 @@ class HUDController:
         """Desenha o logótipo oficial ou um emblema estilizado se a imagem não existir."""
         logo = carregar_logo_equipa(equipa_id, (22, 22))
         if logo is not None:
-            surf.blit(logo, (x, y))
+            lw, lh = logo.get_size()
+            surf.blit(logo, (x + (22 - lw) // 2, y + (22 - lh) // 2))
         else:
             # Emblema de recurso com escudo circular
             cor_bg = info.get("cor_secundaria", (255, 255, 255))
@@ -302,6 +303,13 @@ class HUDController:
         # Nome e Número
         t_nome = self.font_card_nome.render(f"{jogador.numero}  {jogador.nome}", True, (255, 255, 255))
         screen.blit(t_nome, (rect.left + 104, rect.top + 14))
+
+        # Emblema da equipa do jogador no canto do cartão
+        eq_id = getattr(jogador, "equipa_id", "fc_porto")
+        logo_card = carregar_logo_equipa(eq_id, (32, 32))
+        if logo_card is not None:
+            lw, lh = logo_card.get_size()
+            screen.blit(logo_card, (rect.right - 44 + (32 - lw) // 2, rect.top + 14 + (32 - lh) // 2))
 
         # Posição / Papel tático
         papel = getattr(jogador, "papel", "avancado").upper()

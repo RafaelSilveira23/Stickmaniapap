@@ -10,6 +10,8 @@ from ball import Ball
 from ai import AgentIA
 from goalkeeper import Goalkeeper
 from ui import HUDController
+from team import EQUIPAS_LISTA, obter_info_equipa
+from menu import TeamSelectMenu
 
 DURACAO_PARTE = 60 * 5   # 5 minutos por parte
 
@@ -45,12 +47,15 @@ class Game:
         self.jogador_humano.tem_bola = True
         self.bola.seguir_jogador(self.jogador_humano)
 
-        # ── Estado do jogo ───────────────────────────────────────────────
+        # ── Estado do jogo e Menu de Seleção ─────────────────────────────
+        self.estado         = "menu_selecao"  # "menu_selecao" ou "jogo"
+        self.menu           = TeamSelectMenu(self.screen, self.equipa_casa_id, self.equipa_fora_id)
+
         self.golos_azul     = 0
         self.golos_vermelho = 0
         self.parte          = 1
         self.tempo_restante = float(DURACAO_PARTE)
-        self.jogo_ativo     = True
+        self.jogo_ativo     = False
         self.fim_jogo       = False
         self._msg_texto     = ""
         self._msg_timer     = 0.0
@@ -89,6 +94,7 @@ class Game:
         for i, (pos, papel, num, nome, stats) in enumerate(dados_azul):
             humano = (i == 0)
             p = Player("azul", pos, numero=num, nome=nome, humano=humano, teclas="wasd")
+            p.equipa_id       = self.equipa_casa_id
             p.papel           = papel
             p.stat_velocidade = stats[0]
             p.stat_remate     = stats[1]
@@ -121,6 +127,7 @@ class Game:
 
         for pos, papel, num, nome, stats in dados_verm:
             p = Player("vermelho", pos, numero=num, nome=nome, humano=False)
+            p.equipa_id       = self.equipa_fora_id
             p.papel           = papel
             p.stat_velocidade = stats[0]
             p.stat_remate     = stats[1]
@@ -186,12 +193,22 @@ class Game:
     # ================================================================== #
 
     def handle_events(self):
+        if self.estado == "menu_selecao":
+            for event in pygame.event.get():
+                res = self.menu.handle_event(event)
+                if res == "iniciar":
+                    c_id, f_id = self.menu.get_equipas()
+                    self.iniciar_partida(c_id, f_id)
+                elif res == "sair":
+                    self.running = False
+            return
+
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 self.running = False
             elif event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_ESCAPE:
-                    self.running = False
+                if event.key in (pygame.K_ESCAPE, pygame.K_m):
+                    self.voltar_ao_menu()
                 elif event.key == pygame.K_F3:
                     self.show_debug = not self.show_debug
                 elif event.key == pygame.K_z:
@@ -201,9 +218,22 @@ class Game:
                 elif event.key in (pygame.K_TAB, pygame.K_c, pygame.K_SPACE):
                     self._selecionar_jogador_proximo()
                 elif event.key == pygame.K_r and self.fim_jogo:
-                    self.__init__()
+                    self.iniciar_partida(self.equipa_casa_id, self.equipa_fora_id)
+                elif event.key == pygame.K_t:
+                    self.alternar_equipa_casa()
+                elif event.key == pygame.K_y:
+                    self.alternar_equipa_fora()
+                elif event.key in (pygame.K_1, pygame.K_2, pygame.K_3, pygame.K_4,
+                                   pygame.K_5, pygame.K_6, pygame.K_7, pygame.K_8):
+                    idx = event.key - pygame.K_1
+                    if 0 <= idx < len(EQUIPAS_LISTA):
+                        self.mudar_equipa_casa(EQUIPAS_LISTA[idx])
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-                self._tratar_clique_botoes(event.pos)
+                # Botão de pausa superior direito (volta ao menu de seleção)
+                if event.pos[0] >= WIDTH - 56 and event.pos[1] <= 56:
+                    self.voltar_ao_menu()
+                else:
+                    self._tratar_clique_botoes(event.pos)
 
     def _tratar_clique_botoes(self, pos):
         for chave, btn in self.hud.btn_rects.items():
@@ -299,6 +329,10 @@ class Game:
     # ================================================================== #
 
     def update(self, dt: float):
+        if self.estado == "menu_selecao":
+            self.menu.update(dt)
+            return
+
         if not self.jogo_ativo:
             return
 
@@ -382,16 +416,88 @@ class Game:
             self._trocar_humano(melhor)
 
     # ------------------------------------------------------------------ #
+    # Gestão e Alternância de Equipas                                     #
+    # ------------------------------------------------------------------ #
+
+    def iniciar_partida(self, casa_id: str, fora_id: str):
+        """Inicia uma partida completa com as equipas selecionadas no menu."""
+        self.equipa_casa_id = casa_id
+        self.equipa_fora_id = fora_id
+
+        # Atualizar o ringue com o emblema oficial da equipa da casa
+        self.rink.definir_equipa_casa(self.equipa_casa_id)
+
+        # Recriar os jogadores de campo e guarda-redes com as novas equipas
+        self._criar_equipas()
+
+        # Repor bola no centro e dar a posse ao jogador humano
+        cx = RINK_X + RINK_W // 2
+        cy = RINK_Y + RINK_H // 2
+        self.bola.repor((cx, cy))
+        self.bola.definir_dono(self.jogador_humano)
+        self.jogador_humano.tem_bola = True
+        self.bola.seguir_jogador(self.jogador_humano)
+
+        # Reiniciar marcador e cronómetro
+        self.golos_azul     = 0
+        self.golos_vermelho = 0
+        self.parte          = 1
+        self.tempo_restante = float(DURACAO_PARTE)
+        self.jogo_ativo     = True
+        self.fim_jogo       = False
+        self.estado         = "jogo"
+
+        info_c = obter_info_equipa(casa_id)
+        info_f = obter_info_equipa(fora_id)
+        self._msg_texto     = f"{info_c['nome']}  vs  {info_f['nome']}"
+        self._msg_timer     = 2.5
+
+    def voltar_ao_menu(self):
+        """Pausa o jogo e regressa ao ecrã de seleção de equipas."""
+        self.estado = "menu_selecao"
+        self.jogo_ativo = False
+        self.menu = TeamSelectMenu(self.screen, self.equipa_casa_id, self.equipa_fora_id)
+
+    def mudar_equipa_casa(self, equipa_id: str):
+        self.equipa_casa_id = equipa_id
+        self.rink.definir_equipa_casa(equipa_id)
+        for j in self.equipa_azul:
+            j.equipa_id = equipa_id
+        info = obter_info_equipa(equipa_id)
+        self._msg_texto = f"Equipa da Casa: {info['nome']}"
+        self._msg_timer = 2.0
+
+    def mudar_equipa_fora(self, equipa_id: str):
+        self.equipa_fora_id = equipa_id
+        for j in self.equipa_vermelha:
+            j.equipa_id = equipa_id
+        info = obter_info_equipa(equipa_id)
+        self._msg_texto = f"Equipa Visitante: {info['nome']}"
+        self._msg_timer = 2.0
+
+    def alternar_equipa_casa(self):
+        idx = EQUIPAS_LISTA.index(self.equipa_casa_id) if self.equipa_casa_id in EQUIPAS_LISTA else 0
+        prox_idx = (idx + 1) % len(EQUIPAS_LISTA)
+        self.mudar_equipa_casa(EQUIPAS_LISTA[prox_idx])
+
+    def alternar_equipa_fora(self):
+        idx = EQUIPAS_LISTA.index(self.equipa_fora_id) if self.equipa_fora_id in EQUIPAS_LISTA else 0
+        prox_idx = (idx + 1) % len(EQUIPAS_LISTA)
+        self.mudar_equipa_fora(EQUIPAS_LISTA[prox_idx])
+
+    # ------------------------------------------------------------------ #
     # Golos e Fim de Parte                                                #
     # ------------------------------------------------------------------ #
 
     def _golo(self, equipa: str):
+        info_casa = obter_info_equipa(self.equipa_casa_id)
+        info_fora = obter_info_equipa(self.equipa_fora_id)
         if equipa == "azul":
             self.golos_azul += 1
-            self._msg_texto = "GOLO!  FC PORTO"
+            self._msg_texto = f"GOLO!  {info_casa['nome'].upper()}"
         else:
             self.golos_vermelho += 1
-            self._msg_texto = "GOLO!  RIBA D'AVE"
+            self._msg_texto = f"GOLO!  {info_fora['nome'].upper()}"
         self._msg_timer = 2.5
         self._repor_posicoes()
 
@@ -453,6 +559,11 @@ class Game:
     # ================================================================== #
 
     def draw(self):
+        if self.estado == "menu_selecao":
+            self.menu.draw()
+            pygame.display.flip()
+            return
+
         self.screen.fill(COR_FUNDO)
 
         # 1. Ringue e Balizas traseiras
@@ -504,10 +615,13 @@ class Game:
         ov.fill((0, 0, 0, 160))
         self.screen.blit(ov, (0, 0))
 
+        info_casa = obter_info_equipa(self.equipa_casa_id)
+        info_fora = obter_info_equipa(self.equipa_fora_id)
+
         if self.golos_azul > self.golos_vermelho:
-            txt_v, cor = "Vitória do FC Porto!", (100, 170, 255)
+            txt_v, cor = f"Vitória do {info_casa['nome']}!", info_casa.get("cor_primaria", (100, 170, 255))
         elif self.golos_vermelho > self.golos_azul:
-            txt_v, cor = "Vitória do Riba d'Ave!", (255, 80, 80)
+            txt_v, cor = f"Vitória do {info_fora['nome']}!", info_fora.get("cor_primaria", (255, 80, 80))
         else:
             txt_v, cor = "Empate!", (255, 220, 50)
 
