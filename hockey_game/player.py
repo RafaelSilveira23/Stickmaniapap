@@ -727,11 +727,14 @@ class Player(pygame.sprite.Sprite):
 
         self.image = tela
 
-    def draw_rastos(self, screen: pygame.Surface):
+    def draw_rastos(self, screen: pygame.Surface, camera=None):
         """Desenha as raspas dos patins (chamado ANTES de desenhar os jogadores)."""
         for x, y, _vx, _vy, vida, vida_max in self._particulas:
             t = vida / vida_max
             raio = 1 + int(2 * t)
+            if camera is not None:
+                # As raspas nascem nos patins (abaixo do centro); a câmara põe os patins em pos_y
+                x, y = camera.projetar(x, y - PLAYER_SIZE[1] // 2 + 4)
             cor = (250, 238, 215, int(170 * t))
             s = pygame.Surface((raio * 2, raio * 2), pygame.SRCALPHA)
             pygame.draw.circle(s, cor, (raio, raio), raio)

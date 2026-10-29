@@ -339,7 +339,7 @@ class Game:
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 # Confirmar mira com clique esquerdo
                 if self._mira_ativa and event.button == 1:
-                    mpos = pygame.mouse.get_pos()
+                    mpos = self.rink.camera.desprojetar(*pygame.mouse.get_pos())
                     bx = round(self.jogador_humano.pos_x)
                     by = round(self.jogador_humano.pos_y)
                     v = pygame.math.Vector2(mpos[0] - bx, mpos[1] - by)
@@ -515,7 +515,7 @@ class Game:
             dt = dt_real * 0.15  # slow-motion durante a mira
 
             # Atualizar direção pelo rato em tempo real
-            mpos = pygame.mouse.get_pos()
+            mpos = self.rink.camera.desprojetar(*pygame.mouse.get_pos())
             bx = round(self.jogador_humano.pos_x)
             by = round(self.jogador_humano.pos_y)
             v = pygame.math.Vector2(mpos[0] - bx, mpos[1] - by)
@@ -963,40 +963,46 @@ class Game:
         # 1. Ringue e Balizas traseiras
         self.rink.draw(self.screen)
 
+        cam = self.rink.camera
+
         # 2. Raspas dos patins (ficam no chão, por baixo dos jogadores)
         for j in self.todos_jogadores:
-            j.draw_rastos(self.screen)
+            j.draw_rastos(self.screen, cam)
 
         # 3. Jogadores, guarda-redes, bola e balizas, por ordem de profundidade:
-        #    quem está mais abaixo no ecrã está mais perto da câmara e fica por cima.
+        #    quem está mais ao fundo do campo é desenhado primeiro (fica por trás).
         r = self.rink
         atores = sorted(list(self.todos_jogadores) + list(self.grupo_gr), key=lambda s: s.pos_y)
-        # Atrás das balizas = os pés ficam acima do poste de cima
-        atras  = [a for a in atores if a.pos_y + 24 < r.baliza_topo_y]
-        frente = [a for a in atores if a.pos_y + 24 >= r.baliza_topo_y]
+        # Atrás das balizas = os pés estão mais ao fundo do que o poste de cima
+        atras  = [a for a in atores if a.pos_y < r.baliza_topo_y]
+        frente = [a for a in atores if a.pos_y >= r.baliza_topo_y]
 
         b = self.bola
         bola_na_rede = (r.baliza_topo_y <= b.pos_y <= r.baliza_base_y and
                         (b.pos_x < r.linha_golo_esq_x or b.pos_x > r.linha_golo_dir_x))
 
         for a in atras:
-            self.screen.blit(a.image, a.rect)
+            self._desenhar_ator(a, cam)
         if bola_na_rede:
-            self.sprites_bola.draw(self.screen)
+            self._desenhar_bola(cam)
 
         # 4. Travessas, postes da frente e rede lateral das balizas
         self.rink.draw_frente(self.screen)
 
         for a in frente:
-            self.screen.blit(a.image, a.rect)
+            self._desenhar_ator(a, cam)
         if not bola_na_rede:
-            self.sprites_bola.draw(self.screen)
+            self._desenhar_bola(cam)
 
-        # 5. Indicadores por cima dos jogadores
-        for j in self.todos_jogadores:
-            j.draw_extra(self.screen, self.font_num, self.show_debug)
-        for gr in self.grupo_gr:
-            gr.draw_extra(self.screen, self.font_num)
+        # 5. Indicadores por cima dos jogadores (usam o retângulo no ecrã)
+        for a in atores:
+            guardado = a.rect
+            a.rect = getattr(a, "rect_ecra", a.rect)
+            if a in self.grupo_gr:
+                a.draw_extra(self.screen, self.font_num)
+            else:
+                a.draw_extra(self.screen, self.font_num, self.show_debug)
+            a.rect = guardado
 
         # 6. Mira e marcador superior
         self._draw_mira()
@@ -1011,6 +1017,35 @@ class Game:
             self._draw_mensagem(self._msg_texto)
         if self.show_debug:
             self._draw_debug()
+
+    # Distância (no mundo) entre o centro do jogador e os patins: a câmara põe os patins no chão
+    _PES = 22
+
+    def _desenhar_ator(self, a, cam):
+        """Desenha um jogador/guarda-redes no ecrã: posição e tamanho dados pela câmara."""
+        k = cam.escala(a.pos_y)
+        img = a.image
+        w, h = img.get_size()
+        if abs(k - 1.0) > 0.01:
+            img = pygame.transform.smoothscale(img, (max(1, round(w * k)), max(1, round(h * k))))
+        sx, sy = cam.projetar(a.pos_x, a.pos_y)
+        rect = img.get_rect()
+        rect.centerx = round(sx)
+        # Os patins (centro da imagem + _PES) ficam no ponto do chão projetado
+        rect.top = round(sy - (h / 2 + self._PES) * k)
+        self.screen.blit(img, rect)
+        # Para os indicadores (triângulo, "GR") usamos só a parte visível do sprite
+        a.rect_ecra = img.get_bounding_rect().move(rect.topleft)
+
+    def _desenhar_bola(self, cam):
+        b = self.bola
+        k = cam.fator(b.pos_y) * 1.1      # a bola cresce menos do que os jogadores
+        img = b.image
+        if abs(k - 1.0) > 0.01:
+            img = pygame.transform.smoothscale(
+                img, (max(1, round(img.get_width() * k)), max(1, round(img.get_height() * k))))
+        sx, sy = cam.projetar(b.pos_x, b.pos_y)
+        self.screen.blit(img, img.get_rect(center=(round(sx), round(sy))))
 
     def _draw_mensagem(self, texto: str):
         """Faixa horizontal a meio do ringue; nos golos usa as cores da equipa que marcou."""
@@ -1051,8 +1086,9 @@ class Game:
             return
 
         screen = self.screen
-        bx = round(self.jogador_humano.pos_x)
-        by = round(self.jogador_humano.pos_y)
+        cam = self.rink.camera
+        bx = self.jogador_humano.pos_x
+        by = self.jogador_humano.pos_y
         direc = self._mira_direcao
 
         # ── 1. Linha tracejada de trajetória ──────────────────────────────
@@ -1074,19 +1110,19 @@ class Game:
             g = int(255 * min((1 - f) * 2, 1.0))
             cor_linha = (r, g, 30, 210)
             pygame.draw.line(surf_linha, cor_linha,
-                             (int(px_ini), int(py_ini)),
-                             (int(px_fim), int(py_fim)), 3)
+                             cam.projetar(px_ini, py_ini),
+                             cam.projetar(px_fim, py_fim), 3)
 
         screen.blit(surf_linha, (0, 0))
 
         # ── 2. Círculo de mira no fim da linha ────────────────────────────
-        alvo_x = int(bx + direc.x * comprimento_linha)
-        alvo_y = int(by + direc.y * comprimento_linha)
-        pygame.draw.circle(screen, (255, 255, 100, 180), (alvo_x, alvo_y), 8, 2)
+        alvo = cam.projetar(bx + direc.x * comprimento_linha, by + direc.y * comprimento_linha)
+        pygame.draw.circle(screen, (255, 255, 100, 180), (round(alvo[0]), round(alvo[1])), 8, 2)
 
         # ── 3. Barra de Força (estilo 8 Ball Pool) ────────────────────────
-        bar_x  = bx - 60
-        bar_y  = by + 36
+        ex, ey = cam.projetar(bx, by)
+        bar_x  = round(ex) - 60
+        bar_y  = round(ey) + 14
         bar_w  = 120
         bar_h  = 14
 

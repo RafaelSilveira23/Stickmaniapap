@@ -6,6 +6,14 @@ from settings import *
 from team import carregar_logo_equipa, obter_info_equipa
 from cores import cor_linhas_campo, misturar, cor_texto_sobre
 from baliza import criar_baliza
+from camera import Camera
+
+# ---------- Câmara em perspetiva ----------
+CAM_TOPO       = 142    # y no ecrã da linha do fundo do ringue
+CAM_BASE       = 522    # y no ecrã da linha da frente do ringue
+CAM_LARG_TOPO  = 1010   # largura do ringue no fundo (mais estreito = mais perspetiva)
+CAM_LARG_BASE  = 1230   # largura do ringue à frente
+ALTURA_TABELA  = 24     # altura das tabelas (px do mundo)
 
 
 def _pasta_ui():
@@ -19,6 +27,10 @@ class Rink:
         self.cor_linhas  = self._calcular_cor_linhas()
         self.rect = pygame.Rect(RINK_X, RINK_Y, RINK_W, RINK_H)
         cy = self.rect.centery
+
+        # A câmara transforma o campo plano (onde a física acontece) no ecrã em perspetiva
+        self.camera = Camera(RINK_X, RINK_Y, RINK_W, RINK_H,
+                             CAM_TOPO, CAM_BASE, CAM_LARG_TOPO, CAM_LARG_BASE, WIDTH / 2)
 
         ui = _pasta_ui()
         publico_raw = pygame.image.load(os.path.join(ui, "publico_tile.png")).convert_alpha()
@@ -105,71 +117,245 @@ class Rink:
 
         return surf
 
-    def _construir(self):
+    # ================================================================== #
+    # Construção da imagem do ringue (feita uma vez; muda com a equipa da casa)
+    # ================================================================== #
+
+    def _construir_plano(self) -> pygame.Surface:
+        """Piso visto de cima (plano), com todas as linhas. Depois é posto em perspetiva."""
         surf = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
-        r    = self.rect
-        muro = r.inflate(MURO * 2, MURO * 2)
-
-        # Bancada com público no topo a toda a largura
-        self._tile_faixa(surf, 0, WIDTH, 0, muro.top)
-
-        # Sombra da tabela
-        pygame.draw.rect(surf, COR_MURO_SOMBRA, muro.move(0, 4), border_radius=CANTO + MURO)
-        # Tabela em madeira branca/creme
-        pygame.draw.rect(surf, COR_MURO, muro, border_radius=CANTO + MURO)
-
-        # Piso de madeira recortado com cantos arredondados
+        r = self.rect
         surf.blit(self._mascara_cantos(self._campo), r.topleft)
 
-        # Painéis publicitários da tabela superior
-        self._desenhar_placards(surf, muro)
-
-        # ── Linhas Oficiais do Ringue (na cor da equipa da casa) ────────
         cx, cy = r.center
         cor_linha = self.cor_linhas
-
-        # Linha de meio-campo e círculo central
-        pygame.draw.line(surf, cor_linha, (cx, r.top + 3), (cx, r.bottom - 3), LINHA)
-        pygame.draw.circle(surf, cor_linha, (cx, cy), RAIO_CENTRO, LINHA)
+        # Linha do meio, círculo central e emblema
+        pygame.draw.line(surf, cor_linha, (cx, r.top), (cx, r.bottom), LINHA + 1)
+        pygame.draw.circle(surf, cor_linha, (cx, cy), RAIO_CENTRO, LINHA + 1)
         pygame.draw.circle(surf, cor_linha, (cx, cy), 5)
-
-        # Emblema central sutil no meio do círculo
         self._desenhar_centro_emblema(surf, cx, cy)
-
-        # Grandes Áreas (Retângulos à frente das balizas)
+        # Grandes áreas
         area_esq = pygame.Rect(self.linha_golo_esq_x, cy - AREA_H // 2, AREA_W, AREA_H)
         area_dir = pygame.Rect(self.linha_golo_dir_x - AREA_W, cy - AREA_H // 2, AREA_W, AREA_H)
-        pygame.draw.rect(surf, cor_linha, area_esq, LINHA)
-        pygame.draw.rect(surf, cor_linha, area_dir, LINHA)
-
-        # Linhas de Golo vermelhas entre os postes
-        pygame.draw.line(surf, (220, 40, 40),
-                         (self.linha_golo_esq_x, self.baliza_topo_y),
-                         (self.linha_golo_esq_x, self.baliza_base_y), 3)
-        pygame.draw.line(surf, (220, 40, 40),
-                         (self.linha_golo_dir_x, self.baliza_topo_y),
-                         (self.linha_golo_dir_x, self.baliza_base_y), 3)
-
-        # Marcas de Penálti
-        pygame.draw.circle(surf, cor_linha, (self.linha_golo_esq_x + 85, cy), 4)
-        pygame.draw.circle(surf, cor_linha, (self.linha_golo_dir_x - 85, cy), 4)
-
-        # Marcas de Livre Direto
-        pygame.draw.circle(surf, cor_linha, (self.linha_golo_esq_x + 130, cy), 3)
-        pygame.draw.circle(surf, cor_linha, (self.linha_golo_dir_x - 130, cy), 3)
-
-        # Linha circular de proteção atrás da baliza
-        pygame.draw.arc(surf, cor_linha,
-                        pygame.Rect(self.linha_golo_esq_x - 65, cy - 45, 65, 90),
+        pygame.draw.rect(surf, cor_linha, area_esq, LINHA + 1)
+        pygame.draw.rect(surf, cor_linha, area_dir, LINHA + 1)
+        # Linhas de golo vermelhas
+        for gx in (self.linha_golo_esq_x, self.linha_golo_dir_x):
+            pygame.draw.line(surf, (220, 40, 40), (gx, self.baliza_topo_y), (gx, self.baliza_base_y), 3)
+        # Marcas de penálti e de livre direto
+        for gx, sinal in ((self.linha_golo_esq_x, 1), (self.linha_golo_dir_x, -1)):
+            pygame.draw.circle(surf, cor_linha, (gx + 85 * sinal, cy), 4)
+            pygame.draw.circle(surf, cor_linha, (gx + 130 * sinal, cy), 3)
+        # Linha de proteção atrás das balizas
+        pygame.draw.arc(surf, cor_linha, pygame.Rect(self.linha_golo_esq_x - 65, cy - 45, 65, 90),
                         1.57, 4.71, 2)
-        pygame.draw.arc(surf, cor_linha,
-                        pygame.Rect(self.linha_golo_dir_x, cy - 45, 65, 90),
+        pygame.draw.arc(surf, cor_linha, pygame.Rect(self.linha_golo_dir_x, cy - 45, 65, 90),
                         -1.57, 1.57, 2)
+        return surf.subsurface(r).copy()
 
-        # Balizas Oficiais (desenhadas com nitidez sem duplicidade)
-        surf.blit(self._bal_esq, self._pos_baliza_esq)
-        surf.blit(self._bal_dir, self._pos_baliza_dir)
+    def _por_em_perspetiva(self, plano: pygame.Surface, destino: pygame.Surface):
+        """
+        Desenha o piso plano em perspetiva, linha a linha:
+        para cada linha do ecrã descobre-se que linha do campo lhe corresponde
+        e estica-se essa linha para a largura certa.
+        Para as linhas do campo ficarem suaves (sem "escadinhas"), fazemos tudo
+        com o dobro da resolução e no fim reduzimos com smoothscale.
+        """
+        cam = self.camera
+        Q = 2                                            # super-amostragem
+        plano2 = pygame.transform.smoothscale(plano, (RINK_W * Q, RINK_H * Q))
+        y0, y1 = int(cam.topo), int(cam.base) + 1
+        temp = pygame.Surface((WIDTH * Q, (y1 - y0) * Q), pygame.SRCALPHA)
+        for linha_ecra in range((y1 - y0) * Q):
+            sy = y0 + (linha_ecra + 0.5) / Q
+            _, wy = cam.desprojetar(cam.cx, sy)
+            linha = min(RINK_H * Q - 1, max(0, int((wy - RINK_Y) * Q)))
+            largura = cam.fator(wy) * RINK_W * Q
+            fatia = plano2.subsurface((0, linha, RINK_W * Q, 1))
+            esticada = pygame.transform.smoothscale(fatia, (max(1, round(largura)), 1))
+            temp.blit(esticada, (round(cam.cx * Q - largura / 2), linha_ecra))
+        destino.blit(pygame.transform.smoothscale(temp, (WIDTH, y1 - y0)), (0, y0))
 
+    def _contorno_ringue(self, passos_canto: int = 14) -> list:
+        """Pontos (do mundo) à volta do ringue com cantos arredondados, no sentido do relógio."""
+        import math
+        r, R = self.rect, CANTO
+        cantos = [  # (centro do arco, ângulo inicial)
+            ((r.left + R,  r.top + R),    180),
+            ((r.right - R, r.top + R),    270),
+            ((r.right - R, r.bottom - R),   0),
+            ((r.left + R,  r.bottom - R),  90),
+        ]
+        pts = []
+        for (ccx, ccy), a0 in cantos:
+            for k in range(passos_canto + 1):
+                a = math.radians(a0 + 90 * k / passos_canto)
+                pts.append((ccx + R * math.cos(a), ccy + R * math.sin(a)))
+        return pts
+
+    def _desenhar_tabelas(self, surf):
+        """
+        Tabelas com altura: cada pedaço do contorno vira um retângulo "de pé".
+        As do fundo e dos lados veem-se por dentro (brancas); a da frente é mais baixa
+        para não esconder o jogo. Por cima corre o corrimão na cor da equipa da casa.
+        """
+        cam = self.camera
+        pts = self._contorno_ringue()
+        r = self.rect
+        chao, topo = [], []
+        for wx, wy in pts:
+            frente = wy > r.bottom - CANTO
+            h = ALTURA_TABELA * (0.45 if frente else 1.0) * cam.fator(wy)
+            sx, sy = cam.projetar(wx, wy)
+            chao.append((sx, sy))
+            topo.append((sx, sy - h))
+
+        # Desenhar do fundo para a frente
+        n = len(pts)
+        segs = sorted(range(n), key=lambda i: pts[i][1] + pts[(i + 1) % n][1])
+        for i in segs:
+            k = (i + 1) % n
+            (ax, ay), (bx, by) = pts[i], pts[k]
+            # Normal do segmento -> luz: fundo mais claro, lados mais escuros
+            nx, ny = by - ay, -(bx - ax)
+            comp = max(1e-6, (nx * nx + ny * ny) ** 0.5)
+            luz = 0.86 + 0.14 * max(0.0, -ny / comp)
+            cor = tuple(int(c * luz) for c in (236, 240, 248))
+            quad = [chao[i], chao[k], topo[k], topo[i]]
+            pygame.draw.polygon(surf, cor, quad)
+            pygame.draw.polygon(surf, cor, quad, 1)
+
+        # Rodapé escuro junto ao piso e corrimão por cima
+        rodape = misturar(self.cor_linhas, (10, 14, 28), 0.55)
+        pygame.draw.lines(surf, rodape, True, chao, 3)
+        pygame.draw.lines(surf, self.cor_linhas, True, topo, 4)
+        pygame.draw.lines(surf, misturar(self.cor_linhas, (255, 255, 255), 0.45), True,
+                          [(x, y - 1) for x, y in topo], 1)
+        self._desenhar_placards_perspetiva(surf)
+
+    def _desenhar_placards_perspetiva(self, surf):
+        """Publicidade na tabela do fundo (vista de frente, por isso é um retângulo)."""
+        cam = self.camera
+        r = self.rect
+        x1, y_chao = cam.projetar(r.left + CANTO, r.top)
+        x2, _ = cam.projetar(r.right - CANTO, r.top)
+        h = ALTURA_TABELA * cam.fator(r.top)
+        faixa = pygame.Rect(round(x1), round(y_chao - h + 4), round(x2 - x1), round(h - 7))
+
+        info = obter_info_equipa(self.equipa_casa)
+        cor_a = misturar(info.get("cor_primaria", (18, 40, 100)), (10, 14, 28), 0.30)
+        cor_b = (245, 247, 252)
+        nome = info.get("nome", "").upper()
+        textos = ["STICKMANIA", "HÓQUEI EM PATINS", nome,
+                  "JOGO • PAIXÃO • TRADIÇÃO", "PAP 2026/2027", nome]
+        fonte = pygame.font.SysFont("Arial", max(9, faixa.height - 4), bold=True)
+        n = len(textos)
+        for i, txt in enumerate(textos):
+            px = faixa.x + faixa.width * i // n
+            pw = faixa.width * (i + 1) // n - faixa.width * i // n
+            painel = pygame.Rect(px + 1, faixa.y, pw - 2, faixa.height)
+            fundo = cor_a if i % 2 == 0 else cor_b
+            pygame.draw.rect(surf, fundo, painel, border_radius=2)
+            t = fonte.render(txt, True, cor_texto_sobre(fundo))
+            if t.get_width() > painel.width - 6:
+                t = pygame.transform.smoothscale(t, (painel.width - 6, t.get_height()))
+            surf.blit(t, (painel.centerx - t.get_width() // 2, painel.centery - t.get_height() // 2))
+
+    def _desenhar_bancadas(self, surf):
+        """
+        Bancadas com público desenhado no código: filas de degraus e adeptos
+        (muitos com as cores da equipa da casa). As filas de cima estão mais longe,
+        por isso são mais pequenas.
+        """
+        import random
+        rnd = random.Random(7)                       # sempre o mesmo público
+        info = obter_info_equipa(self.equipa_casa)
+        c1 = tuple(info.get("cor_primaria", (30, 80, 180)))
+        c2 = tuple(info.get("cor_secundaria", (240, 240, 240)))
+        outras = [(200, 40, 40), (240, 240, 240), (30, 30, 36), (60, 120, 200),
+                  (230, 190, 40), (90, 90, 100), (40, 140, 70)]
+        peles = [(240, 200, 165), (222, 175, 135), (190, 135, 95), (140, 95, 65), (250, 215, 185)]
+        cabelos = [(40, 28, 20), (70, 45, 25), (20, 20, 22), (150, 110, 60), (200, 170, 110)]
+
+        limite = CAM_BASE + 12
+        surf.fill((12, 18, 38), (0, 0, WIDTH, limite))
+        y = limite
+        fila = 0
+        filas = []
+        while y > -30:
+            # perto (em baixo) = filas altas; longe (em cima) = filas baixas
+            alt = max(13, round(26 - 13 * (1 - y / limite)))
+            y -= alt
+            filas.append((y, alt))
+            fila += 1
+        # Desenhar de cima (longe) para baixo (perto)
+        for y, alt in reversed(filas):
+            degrau = (22, 32, 66) if (y // alt) % 2 else (18, 27, 56)
+            pygame.draw.rect(surf, degrau, (0, y + alt * 0.55, WIDTH, alt * 0.45 + 1))
+            pygame.draw.line(surf, (34, 48, 92), (0, round(y + alt * 0.55)), (WIDTH, round(y + alt * 0.55)))
+            passo = alt * 0.62
+            x = -rnd.uniform(0, passo)
+            while x < WIDTH + passo:
+                if rnd.random() < 0.9:                   # alguns lugares vazios
+                    r_cab = alt * 0.17
+                    cor = c1 if rnd.random() < 0.45 else (c2 if rnd.random() < 0.3 else rnd.choice(outras))
+                    cx_p = x + rnd.uniform(-1, 1)
+                    topo_corpo = y + alt * 0.38
+                    corpo = pygame.Rect(0, 0, round(alt * 0.42), round(alt * 0.5))
+                    corpo.midtop = (round(cx_p), round(topo_corpo))
+                    pygame.draw.rect(surf, cor, corpo, border_radius=max(1, round(alt * 0.12)))
+                    if rnd.random() < 0.12:              # braços no ar / cachecol
+                        pygame.draw.line(surf, cor, (corpo.left, corpo.top + 2),
+                                         (corpo.left - alt * 0.15, corpo.top - alt * 0.3), 2)
+                        pygame.draw.line(surf, cor, (corpo.right, corpo.top + 2),
+                                         (corpo.right + alt * 0.15, corpo.top - alt * 0.3), 2)
+                    cab = (round(cx_p), round(topo_corpo - r_cab * 0.6))
+                    pygame.draw.circle(surf, rnd.choice(peles), cab, max(2, round(r_cab)))
+                    pygame.draw.circle(surf, rnd.choice(cabelos), (cab[0], cab[1] - round(r_cab * 0.45)),
+                                       max(1, round(r_cab * 0.8)), draw_top_left=True, draw_top_right=True)
+                x += passo * rnd.uniform(0.9, 1.15)
+
+        # Luz: mais claro em cima (iluminação do pavilhão), mais escuro dos lados e em baixo
+        sombra = pygame.Surface((WIDTH, limite), pygame.SRCALPHA)
+        for yy in range(limite):
+            t = max(0.0, (yy - 60) / (limite - 60))
+            pygame.draw.line(sombra, (8, 12, 26, int(30 + 175 * t)), (0, yy), (WIDTH, yy))
+        surf.blit(sombra, (0, 0))
+        # Varandim à frente da primeira fila
+        cam = self.camera
+        y_var = round(cam.ecra_y(self.rect.top) - ALTURA_TABELA * cam.fator(self.rect.top)) - 8
+        pygame.draw.rect(surf, (16, 24, 48), (0, y_var, WIDTH, 8))
+        pygame.draw.line(surf, (60, 80, 130), (0, y_var), (WIDTH, y_var), 2)
+
+    def _preparar_balizas_perspetiva(self):
+        """
+        Cria as balizas já com o tamanho do ecrã:
+          - a abertura (de poste a poste) segue a perspetiva do chão;
+          - a altura dos postes segue o tamanho dos jogadores.
+        Assim os postes ficam exatamente nas pontas da linha de golo.
+        """
+        cam = self.camera
+        cy = self.rect.centery
+        boca = round(cam.ecra_y(self.baliza_base_y) - cam.ecra_y(self.baliza_topo_y))
+        altura = round(24 * cam.escala(cy))
+        prof = round(40 * cam.fator(cy))
+        self._balizas_ecra = []
+        for gx, lado in ((self.linha_golo_esq_x, "direita"), (self.linha_golo_dir_x, "esquerda")):
+            fundo, frente, ancora = criar_baliza(boca, altura=altura, profundidade=prof, virada_para=lado)
+            sx, _ = cam.projetar(gx, cy)
+            sy = (cam.ecra_y(self.baliza_topo_y) + cam.ecra_y(self.baliza_base_y)) / 2
+            pos = (round(sx - ancora[0]), round(sy - ancora[1]))
+            self._balizas_ecra.append((fundo, frente, pos))
+
+    def _construir(self):
+        surf = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+        surf.fill(COR_FUNDO)
+        self._desenhar_bancadas(surf)
+        self._por_em_perspetiva(self._construir_plano(), surf)
+        self._desenhar_tabelas(surf)
+        self._preparar_balizas_perspetiva()
+        for fundo, _frente, pos in self._balizas_ecra:
+            surf.blit(fundo, pos)
         return surf
 
     def _calcular_cor_linhas(self) -> tuple:
@@ -247,8 +433,8 @@ class Rink:
 
     def draw_frente(self, screen):
         """Travessa, poste da frente e rede lateral: ficam POR CIMA da bola e do guarda-redes."""
-        screen.blit(self._bal_esq_frente, self._pos_baliza_esq)
-        screen.blit(self._bal_dir_frente, self._pos_baliza_dir)
+        for _fundo, frente, pos in self._balizas_ecra:
+            screen.blit(frente, pos)
 
     def rect_frente_baliza(self, lado: str) -> pygame.Rect:
         """Retângulo ocupado pela camada da frente de uma baliza ('esq' ou 'dir')."""

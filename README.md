@@ -40,6 +40,10 @@ No Windows também se pode fazer duplo clique em `jogar.bat`.
 - **Balizas desenhadas no código** (vista 3/4, rede em malha, sombra), em duas camadas:
   a bola fica por baixo da rede quando entra e o guarda-redes fica à frente da baliza
 - Jogadores desenhados por ordem de profundidade (quem está mais abaixo no ecrã fica à frente)
+- **Câmara em perspetiva (vista de TV)**: o campo aparece em trapézio, os jogadores do fundo
+  ficam mais pequenos, as tabelas têm altura e publicidade, e há bancadas com público
+  nas cores da equipa da casa. A física e a IA continuam num campo plano; só o desenho
+  passa pela câmara (`hockey_game/camera.py`)
 
 ## Estrutura
 
@@ -52,6 +56,7 @@ No Windows também se pode fazer duplo clique em `jogar.bat`.
 | `hockey_game/team.py` | Dados das equipas (nome, sigla, cores, emblema) |
 | `hockey_game/player.py`, `goalkeeper.py`, `ai.py` | Jogadores, guarda-redes e inteligência artificial |
 | `hockey_game/ball.py`, `rink.py` | Física da bola e desenho do ringue |
+| `hockey_game/camera.py` | Câmara em perspetiva (converte campo plano <-> ecrã) |
 | `hockey_game/baliza.py` | Desenho das balizas (camada de fundo e da frente) |
 | `hockey_game/animation.py` | Carregamento de animações (redução suave e alinhamento pelos patins) |
 | `hockey_game/ui.py` | HUD (marcador, mini-mapa, cartão do jogador) |
