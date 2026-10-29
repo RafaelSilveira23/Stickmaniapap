@@ -34,9 +34,12 @@ No Windows também se pode fazer duplo clique em `jogar.bat`.
 - **Linhas do ringue na cor da equipa da casa**, ajustadas automaticamente para se verem bem no piso de madeira
 - IA com 3 níveis de dificuldade, sistema de faltas, livres diretos e penáltis
 - Mira de remate com barra de força
-- **Animações de patinagem melhoradas**: o jogador vira-se para o lado para onde patina,
-  inclina-se ao acelerar e para trás ao travar, balança a cada passada, tem sombra no chão
-  e larga raspas dos patins nas travagens e nas viragens rápidas
+- **Sprites novos gerados por código** (`sprites_v3/`, ver `ferramentas/gerar_sprites.py`):
+  11 animações do jogador (parado, patinar, sprint, travar, com bola, passe, remate, desarme,
+  queda, levantar, festejar) e 5 do guarda-redes (parado, mover, defesa em baixo,
+  defesa com a luva, festejar), todos pintados com as cores de cada clube
+- O jogador vira-se para o lado para onde patina, tem sombra no chão e larga raspas
+  dos patins nas travagens e nas viragens rápidas; a equipa que marca festeja o golo
 - **Balizas desenhadas no código** (vista 3/4, rede em malha, sombra), em duas camadas:
   a bola fica por baixo da rede quando entra e o guarda-redes fica à frente da baliza
 - Jogadores desenhados por ordem de profundidade (quem está mais abaixo no ecrã fica à frente)
@@ -53,7 +56,8 @@ No Windows também se pode fazer duplo clique em `jogar.bat`.
 | `hockey_game/player.py`, `goalkeeper.py`, `ai.py` | Jogadores, guarda-redes e inteligência artificial |
 | `hockey_game/ball.py`, `rink.py` | Física da bola e desenho do ringue |
 | `hockey_game/baliza.py` | Desenho das balizas (camada de fundo e da frente) |
-| `hockey_game/animation.py` | Carregamento de animações (redução suave e alinhamento pelos patins) |
+| `hockey_game/animation.py` | Carregamento de animações e de spritesheets |
+| `ferramentas/gerar_sprites.py` | Gera as spritesheets de `sprites_v3/` a partir de um esqueleto (IK) |
 | `hockey_game/ui.py` | HUD (marcador, mini-mapa, cartão do jogador) |
 
 Para mudar as cores de uma equipa, edita `cor_primaria`, `cor_secundaria` e `padrao` (`"liso"` ou `"riscas"`) em `hockey_game/team.py`.

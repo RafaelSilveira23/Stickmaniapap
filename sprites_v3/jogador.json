@@ -1,0 +1,79 @@
+{
+  "celula": [
+    96,
+    96
+  ],
+  "ancora_pes": [
+    48,
+    90
+  ],
+  "virado_para": "direita",
+  "animacoes": {
+    "parado": {
+      "row": 0,
+      "frames": 4,
+      "fps": 4.0,
+      "loop": true
+    },
+    "patinar": {
+      "row": 1,
+      "frames": 8,
+      "fps": 10.0,
+      "loop": true
+    },
+    "sprint": {
+      "row": 2,
+      "frames": 6,
+      "fps": 12.0,
+      "loop": true
+    },
+    "travar": {
+      "row": 3,
+      "frames": 2,
+      "fps": 12.0,
+      "loop": true
+    },
+    "com_bola": {
+      "row": 4,
+      "frames": 8,
+      "fps": 10.0,
+      "loop": true
+    },
+    "passe": {
+      "row": 5,
+      "frames": 5,
+      "fps": 14.0,
+      "loop": false
+    },
+    "remate": {
+      "row": 6,
+      "frames": 6,
+      "fps": 14.0,
+      "loop": false
+    },
+    "desarme": {
+      "row": 7,
+      "frames": 4,
+      "fps": 12.0,
+      "loop": false
+    },
+    "queda": {
+      "row": 8,
+      "frames": 5,
+      "fps": 10.0,
+      "loop": false
+    },
+    "levantar": {
+      "row": 9,
+      "frames": 4,
+      "fps": 7.0,
+      "loop": false
+    },
+    "festejar": {
+      "row": 10,
+      "frames": 6,
+      "fps": 8.0,
+      "loop": true
+    }
+  }
+}

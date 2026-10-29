@@ -877,6 +877,12 @@ class Game:
         self._msg_equipa = equipa
         self._repor_posicoes()
 
+        # A equipa que marcou festeja (quem tiver a bola não festeja)
+        marcou = self.equipa_azul if equipa == "azul" else self.equipa_vermelha
+        for j in marcou:
+            j.festejar(2.0)
+        (self.gr_azul if equipa == "azul" else self.gr_vermelho).festejar(2.0)
+
     def _repor_posicoes(self):
         self._cancelar_mira()
         cx = RINK_X + RINK_W // 2

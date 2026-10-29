@@ -3,7 +3,7 @@
 
 Diferenças em relação ao Player de campo:
   - Só se move verticalmente (eixo Y), dentro dos limites da baliza
-  - Tem animações próprias: parado, mover_cima/baixo/esquerda/direita, defender_01/02
+  - Tem animações próprias (sprites_v3): parado, mover, defender, defesa_alta, festejar
   - Não apanha a bola nem remata — só bloqueia
   - A IA segue a bola verticalmente e tenta interpor-se
 """
@@ -11,8 +11,8 @@ import os
 import math
 import pygame
 from settings import *
-from animation import AnimationController, load_animation_from_folder, load_single_frame
-from cores import cor_texto_sobre
+from animation import AnimationController, carregar_spritesheet
+from cores import cor_texto_sobre, recolorir_frames
 from player import sombra_oval
 
 # Tamanho do sprite do guarda-redes no ecrã
@@ -27,21 +27,18 @@ GR_ALERTA   = 220
 
 def _pasta_gr():
     base = os.path.dirname(os.path.abspath(__file__))
-    return os.path.join(base, "..", "sprites_v2", "hd", "frames", "guarda_redes")
+    return os.path.join(base, "..", "sprites_v3")
 
 
-def _carregar_animacoes_gr() -> dict:
+def _carregar_animacoes_gr(kit: dict | None = None) -> dict:
+    """Animações: parado, mover, defender (em baixo), defesa_alta (luva no ar), festejar."""
     pasta = _pasta_gr()
-    s = GR_SIZE
-    return {
-        "parado":        load_single_frame(os.path.join(pasta, "parado.png"), scale=s),
-        "mover_cima":    load_single_frame(os.path.join(pasta, "mover_cima.png"),    scale=s),
-        "mover_baixo":   load_single_frame(os.path.join(pasta, "mover_baixo.png"),   scale=s),
-        "mover_direita": load_single_frame(os.path.join(pasta, "mover_direita.png"), scale=s),
-        "mover_esquerda":load_single_frame(os.path.join(pasta, "mover_esquerda.png"),scale=s),
-        "defender":      load_animation_from_folder(pasta, "defender", fps=8.0,
-                                                    loop=True, scale=s),
-    }
+    anims = carregar_spritesheet(os.path.join(pasta, "guarda_redes.png"),
+                                 os.path.join(pasta, "guarda_redes.json"), scale=GR_SIZE)
+    if kit:
+        for estado, anim in anims.items():
+            anim.frames = recolorir_frames(("gr", estado, GR_SIZE), anim.frames, kit)
+    return anims
 
 
 class Goalkeeper(pygame.sprite.Sprite):
@@ -66,6 +63,7 @@ class Goalkeeper(pygame.sprite.Sprite):
         self.nome   = "Guarda-redes"
         self.numero = 1
         self.tem_bola = False          # GR nunca tem a bola (não apanha)
+        self._kit = None
 
         # Animações
         self._anim = AnimationController(_carregar_animacoes_gr())
@@ -92,7 +90,22 @@ class Goalkeeper(pygame.sprite.Sprite):
 
         # Cooldown da animação de defesa
         self._defender_timer = 0.0
+        self._tipo_defesa = "defender"
         self.definir_dificuldade(dificuldade)
+
+    @property
+    def kit(self):
+        return self._kit
+
+    @kit.setter
+    def kit(self, novo: dict):
+        """Ao receber o equipamento da equipa, volta a pintar os sprites com essas cores."""
+        if novo is not None and novo != self._kit:
+            self._kit = novo
+            self._anim = AnimationController(_carregar_animacoes_gr(novo))
+
+    def festejar(self, duracao: float = 2.0):
+        self._festejar_timer = duracao
 
     def definir_dificuldade(self, nivel: str):
         self.dificuldade = nivel
@@ -128,10 +141,6 @@ class Goalkeeper(pygame.sprite.Sprite):
         alvo_y = max(self._y_min, min(self._y_max, bola.pos_y))
         self._target_y = alvo_y
 
-        # Ativar animação de defender quando a bola se aproxima
-        dist = math.hypot(bola.pos_x - self.pos_x, bola.pos_y - self.pos_y)
-        if dist < self.alerta_dist and self._defender_timer <= 0:
-            self._defender_timer = 0.4   # mostra animação de defender por 0.4s
 
     # ------------------------------------------------------------------ #
     # Movimento vertical com inércia                                       #
@@ -164,11 +173,14 @@ class Goalkeeper(pygame.sprite.Sprite):
 
     def _atualizar_animacao(self, dt: float, bola):
         self._defender_timer = max(0.0, self._defender_timer - dt)
+        self._festejar_timer = max(0.0, getattr(self, "_festejar_timer", 0.0) - dt)
 
         if self._defender_timer > 0:
-            self._anim.estado = "defender"
+            self._anim.estado = self._tipo_defesa
+        elif self._festejar_timer > 0:
+            self._anim.estado = "festejar"
         elif abs(self.vel_y) > 8:
-            self._anim.estado = "mover_cima" if self.vel_y < 0 else "mover_baixo"
+            self._anim.estado = "mover"
         else:
             self._anim.estado = "parado"
 
@@ -224,8 +236,10 @@ class Goalkeeper(pygame.sprite.Sprite):
                 # Empurra a bola para fora
                 bola.pos_x += nx * (raio_colisao - dist + 2)
                 bola.pos_y += ny * (raio_colisao - dist + 2)
-                # Ativa animação de defender
+                # Ativa animação de defesa: em baixo ("borboleta") ou com a luva no ar,
+                # conforme a bola venha do lado da luva ou do lado do stick
                 self._defender_timer = 0.5
+                self._tipo_defesa = "defesa_alta" if bola.pos_y < self.pos_y - 6 else "defender"
                 return True
         return False
 

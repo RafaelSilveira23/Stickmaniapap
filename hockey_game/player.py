@@ -5,7 +5,7 @@ import random
 import math
 import pygame
 from settings import *
-from animation import AnimationController, load_animation_from_names
+from animation import AnimationController, carregar_spritesheet
 from cores import recolorir_frames
 
 # ---------- Constantes ----------
@@ -28,7 +28,7 @@ _FPS_COM_BOLA_IDLE = 1.5  # fps de animação quando tem bola e está parado
 
 # Efeitos de movimento
 _VIRAR_DURACAO  = 0.12    # segundos que o jogador demora a "dar a volta"
-_INCLINACAO_MAX = 6.0     # graus de inclinação para a frente a correr
+_INCLINACAO_MAX = 2.5     # graus extra (os frames novos já vêm inclinados)
 
 # Duração e intensidade do shake de colisão
 _SHAKE_DURACAO  = 0.20    # segundos de shake após colisão
@@ -43,45 +43,31 @@ def _lerp_fixo(atual: float, alvo: float, max_step: float) -> float:
     return atual + max_step * (1.0 if diff > 0 else -1.0)
 
 
-def _pasta_sprites(equipa: str) -> str:
+def _pasta_sprites() -> str:
     base = os.path.dirname(os.path.abspath(__file__))
-    return os.path.join(base, "..", "sprites_v2", "hd", "frames", equipa)
+    return os.path.join(base, "..", "sprites_v3")
 
 
-# Todos os sprites estão desenhados virados para a DIREITA.
-# Para andar para a esquerda, o frame é espelhado no código (ver _compor_imagem).
-#
-# Os ficheiros "correr_cima/baixo/esquerda" originais são todos vistas de lado e
-# com pequenas diferenças entre si (cabelo, stick), o que fazia o jogador "tremer".
-# Por isso montamos UM ciclo de patinagem com os 4 frames mais consistentes
-# e usamo-lo em todas as direções.
-_ANIMACOES_JOGADOR = [
-    # (estado, ficheiros, fps, loop)
-    ("parado",   ["parado_01", "parado_02", "parado_03"],                       2.0, True),
-    ("correr",   ["correr_esquerda_01", "correr_esquerda_02",
-                  "correr_esquerda_03", "correr_cima_02"],                      9.0, True),
-    # com_bola_04 não entra: esse frame já tem uma bola desenhada (ficavam duas bolas)
-    ("com_bola", ["com_bola_01", "com_bola_02", "com_bola_03"],                 8.0, True),
-    ("passe",    ["passe_01", "passe_02", "passe_03"],                         10.0, False),
-    ("remate",   ["remate_01", "remate_02"],                                   10.0, False),
-    ("colisao",  ["colisao_01", "colisao_02", "colisao_03"],                    8.0, False),
-]
+# Spritesheet gerada por ferramentas/gerar_sprites.py (todos os frames virados para a DIREITA;
+# para a esquerda o frame é espelhado em _compor_imagem).
+# Animações: parado, patinar, sprint, travar, com_bola, passe, remate, desarme,
+#            queda, levantar, festejar
+_ACOES_NO_CHAO = ("queda", "levantar")          # jogador caído: não se mexe nem apanha a bola
+_ACOES_FPS_FIXO = ("passe", "remate", "desarme", "queda", "levantar", "festejar", "parado", "travar")
 
 
 def _carregar_animacoes(equipa: str, kit: dict | None = None) -> dict:
     """
-    Carrega as animações do jogador.
-    Se for dado um 'kit' (cores do equipamento), usa os sprites base azuis
-    e pinta-os com as cores da equipa.
+    Carrega as animações do jogador a partir da spritesheet.
+    O equipamento da folha é azul; se for dado um 'kit', é pintado com as cores da equipa.
     """
-    pasta = _pasta_sprites("azul" if kit else equipa)
+    pasta = _pasta_sprites()
     s = PLAYER_SIZE
-    anims = {}
-    for estado, nomes, fps, loop in _ANIMACOES_JOGADOR:
-        anim = load_animation_from_names(pasta, nomes, fps=fps, loop=loop, scale=s)
-        if kit:
-            anim.frames = recolorir_frames((estado, s, "v2"), anim.frames, kit)
-        anims[estado] = anim
+    anims = carregar_spritesheet(os.path.join(pasta, "jogador.png"),
+                                 os.path.join(pasta, "jogador.json"), scale=s)
+    if kit:
+        for estado, anim in anims.items():
+            anim.frames = recolorir_frames((estado, s, "v3"), anim.frames, kit)
     return anims
 
 
@@ -250,7 +236,7 @@ class Player(pygame.sprite.Sprite):
         """Suaviza a mudança de velocidade com taxa fixa por segundo tanto para humanos como IA."""
         taxa = ACELERACAO * dt   # px/s * dt = px/frame
 
-        if self._estado_action in ("remate", "colisao"):
+        if self._estado_action in ("remate",) + _ACOES_NO_CHAO:
             self.vel_x = _lerp_fixo(self.vel_x, 0.0,            taxa * 0.8)
             self.vel_y = _lerp_fixo(self.vel_y, 0.0,            taxa * 0.8)
         elif self._desestabilizado_timer > 0:
@@ -399,6 +385,9 @@ class Player(pygame.sprite.Sprite):
         else:
             # Desarme limpo: a bola solta-se mas o jogador FICA EM PÉ!
             portador.desarme_limpo(bola, dir_impacto)
+            if defensor._estado_action is None:
+                defensor._olhar_para(pygame.math.Vector2(portador.pos_x - defensor.pos_x, 0))
+                defensor._comecar_acao("desarme", 0.33)
 
             # Pequena probabilidade de falta por obstrução em cargas rápidas mesmo sem queda
             if (is_sprint or carga_por_tras) and random.random() < 0.12:
@@ -427,8 +416,8 @@ class Player(pygame.sprite.Sprite):
         if bola.dono is not None:
             return
 
-        # Jogador atordoado por colisão não apanha a bola de imediato
-        if self._estado_action == "colisao":
+        # Jogador caído não apanha a bola
+        if self._estado_action in _ACOES_NO_CHAO:
             return
 
         dist = ((self.pos_x - bola.pos_x) ** 2 + (self.pos_y - bola.pos_y) ** 2) ** 0.5
@@ -500,12 +489,17 @@ class Player(pygame.sprite.Sprite):
                 else:
                     v = pygame.math.Vector2(65, 65)
                 bola.libertar(v, dono_anterior=self)
-        self._comecar_acao("colisao", 0.65)
+        self._comecar_acao("queda", 0.85)
         self._shake_timer = _SHAKE_DURACAO
 
     def sofrer_colisao(self, bola=None, direcao_impacto=None):
         """Compatibilidade: chamada genérica usa desarme limpo."""
         self.desarme_limpo(bola, direcao_impacto)
+
+    def festejar(self, duracao: float = 2.0):
+        """Festejo do golo (para assim que o jogador começar a patinar)."""
+        if not self.tem_bola:
+            self._comecar_acao("festejar", duracao)
 
     def _olhar_para(self, direcao_vec: pygame.math.Vector2):
         """Vira o sprite para o lado do passe/remate."""
@@ -534,23 +528,42 @@ class Player(pygame.sprite.Sprite):
                 self._shake_timer  = 0.0
                 self._shake_offset = (0, 0)
 
-        if self._estado_action is not None:
-            self._action_timer -= dt
-            if self._action_timer <= 0 or self._anim.finished:
-                self._estado_action = None
-
         vel_atual = (self.vel_x ** 2 + self.vel_y ** 2) ** 0.5
         self._atualizar_lado(dt)
         self._atualizar_inclinacao(dt, vel_atual)
         self._atualizar_particulas(dt, vel_atual)
 
+        if self._estado_action is not None:
+            self._action_timer -= dt
+            # A queda acaba pelo tempo (fica deitado depois do último frame) e depois levanta-se
+            if self._estado_action == "queda":
+                if self._action_timer <= 0:
+                    self._comecar_acao("levantar", 0.55)
+            elif self._estado_action == "festejar":
+                # Se começar a patinar, para de festejar
+                if self._action_timer <= 0 or vel_atual > 60:
+                    self._estado_action = None
+            elif self._action_timer <= 0 or self._anim.finished:
+                self._estado_action = None
+
         if self._estado_action is None:
             em_movimento = abs(self.vel_x) > 8 or abs(self.vel_y) > 8
 
-            if self.tem_bola:
+            alvo_vel = (self._target_vx ** 2 + self._target_vy ** 2) ** 0.5
+            contra = self.vel_x * self._target_vx + self.vel_y * self._target_vy
+            a_travar = vel_atual > 150 and (contra < 0 or alvo_vel < vel_atual * 0.35)
+
+            if a_travar and not self.tem_bola and vel_atual > 175:
+                # Travagem "à hóquei": dura um bocadinho para se ver (e larga raspas)
+                self._comecar_acao("travar", 0.28)
+                self._emitir_raspas(4)
+                novo_estado = "travar"
+            elif self.tem_bola:
                 novo_estado = "com_bola"
+            elif em_movimento and vel_atual > 215:
+                novo_estado = "sprint"
             elif em_movimento:
-                novo_estado = "correr"
+                novo_estado = "patinar"
             else:
                 novo_estado = "parado"
 
@@ -586,12 +599,14 @@ class Player(pygame.sprite.Sprite):
                 fps_anim = _FPS_COM_BOLA_IDLE
 
             # Aplicar FPS dinâmico à animação de corrida/com_bola
-            # (não tocar em passe/remate/colisao que têm fps fixo)
+            # (passe, remate, queda, etc. têm fps fixo)
             estado_anim_atual = self._anim.estado
             if estado_anim_atual in self._anim._anims:
                 anim_obj = self._anim._anims[estado_anim_atual]
-                if hasattr(anim_obj, "frame_time") and estado_anim_atual not in ("passe", "remate", "colisao", "parado"):
-                    anim_obj.frame_time = 1.0 / max(fps_anim, 0.5)
+                if hasattr(anim_obj, "frame_time") and estado_anim_atual not in _ACOES_FPS_FIXO:
+                    # Ciclos com mais frames precisam de mais fps para manter a mesma passada
+                    fps_ciclo = fps_anim * len(anim_obj.frames) / 6.5
+                    anim_obj.frame_time = 1.0 / max(fps_ciclo, 0.5)
 
             # Balanço: o corpo sobe e desce duas vezes por ciclo de 4 frames (uma por passada)
             if em_movimento:
@@ -612,7 +627,7 @@ class Player(pygame.sprite.Sprite):
             self._virar_timer = max(0.0, self._virar_timer - dt)
 
         # Durante a queda o jogador não se vira
-        if self._estado_action == "colisao":
+        if self._estado_action in _ACOES_NO_CHAO:
             return
 
         # Com a bola (ou a passar/rematar) olha para onde aponta o stick;
@@ -636,7 +651,7 @@ class Player(pygame.sprite.Sprite):
     def _atualizar_inclinacao(self, dt: float, vel_atual: float):
         """O jogador inclina-se para a frente ao patinar e para trás ao travar."""
         alvo = 0.0
-        if self._estado_action != "colisao" and vel_atual > 8:
+        if self._estado_action not in _ACOES_NO_CHAO and vel_atual > 8:
             # Para a frente, proporcional à velocidade horizontal
             frente = abs(self.vel_x) / PLAYER_SPEED
             alvo = _INCLINACAO_MAX * min(frente, 1.3)
@@ -662,7 +677,7 @@ class Player(pygame.sprite.Sprite):
 
     def _atualizar_particulas(self, dt: float, vel_atual: float):
         # Travagens fortes e sprints rápidos largam raspas dos patins
-        if self._estado_action != "colisao" and vel_atual > 140:
+        if self._estado_action not in _ACOES_NO_CHAO and vel_atual > 140:
             contra = self.vel_x * self._target_vx + self.vel_y * self._target_vy
             alvo_vel = (self._target_vx ** 2 + self._target_vy ** 2) ** 0.5
             if contra < 0 or alvo_vel < vel_atual * 0.4:
@@ -703,16 +718,14 @@ class Player(pygame.sprite.Sprite):
         if abs(angulo) > 0.5:
             frame = pygame.transform.rotozoom(frame, angulo, 1.0)
 
-        bob = 0
-        if self._anim.estado in ("correr", "com_bola") and self._fase_passada:
-            bob = -round(abs(math.sin(self._fase_passada)) * 2)
+        bob = 0   # o balanço da passada já vem desenhado nos frames novos
 
         tela = pygame.Surface(TAMANHO_TELA, pygame.SRCALPHA)
         cx = TAMANHO_TELA[0] // 2
         pes_y = _MARGEM_Y + PLAYER_SIZE[1] - 2
 
         # Sombra: encolhe um pouco quando o corpo sobe
-        larg_sombra = 30 + bob * 2 if self._anim.estado != "colisao" else 44
+        larg_sombra = 44 if self._anim.estado in _ACOES_NO_CHAO else 30
         sombra = sombra_oval(larg_sombra, 9)
         tela.blit(sombra, (cx - sombra.get_width() // 2, pes_y - 5))
 

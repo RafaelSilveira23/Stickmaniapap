@@ -1,0 +1,43 @@
+{
+  "celula": [
+    96,
+    96
+  ],
+  "ancora_pes": [
+    48,
+    90
+  ],
+  "virado_para": "direita",
+  "animacoes": {
+    "parado": {
+      "row": 0,
+      "frames": 4,
+      "fps": 4.0,
+      "loop": true
+    },
+    "mover": {
+      "row": 1,
+      "frames": 4,
+      "fps": 10.0,
+      "loop": true
+    },
+    "defender": {
+      "row": 2,
+      "frames": 3,
+      "fps": 12.0,
+      "loop": false
+    },
+    "defesa_alta": {
+      "row": 3,
+      "frames": 3,
+      "fps": 12.0,
+      "loop": false
+    },
+    "festejar": {
+      "row": 4,
+      "frames": 4,
+      "fps": 6.0,
+      "loop": true
+    }
+  }
+}
