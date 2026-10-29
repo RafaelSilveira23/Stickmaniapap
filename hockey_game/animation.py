@@ -53,12 +53,56 @@ class Animation:
 # Funções utilitárias de carregamento
 # ---------------------------------------------------------------------------
 
-def _load_image(path: str, scale: tuple[int, int] | None = None) -> pygame.Surface:
-    """Carrega uma imagem com transparência; faz scale se pedido."""
+def redimensionar(img: pygame.Surface, scale: tuple[int, int]) -> pygame.Surface:
+    """
+    Redimensiona uma imagem.
+    Ao REDUZIR usamos smoothscale (mistura os píxeis e fica nítido, sem "serrilhado");
+    ao AUMENTAR usamos scale normal para manter o aspeto pixel-art.
+    """
+    if img.get_width() > scale[0] or img.get_height() > scale[1]:
+        return pygame.transform.smoothscale(img, scale)
+    return pygame.transform.scale(img, scale)
+
+
+def alinhar_pelos_pes(img: pygame.Surface, altura_pes: int = 24) -> pygame.Surface:
+    """
+    Centra a imagem na horizontal usando apenas os patins (parte de baixo do sprite).
+    Assim, ao trocar de frame, o jogador não "salta" para os lados.
+    """
+    w, h = img.get_size()
+    zona_pes = img.subsurface((0, h - altura_pes, w, altura_pes))
+    caixa = zona_pes.get_bounding_rect()
+    if caixa.width == 0:
+        return img
+    desvio = round(w / 2 - caixa.centerx)
+    if desvio == 0:
+        return img
+    nova = pygame.Surface((w, h), pygame.SRCALPHA)
+    nova.blit(img, (desvio, 0))
+    return nova
+
+
+def _load_image(path: str, scale: tuple[int, int] | None = None,
+                alinhar: bool = False) -> pygame.Surface:
+    """Carrega uma imagem com transparência; alinha pelos pés e faz scale se pedido."""
     img = pygame.image.load(path).convert_alpha()
+    if alinhar:
+        img = alinhar_pelos_pes(img)
     if scale:
-        img = pygame.transform.scale(img, scale)
+        img = redimensionar(img, scale)
     return img
+
+
+def load_animation_from_names(folder: str, nomes: list[str], fps: float = 8.0,
+                              loop: bool = True,
+                              scale: tuple[int, int] | None = None,
+                              alinhar: bool = True) -> Animation:
+    """
+    Cria uma animação a partir de uma lista de nomes de ficheiros (sem .png).
+    Útil para montar um ciclo com os melhores frames, mesmo que tenham nomes diferentes.
+    """
+    frames = [_load_image(os.path.join(folder, n + ".png"), scale, alinhar) for n in nomes]
+    return Animation(frames, fps=fps, loop=loop)
 
 
 def load_animation_from_folder(
@@ -68,6 +112,7 @@ def load_animation_from_folder(
     fps: float = 8.0,
     loop: bool = True,
     scale: tuple[int, int] | None = None,
+    alinhar: bool = False,
 ) -> Animation:
     """
     Carrega frames com nomes do tipo: <prefix>_01.png, <prefix>_02.png, ...
@@ -93,13 +138,14 @@ def load_animation_from_folder(
     for i in range(1, count + 1):
         filename = f"{prefix}_{i:02d}.png"
         full_path = os.path.join(folder, filename)
-        frames.append(_load_image(full_path, scale))
+        frames.append(_load_image(full_path, scale, alinhar))
     return Animation(frames, fps=fps, loop=loop)
 
 
-def load_single_frame(path: str, scale: tuple[int, int] | None = None) -> Animation:
+def load_single_frame(path: str, scale: tuple[int, int] | None = None,
+                      alinhar: bool = False) -> Animation:
     """Para frames únicos (ex: parado com uma única imagem)."""
-    return Animation([_load_image(path, scale)], fps=1.0, loop=True)
+    return Animation([_load_image(path, scale, alinhar)], fps=1.0, loop=True)
 
 
 class AnimationController:

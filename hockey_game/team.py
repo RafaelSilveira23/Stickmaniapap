@@ -14,6 +14,7 @@ EQUIPAS_INFO = {
         "sigla": "FCP",
         "cor_primaria": (15, 60, 160),
         "cor_secundaria": (255, 255, 255),
+        "padrao": "riscas",   # "riscas" = camisola às riscas; "liso" = uma só cor
         "ficheiros_logo": ["Porto.jpg", "porto.png", "fc_porto.png", "fcp.png"],
     },
     "riba_dave": {

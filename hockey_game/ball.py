@@ -5,7 +5,7 @@ import random
 import pygame
 from settings import *
 
-BOLA_SIZE        = 14
+BOLA_SIZE        = 11             # era 14: ficava quase do tamanho da cabeça do jogador
 ATRITO           = 0.988          # atrito base (mantido para compatibilidade)
 ATRITO_BASE      = 0.991          # atrito quando a bola está rápida (menos resistência)
 ATRITO_LENTO     = 0.975          # atrito quando a bola está lenta (mais resistência)
@@ -34,7 +34,7 @@ class Ball(pygame.sprite.Sprite):
 
         caminho = os.path.join(_pasta_extras(), "bola.png")
         img = pygame.image.load(caminho).convert_alpha()
-        self._imagem_base = pygame.transform.scale(img, (BOLA_SIZE, BOLA_SIZE))
+        self._imagem_base = pygame.transform.smoothscale(img, (BOLA_SIZE, BOLA_SIZE))
         self.image = self._imagem_base.copy()
         self.rect = self.image.get_rect(center=pos)
 

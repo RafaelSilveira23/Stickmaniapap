@@ -12,9 +12,12 @@ import math
 import pygame
 from settings import *
 from animation import AnimationController, load_animation_from_folder, load_single_frame
+from cores import cor_texto_sobre
+from player import sombra_oval
 
 # Tamanho do sprite do guarda-redes no ecrã
 GR_SIZE     = (56, 56)
+_TELA_GR    = (GR_SIZE[0] + 16, GR_SIZE[1] + 12)   # espaço extra para a sombra e a inclinação
 GR_SPEED    = 240      # velocidade vertical máxima (mais rápido que jogador normal)
 GR_ACCEL    = 2400     # aceleração (px/s²)
 
@@ -172,9 +175,26 @@ class Goalkeeper(pygame.sprite.Sprite):
         self._anim.update(dt)
         img = self._anim.imagem
         if self.lado == "dir":
-            self.image = pygame.transform.flip(img, True, False)
-        else:
-            self.image = img
+            img = pygame.transform.flip(img, True, False)
+
+        # Pequeno balanço ao deslizar e inclinação para o lado da bola ao defender
+        self._fase = (getattr(self, "_fase", 0.0) + dt * 10) if abs(self.vel_y) > 8 else 0.0
+        bob = -round(abs(math.sin(self._fase)) * 2)
+        angulo = 0.0
+        if self._anim.estado == "defender":
+            # Inclina o corpo na direção vertical da bola (estica-se para ela)
+            dy = max(-1.0, min(1.0, (bola.pos_y - self.pos_y) / 40))
+            angulo = -dy * 10 if self.lado == "esq" else dy * 10
+            img = pygame.transform.rotozoom(img, angulo, 1.0)
+
+        tela = pygame.Surface(_TELA_GR, pygame.SRCALPHA)
+        cx = _TELA_GR[0] // 2
+        pes_y = _TELA_GR[1] // 2 + GR_SIZE[1] // 2 - 2
+        sombra = sombra_oval(40, 11)
+        tela.blit(sombra, (cx - sombra.get_width() // 2, pes_y - 6))
+        tela.blit(img, img.get_rect(center=(cx, _TELA_GR[1] // 2 + bob)))
+        self.image = tela
+        self.rect = self.image.get_rect(center=(round(self.pos_x), round(self.pos_y)))
 
     # ------------------------------------------------------------------ #
     # Bloquear a bola (chamado por game.py após update da bola)           #
@@ -214,7 +234,13 @@ class Goalkeeper(pygame.sprite.Sprite):
     # ------------------------------------------------------------------ #
 
     def draw_extra(self, screen: pygame.Surface, font: pygame.font.Font):
-        for cor, off in [((0,0,0), 1), ((255,255,255), 0)]:
-            t = font.render("GR", True, cor)
-            screen.blit(t, (self.rect.centerx - t.get_width()//2 + off,
-                            self.rect.top - t.get_height() - 2 + off))
+        """Etiqueta 'GR' com a cor do equipamento da equipa."""
+        kit = getattr(self, "kit", None)
+        fundo = kit["principal"] if kit else (20, 30, 60)
+        cor_txt = cor_texto_sobre(fundo)
+        t = font.render("GR", True, cor_txt)
+        caixa = pygame.Rect(0, 0, t.get_width() + 8, t.get_height() + 2)
+        caixa.midbottom = (self.rect.centerx, self.rect.top - 1)
+        pygame.draw.rect(screen, fundo, caixa, border_radius=4)
+        pygame.draw.rect(screen, (255, 255, 255), caixa, 1, border_radius=4)
+        screen.blit(t, (caixa.centerx - t.get_width() // 2, caixa.centery - t.get_height() // 2))

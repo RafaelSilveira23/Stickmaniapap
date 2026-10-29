@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 """game.py - game loop com IA real, posicionamento tático, mini-mapa e cartão de jogador."""
-import os
 import math
 import pygame
 from settings import *
@@ -11,7 +10,9 @@ from ai import AgentIA
 from goalkeeper import Goalkeeper
 from ui import HUDController
 from team import EQUIPAS_LISTA, obter_info_equipa
-from menu import TeamSelectMenu
+from menu import MenuPrincipal, EcraControlos, TeamSelectMenu, MenuPausa, EcraFimJogo
+from cores import definir_equipamentos, misturar, cor_texto_sobre
+from componentes import COR_DESTAQUE
 
 DURACAO_PARTE = 60 * 5   # 5 minutos por parte
 
@@ -49,8 +50,15 @@ class Game:
         self.bola.seguir_jogador(self.jogador_humano)
 
         # ── Estado do jogo e Menu de Seleção ─────────────────────────────
-        self.estado         = "menu_selecao"  # "menu_selecao" ou "jogo"
+        # Estados: "menu_principal", "controlos", "menu_selecao" ou "jogo"
+        self.estado         = "menu_principal"
+        self.menu_principal = MenuPrincipal(self.screen, self.equipa_casa_id, self.equipa_fora_id)
         self.menu           = TeamSelectMenu(self.screen, self.equipa_casa_id, self.equipa_fora_id)
+        self.ecra_controlos = EcraControlos(self.screen)
+        self.menu_pausa     = MenuPausa(self.screen)
+        self.ecra_fim       = EcraFimJogo(self.screen)
+        self._origem_controlos = "menu_principal"   # para onde volta o ecrã de controlos
+        self.pausado        = False
 
         self.golos_azul     = 0
         self.golos_vermelho = 0
@@ -94,6 +102,9 @@ class Game:
         cy = RINK_Y + RINK_H // 2
         r  = self.rink
 
+        # Equipamentos: cores de cada equipa (a visitante usa o alternativo se as cores chocarem)
+        self.kit_casa, self.kit_fora = definir_equipamentos(self.equipa_casa_id, self.equipa_fora_id)
+
         bal_prop_azul = r.baliza_dir
         bal_adv_azul  = r.baliza_esq
         bal_prop_verm = r.baliza_esq
@@ -115,7 +126,8 @@ class Game:
 
         for i, (pos, papel, num, nome, stats) in enumerate(dados_azul):
             humano = (i == 0)
-            p = Player("azul", pos, numero=num, nome=nome, humano=humano, teclas="wasd")
+            p = Player("azul", pos, numero=num, nome=nome, humano=humano, teclas="wasd",
+                       kit=self.kit_casa)
             p.equipa_id       = self.equipa_casa_id
             p.papel           = papel
             p.stat_velocidade = stats[0]
@@ -149,7 +161,8 @@ class Game:
         self.jogador_humano2   = None
 
         for pos, papel, num, nome, stats in dados_verm:
-            p = Player("vermelho", pos, numero=num, nome=nome, humano=False)
+            p = Player("vermelho", pos, numero=num, nome=nome, humano=False,
+                       kit=self.kit_fora)
             p.equipa_id       = self.equipa_fora_id
             p.papel           = papel
             p.stat_velocidade = stats[0]
@@ -182,6 +195,8 @@ class Game:
             pos_x_fixo=r.linha_golo_esq_x + 4,
             dificuldade=self.dificuldade
         )
+        self.gr_azul.kit     = self.kit_casa
+        self.gr_vermelho.kit = self.kit_fora
         self.grupo_gr = pygame.sprite.Group(self.gr_azul, self.gr_vermelho)
 
     def _pos_tatica_azul(self, papel: str, pos_inicial: tuple) -> tuple:
@@ -219,23 +234,85 @@ class Game:
     # ================================================================== #
 
     def handle_events(self):
+        # ── Menus (cada ecrã devolve uma "ação") ──────────────────────────
+        if self.estado == "menu_principal":
+            for event in pygame.event.get():
+                acao = self.menu_principal.handle_event(event)
+                if acao == "jogar":
+                    self.abrir_selecao_equipas()
+                elif acao == "controlos":
+                    self._origem_controlos = "menu_principal"
+                    self.estado = "controlos"
+                elif acao == "sair":
+                    self.running = False
+            return
+
+        if self.estado == "controlos":
+            for event in pygame.event.get():
+                acao = self.ecra_controlos.handle_event(event)
+                if acao == "voltar":
+                    # Se veio da pausa, volta ao jogo (que continua em pausa)
+                    self.estado = "jogo" if self._origem_controlos == "pausa" else "menu_principal"
+                elif acao == "sair":
+                    self.running = False
+            return
+
         if self.estado == "menu_selecao":
             for event in pygame.event.get():
                 res = self.menu.handle_event(event)
                 if res == "iniciar":
                     c_id, f_id = self.menu.get_equipas()
-                    dif = getattr(self.menu, "get_dificuldade", lambda: "normal")()
-                    self.iniciar_partida(c_id, f_id, dificuldade=dif)
+                    self.iniciar_partida(c_id, f_id, dificuldade=self.menu.get_dificuldade())
+                elif res == "voltar":
+                    c_id, f_id = self.menu.get_equipas()
+                    self.dificuldade = self.menu.get_dificuldade()
+                    self.ir_para_menu_principal(c_id, f_id)
                 elif res == "sair":
                     self.running = False
             return
 
+        # ── Jogo em pausa ────────────────────────────────────────────────
+        if self.pausado:
+            for event in pygame.event.get():
+                acao = self.menu_pausa.handle_event(event)
+                if acao == "continuar":
+                    self.pausado = False
+                elif acao == "reiniciar":
+                    self.iniciar_partida(self.equipa_casa_id, self.equipa_fora_id, self.dificuldade)
+                elif acao == "controlos":
+                    self._origem_controlos = "pausa"
+                    self.estado = "controlos"
+                elif acao == "menu":
+                    self.ir_para_menu_principal()
+                elif acao == "sair":
+                    self.running = False
+            return
+
+        # ── Fim do jogo ──────────────────────────────────────────────────
+        if self.fim_jogo:
+            for event in pygame.event.get():
+                acao = self.ecra_fim.handle_event(event)
+                if acao == "reiniciar":
+                    self.iniciar_partida(self.equipa_casa_id, self.equipa_fora_id, self.dificuldade)
+                elif acao == "equipas":
+                    self.abrir_selecao_equipas()
+                elif acao == "menu":
+                    self.ir_para_menu_principal()
+                elif acao == "sair":
+                    self.running = False
+            return
+
+        # ── Partida a decorrer ───────────────────────────────────────────
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 self.running = False
             elif event.type == pygame.KEYDOWN:
-                if event.key in (pygame.K_ESCAPE, pygame.K_m):
-                    self.voltar_ao_menu()
+                if event.key in (pygame.K_ESCAPE, pygame.K_p, pygame.K_m):
+                    # ESC com a mira aberta cancela o remate; caso contrário abre a pausa
+                    if event.key == pygame.K_ESCAPE and self._mira_ativa:
+                        self._mira_ativa = False
+                    else:
+                        self.abrir_pausa()
                 elif event.key == pygame.K_F3:
                     self.show_debug = not self.show_debug
                 elif event.key == pygame.K_F4:
@@ -248,12 +325,8 @@ class Game:
                     self._acao_passe()
                 elif event.key == pygame.K_x:
                     self._acao_remate()
-                elif event.key == pygame.K_ESCAPE and self._mira_ativa:
-                    self._mira_ativa = False  # cancelar mira sem rematar
                 elif event.key in (pygame.K_TAB, pygame.K_c, pygame.K_SPACE):
                     self._selecionar_jogador_proximo()
-                elif event.key == pygame.K_r and self.fim_jogo:
-                    self.iniciar_partida(self.equipa_casa_id, self.equipa_fora_id)
                 elif event.key == pygame.K_t:
                     self.alternar_equipa_casa()
                 elif event.key == pygame.K_y:
@@ -274,9 +347,9 @@ class Game:
                         self._mira_direcao = v.normalize()
                     self._confirmar_remate()
                     continue  # não processar clique noutros elementos
-                # Botão de pausa superior direito (volta ao menu de seleção)
+                # Botão de pausa no canto superior direito
                 if event.pos[0] >= WIDTH - 56 and event.pos[1] <= 56:
-                    self.voltar_ao_menu()
+                    self.abrir_pausa()
                 else:
                     self._tratar_clique_botoes(event.pos)
 
@@ -411,8 +484,20 @@ class Game:
     # ================================================================== #
 
     def update(self, dt: float):
+        if self.estado == "menu_principal":
+            self.menu_principal.update(dt)
+            return
+        if self.estado == "controlos":
+            self.ecra_controlos.update(dt)
+            return
         if self.estado == "menu_selecao":
             self.menu.update(dt)
+            return
+        if self.pausado:
+            self.menu_pausa.update(dt)
+            return
+        if self.fim_jogo:
+            self.ecra_fim.update(dt)
             return
 
         if not self.jogo_ativo:
@@ -543,6 +628,10 @@ class Game:
         self.equipa_fora_id = fora_id
         if dificuldade:
             self.dificuldade = dificuldade
+
+        # Repor estados da partida anterior (mira aberta, pausa, ...)
+        self._cancelar_mira()
+        self.pausado = False
 
         # Reiniciar contadores de faltas
         self.faltas_azul     = 0
@@ -689,25 +778,70 @@ class Game:
                     j.rect.center = (round(j.pos_x), round(j.pos_y))
                     j.set_target(0.0, 0.0)
 
-    def voltar_ao_menu(self):
-        """Pausa o jogo e regressa ao ecrã de seleção de equipas."""
-        self.estado = "menu_selecao"
+    def _cancelar_mira(self):
+        self._mira_ativa = False
+        self._mira_forca = 0.0
+
+    def abrir_pausa(self):
+        if self.jogo_ativo and not self.fim_jogo:
+            self._cancelar_mira()
+            self.pausado = True
+            self.menu_pausa = MenuPausa(self.screen)
+
+    def abrir_selecao_equipas(self):
+        """Vai para o ecrã de seleção de equipas, mantendo as últimas escolhas e a dificuldade."""
+        self._cancelar_mira()
+        self.pausado = False
         self.jogo_ativo = False
-        self.menu = TeamSelectMenu(self.screen, self.equipa_casa_id, self.equipa_fora_id)
+        self.fim_jogo = False
+        self.estado = "menu_selecao"
+        self.menu = TeamSelectMenu(self.screen, self.equipa_casa_id, self.equipa_fora_id,
+                                   dificuldade=self.dificuldade)
+
+    # Mantido por compatibilidade com o código antigo
+    voltar_ao_menu = abrir_selecao_equipas
+
+    def ir_para_menu_principal(self, casa_id: str = None, fora_id: str = None):
+        self._cancelar_mira()
+        self.pausado = False
+        self.jogo_ativo = False
+        self.fim_jogo = False
+        if casa_id:
+            self.equipa_casa_id = casa_id
+        if fora_id:
+            self.equipa_fora_id = fora_id
+        self.estado = "menu_principal"
+        self.menu_principal = MenuPrincipal(self.screen, self.equipa_casa_id, self.equipa_fora_id)
+
+    def _atualizar_equipamentos(self):
+        """Recalcula os equipamentos das duas equipas e aplica-os aos jogadores."""
+        self.kit_casa, self.kit_fora = definir_equipamentos(self.equipa_casa_id, self.equipa_fora_id)
+        for j in self.equipa_azul:
+            j.aplicar_equipamento(self.kit_casa)
+        for j in self.equipa_vermelha:
+            j.aplicar_equipamento(self.kit_fora)
+        self.gr_azul.kit     = self.kit_casa
+        self.gr_vermelho.kit = self.kit_fora
 
     def mudar_equipa_casa(self, equipa_id: str):
+        if equipa_id == self.equipa_fora_id:
+            return  # as duas equipas não podem ser iguais
         self.equipa_casa_id = equipa_id
         self.rink.definir_equipa_casa(equipa_id)
         for j in self.equipa_azul:
             j.equipa_id = equipa_id
+        self._atualizar_equipamentos()
         info = obter_info_equipa(equipa_id)
         self._msg_texto = f"Equipa da Casa: {info['nome']}"
         self._msg_timer = 2.0
 
     def mudar_equipa_fora(self, equipa_id: str):
+        if equipa_id == self.equipa_casa_id:
+            return  # as duas equipas não podem ser iguais
         self.equipa_fora_id = equipa_id
         for j in self.equipa_vermelha:
             j.equipa_id = equipa_id
+        self._atualizar_equipamentos()
         info = obter_info_equipa(equipa_id)
         self._msg_texto = f"Equipa Visitante: {info['nome']}"
         self._msg_timer = 2.0
@@ -715,11 +849,15 @@ class Game:
     def alternar_equipa_casa(self):
         idx = EQUIPAS_LISTA.index(self.equipa_casa_id) if self.equipa_casa_id in EQUIPAS_LISTA else 0
         prox_idx = (idx + 1) % len(EQUIPAS_LISTA)
+        if EQUIPAS_LISTA[prox_idx] == self.equipa_fora_id:
+            prox_idx = (prox_idx + 1) % len(EQUIPAS_LISTA)
         self.mudar_equipa_casa(EQUIPAS_LISTA[prox_idx])
 
     def alternar_equipa_fora(self):
         idx = EQUIPAS_LISTA.index(self.equipa_fora_id) if self.equipa_fora_id in EQUIPAS_LISTA else 0
         prox_idx = (idx + 1) % len(EQUIPAS_LISTA)
+        if EQUIPAS_LISTA[prox_idx] == self.equipa_casa_id:
+            prox_idx = (prox_idx + 1) % len(EQUIPAS_LISTA)
         self.mudar_equipa_fora(EQUIPAS_LISTA[prox_idx])
 
     # ------------------------------------------------------------------ #
@@ -736,9 +874,11 @@ class Game:
             self.golos_vermelho += 1
             self._msg_texto = f"GOLO!  {info_fora['nome'].upper()}"
         self._msg_timer = 2.5
+        self._msg_equipa = equipa
         self._repor_posicoes()
 
     def _repor_posicoes(self):
+        self._cancelar_mira()
         cx = RINK_X + RINK_W // 2
         cy = RINK_Y + RINK_H // 2
         self.bola.repor((cx, cy))
@@ -788,33 +928,69 @@ class Game:
             self._msg_timer = 3.0
             self._repor_posicoes()
         else:
+            self._cancelar_mira()
             self.jogo_ativo = False
             self.fim_jogo   = True
+            self.ecra_fim   = EcraFimJogo(self.screen)
 
     # ================================================================== #
     # Desenho Principal                                                    #
     # ================================================================== #
 
     def draw(self):
-        if self.estado == "menu_selecao":
+        if self.estado == "menu_principal":
+            self.menu_principal.draw()
+        elif self.estado == "menu_selecao":
             self.menu.draw()
-            pygame.display.flip()
-            return
+        elif self.estado == "controlos":
+            if self._origem_controlos == "pausa":
+                self._draw_cena()
+                self.ecra_controlos.draw(por_cima_do_jogo=True)
+            else:
+                self.ecra_controlos.draw()
+        else:
+            self._draw_cena()
+            if self.pausado:
+                self.menu_pausa.draw(self)
+            elif self.fim_jogo:
+                self.ecra_fim.draw(self)
+        pygame.display.flip()
 
+    def _draw_cena(self):
+        """Desenha o ringue, os jogadores e o HUD (sem os menus por cima)."""
         self.screen.fill(COR_FUNDO)
 
         # 1. Ringue e Balizas traseiras
         self.rink.draw(self.screen)
 
-        # 2. Guarda-redes
-        self.grupo_gr.draw(self.screen)
+        # 2. Raspas dos patins (ficam no chão, por baixo dos jogadores)
+        for j in self.todos_jogadores:
+            j.draw_rastos(self.screen)
 
-        # 3. Jogadores de campo e bola
-        self.todos_jogadores.draw(self.screen)
-        self.sprites_bola.draw(self.screen)
+        # 3. Jogadores, guarda-redes, bola e balizas, por ordem de profundidade:
+        #    quem está mais abaixo no ecrã está mais perto da câmara e fica por cima.
+        r = self.rink
+        atores = sorted(list(self.todos_jogadores) + list(self.grupo_gr), key=lambda s: s.pos_y)
+        # Atrás das balizas = os pés ficam acima do poste de cima
+        atras  = [a for a in atores if a.pos_y + 24 < r.baliza_topo_y]
+        frente = [a for a in atores if a.pos_y + 24 >= r.baliza_topo_y]
 
-        # 4. Postes frontais e travessas das balizas
+        b = self.bola
+        bola_na_rede = (r.baliza_topo_y <= b.pos_y <= r.baliza_base_y and
+                        (b.pos_x < r.linha_golo_esq_x or b.pos_x > r.linha_golo_dir_x))
+
+        for a in atras:
+            self.screen.blit(a.image, a.rect)
+        if bola_na_rede:
+            self.sprites_bola.draw(self.screen)
+
+        # 4. Travessas, postes da frente e rede lateral das balizas
         self.rink.draw_frente(self.screen)
+
+        for a in frente:
+            self.screen.blit(a.image, a.rect)
+        if not bola_na_rede:
+            self.sprites_bola.draw(self.screen)
 
         # 5. Indicadores por cima dos jogadores
         for j in self.todos_jogadores:
@@ -822,7 +998,7 @@ class Game:
         for gr in self.grupo_gr:
             gr.draw_extra(self.screen, self.font_num)
 
-        # 6. Marcador Superior do Mockup
+        # 6. Mira e marcador superior
         self._draw_mira()
         self.hud.draw_top_bar(self.screen, self)
         self.hud.draw_foul_banner(self.screen, self)
@@ -830,49 +1006,37 @@ class Game:
         # 7. Painel Inferior (Mini-mapa, Cartão de Jogador e Controlos)
         self.hud.draw_bottom_panel(self.screen, self)
 
-        # 8. Mensagens de Golo / Fim de Jogo
-        if self._msg_timer > 0:
+        # 8. Mensagens (golo, intervalo, ...)
+        if self._msg_timer > 0 and not self.fim_jogo:
             self._draw_mensagem(self._msg_texto)
-        if self.fim_jogo:
-            self._draw_fim_jogo()
         if self.show_debug:
             self._draw_debug()
 
-        pygame.display.flip()
-
     def _draw_mensagem(self, texto: str):
-        ov = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
-        ov.fill((0, 0, 0, 110))
-        self.screen.blit(ov, (0, 0))
-        for cor, off in [((0,0,0), 3), ((255, 220, 50), 0)]:
-            t = self.font_big.render(texto, True, cor)
+        """Faixa horizontal a meio do ringue; nos golos usa as cores da equipa que marcou."""
+        cy = RINK_Y + RINK_H // 2
+        altura = 96
+        cor = (20, 40, 90)
+        if texto.startswith("GOLO"):
+            kit = self.kit_casa if getattr(self, "_msg_equipa", "azul") == "azul" else self.kit_fora
+            cor = kit["principal"]
+
+        # Entra a deslizar e desvanece no fim
+        alpha = int(225 * min(1.0, self._msg_timer / 0.4))
+        faixa = pygame.Surface((WIDTH, altura), pygame.SRCALPHA)
+        for y in range(altura):
+            t = abs(y - altura / 2) / (altura / 2)
+            c = misturar(cor, (5, 8, 18), 0.25 + 0.5 * t)
+            pygame.draw.line(faixa, (*c, alpha), (0, y), (WIDTH, y))
+        pygame.draw.line(faixa, (*COR_DESTAQUE, alpha), (0, 0), (WIDTH, 0), 3)
+        pygame.draw.line(faixa, (*COR_DESTAQUE, alpha), (0, altura - 3), (WIDTH, altura - 3), 3)
+        self.screen.blit(faixa, (0, cy - altura // 2))
+
+        cor_txt = cor_texto_sobre(misturar(cor, (5, 8, 18), 0.25))
+        for c, off in [((0, 0, 0), 3), (cor_txt, 0)]:
+            t = self.font_big.render(texto, True, c)
             self.screen.blit(t, (WIDTH // 2 - t.get_width() // 2 + off,
-                                  RINK_Y + RINK_H // 2 - t.get_height() // 2 + off))
-
-    def _draw_fim_jogo(self):
-        ov = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
-        ov.fill((0, 0, 0, 160))
-        self.screen.blit(ov, (0, 0))
-
-        info_casa = obter_info_equipa(self.equipa_casa_id)
-        info_fora = obter_info_equipa(self.equipa_fora_id)
-
-        if self.golos_azul > self.golos_vermelho:
-            txt_v, cor = f"Vitória do {info_casa['nome']}!", info_casa.get("cor_primaria", (100, 170, 255))
-        elif self.golos_vermelho > self.golos_azul:
-            txt_v, cor = f"Vitória do {info_fora['nome']}!", info_fora.get("cor_primaria", (255, 80, 80))
-        else:
-            txt_v, cor = "Empate!", (255, 220, 50)
-
-        linhas = [
-            (self.font_big.render("FIM DO JOGO", True, (255, 255, 255))),
-            (self.font_big.render(txt_v, True, cor)),
-            (self.font_med.render(f"{self.golos_azul} — {self.golos_vermelho}", True, (255, 255, 255))),
-            (self.font_num.render("Prima  R  para recomeçar", True, (180, 180, 180))),
-        ]
-        for i, t in enumerate(linhas):
-            self.screen.blit(t, (WIDTH // 2 - t.get_width() // 2,
-                                  RINK_Y + 70 + i * 50))
+                                 cy - t.get_height() // 2 + off))
 
     def _draw_debug(self):
         fps = self.font_num.render(f"FPS: {self.clock.get_fps():.0f}", True, (255, 255, 100))

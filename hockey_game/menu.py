@@ -1,82 +1,240 @@
 # -*- coding: utf-8 -*-
-"""menu.py - Ecrã de Seleção de Equipas oficial (StickMania PAP).
+"""menu.py - Ecrãs de menu do StickMania PAP.
 
-Permite ao jogador escolher a sua equipa (Casa) e a equipa adversária (Visitante)
-a partir de todas as equipas disponíveis com logótipos oficiais e cores reais.
+  • MenuPrincipal   - ecrã inicial (Jogar, Controlos, Sair)
+  • EcraControlos   - lista de teclas
+  • TeamSelectMenu  - seleção das equipas, do equipamento e da dificuldade
+  • MenuPausa       - pausa durante a partida
+  • EcraFimJogo     - resultado final
+
+Cada ecrã tem handle_event(event) -> ação (str) ou None, update(dt) e draw().
+Quem decide o que fazer com a ação é a classe Game (game.py).
 """
 import math
 import pygame
-from settings import WIDTH, HEIGHT, TITLE
+
+from settings import WIDTH, HEIGHT
 from team import EQUIPAS_LISTA, obter_info_equipa, carregar_logo_equipa
 from ai import DIFICULDADES
+from cores import (definir_equipamentos, cor_linhas_campo, cor_visivel_em_escuro,
+                   cor_texto_sobre, misturar)
+from componentes import (fonte, texto, painel, fundo_menu, Botao, ListaBotoes,
+                         sprite_equipamento, amostra_cor, faixa_equipa, escurecer_ecra,
+                         COR_DESTAQUE, COR_TEXTO, COR_TEXTO_SUAVE, COR_PAINEL)
 
+
+# ====================================================================== #
+# Menu Principal                                                         #
+# ====================================================================== #
+
+class MenuPrincipal:
+    def __init__(self, screen: pygame.Surface, casa_id: str = "fc_porto", fora_id: str = "riba_dave"):
+        self.screen = screen
+        self.casa_id = casa_id
+        self.fora_id = fora_id
+        self.t = 0.0
+        bw, bh, x = 340, 58, WIDTH // 2 - 170
+        self.lista = ListaBotoes([
+            Botao((x, 340, bw, bh), "JOGAR", "jogar", cor=(40, 190, 100), tamanho_texto=24, icone="►"),
+            Botao((x, 414, bw, bh), "CONTROLOS", "controlos", cor=(50, 140, 255), tamanho_texto=22),
+            Botao((x, 488, bw, bh), "SAIR", "sair", cor=(230, 70, 70), tamanho_texto=22),
+        ])
+
+    def handle_event(self, event) -> str | None:
+        if event.type == pygame.QUIT:
+            return "sair"
+        return self.lista.handle_event(event)
+
+    def update(self, dt: float):
+        self.t += dt
+
+    def draw(self):
+        s = self.screen
+        kit_casa, kit_fora = definir_equipamentos(self.casa_id, self.fora_id)
+        fundo_menu(s, self.t, kit_casa["principal"], kit_fora["principal"])
+
+        # Título com um ligeiro "respirar"
+        escala = 1.0 + 0.015 * math.sin(self.t * 2.0)
+        f = fonte(int(86 * escala))
+        titulo = f.render("STICKMANIA", True, COR_TEXTO)
+        sombra = f.render("STICKMANIA", True, (0, 0, 0))
+        tr = titulo.get_rect(center=(WIDTH // 2, 150))
+        s.blit(sombra, (tr.x + 4, tr.y + 5))
+        s.blit(titulo, tr)
+        # Sublinhado dourado
+        pygame.draw.rect(s, COR_DESTAQUE, (WIDTH // 2 - 150, tr.bottom + 4, 300, 4), border_radius=2)
+        texto(s, "HÓQUEI EM PATINS 2D", 24, COR_DESTAQUE, (WIDTH // 2, tr.bottom + 32))
+        texto(s, "Escolhe o teu clube, entra no ringue e marca golos!", 15, COR_TEXTO_SUAVE,
+              (WIDTH // 2, tr.bottom + 62), negrito=False)
+
+        # Jogadores decorativos com os equipamentos das equipas escolhidas
+        for kit, eq_id, cx, virar in ((kit_casa, self.casa_id, 230, False),
+                                      (kit_fora, self.fora_id, WIDTH - 230, True)):
+            pygame.draw.ellipse(s, (0, 0, 0), (cx - 70, 548, 140, 22))
+            img = sprite_equipamento(kit, 220, self.t, virar=virar)
+            s.blit(img, img.get_rect(midbottom=(cx, 572)))
+            logo = carregar_logo_equipa(eq_id, (70, 70))
+            if logo:
+                s.blit(logo, logo.get_rect(center=(cx, 345)))
+            texto(s, obter_info_equipa(eq_id)["nome"], 16, COR_TEXTO, (cx, 600))
+
+        self.lista.draw(s)
+
+        texto(s, "↑ ↓ para escolher  •  ENTER para confirmar", 13, (110, 140, 190),
+              (WIDTH // 2, 580), negrito=False)
+        texto(s, "Projeto PAP  •  Rafael Silveira  •  2026/2027", 13, (90, 115, 160),
+              (WIDTH // 2, HEIGHT - 24), negrito=False)
+
+
+# ====================================================================== #
+# Ecrã de Controlos                                                      #
+# ====================================================================== #
+
+CONTROLOS = [
+    ("MOVIMENTO", [
+        ("W A S D  /  Setas", "Mover o jogador"),
+        ("SHIFT", "Sprint (correr mais rápido)"),
+        ("C  /  TAB  /  ESPAÇO", "Trocar para o jogador mais perto da bola"),
+    ]),
+    ("COM A BOLA", [
+        ("Z", "Passe para o colega mais bem colocado"),
+        ("X", "Abrir a mira de remate"),
+        ("X  /  Clique", "Rematar (a força depende da barra)"),
+        ("Rato", "Apontar o remate"),
+    ]),
+    ("JOGO", [
+        ("ESC  /  P", "Pausa (ESC também cancela a mira)"),
+        ("F4", "Mudar a dificuldade da IA"),
+        ("F3", "Modo de depuração (FPS)"),
+    ]),
+]
+
+
+class EcraControlos:
+    def __init__(self, screen: pygame.Surface):
+        self.screen = screen
+        self.t = 0.0
+        self.btn_voltar = Botao((WIDTH // 2 - 140, HEIGHT - 92, 280, 52), "VOLTAR", "voltar",
+                                cor=(50, 140, 255), icone="◄")
+
+    def handle_event(self, event) -> str | None:
+        if event.type == pygame.QUIT:
+            return "sair"
+        if event.type == pygame.KEYDOWN and event.key in (pygame.K_ESCAPE, pygame.K_RETURN,
+                                                          pygame.K_KP_ENTER, pygame.K_BACKSPACE):
+            return "voltar"
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1 and self.btn_voltar.por_cima(event.pos):
+            return "voltar"
+        return None
+
+    def update(self, dt: float):
+        self.t += dt
+
+    def draw(self, por_cima_do_jogo: bool = False):
+        s = self.screen
+        if por_cima_do_jogo:
+            escurecer_ecra(s, 200)
+        else:
+            fundo_menu(s, self.t)
+
+        texto(s, "CONTROLOS", 44, COR_TEXTO, (WIDTH // 2, 70), sombra=True)
+        pygame.draw.rect(s, COR_DESTAQUE, (WIDTH // 2 - 90, 100, 180, 4), border_radius=2)
+
+        caixa = pygame.Rect(170, 130, WIDTH - 340, 470)
+        painel(s, caixa, alpha=235)
+
+        y = caixa.top + 28
+        for secao, linhas in CONTROLOS:
+            texto(s, secao, 15, COR_DESTAQUE, (caixa.left + 40, y), ancora="midleft")
+            pygame.draw.line(s, (40, 65, 120), (caixa.left + 40, y + 14), (caixa.right - 40, y + 14), 1)
+            y += 34
+            for tecla, descricao in linhas:
+                # "Tecla" desenhada como uma tecla de teclado
+                f = fonte(14)
+                img = f.render(tecla, True, (255, 255, 255))
+                tecla_r = pygame.Rect(caixa.left + 40, y - 14, img.get_width() + 22, 28)
+                pygame.draw.rect(s, (30, 48, 92), tecla_r, border_radius=6)
+                pygame.draw.rect(s, (90, 130, 210), tecla_r, 1, border_radius=6)
+                pygame.draw.line(s, (12, 20, 40), (tecla_r.left + 4, tecla_r.bottom), (tecla_r.right - 4, tecla_r.bottom), 2)
+                s.blit(img, img.get_rect(center=tecla_r.center))
+                texto(s, descricao, 15, (210, 225, 250), (caixa.left + 290, y), ancora="midleft", negrito=False)
+                y += 34
+            y += 10
+
+        self.btn_voltar.draw(s, pygame.mouse.get_pos())
+
+
+# ====================================================================== #
+# Seleção de Equipas                                                     #
+# ====================================================================== #
 
 class TeamSelectMenu:
-    def __init__(self, screen: pygame.Surface, casa_id: str = "fc_porto", fora_id: str = "riba_dave"):
+    def __init__(self, screen: pygame.Surface, casa_id: str = "fc_porto",
+                 fora_id: str = "riba_dave", dificuldade: str = "normal"):
         self.screen = screen
         self.casa_idx = EQUIPAS_LISTA.index(casa_id) if casa_id in EQUIPAS_LISTA else 0
         self.fora_idx = EQUIPAS_LISTA.index(fora_id) if fora_id in EQUIPAS_LISTA else 1
-        self.dificuldade = "normal"  # "facil", "normal", "dificil"
-
-        # Fontes
-        self.font_header = pygame.font.SysFont("Arial", 32, bold=True)
-        self.font_sub = pygame.font.SysFont("Arial", 16)
-        self.font_card_title = pygame.font.SysFont("Arial", 14, bold=True)
-        self.font_team_name = pygame.font.SysFont("Arial", 22, bold=True)
-        self.font_team_sub = pygame.font.SysFont("Arial", 13, bold=True)
-        self.font_vs = pygame.font.SysFont("Arial", 28, bold=True)
-        self.font_btn = pygame.font.SysFont("Arial", 18, bold=True)
-        self.font_grid = pygame.font.SysFont("Arial", 11, bold=True)
-        self.font_hint = pygame.font.SysFont("Arial", 12)
-
-        # Retângulos interativos
-        self._setup_rects()
+        if self.fora_idx == self.casa_idx:
+            self.fora_idx = (self.casa_idx + 1) % len(EQUIPAS_LISTA)
+        self.dificuldade = dificuldade if dificuldade in DIFICULDADES else "normal"
         self.anim_t = 0.0
+        self._setup_rects()
 
+    # ------------------------------------------------------------------ #
     def _setup_rects(self):
-        # Cartão Equipa da Casa
-        self.rect_casa = pygame.Rect(180, 95, 360, 245)
-        self.btn_casa_prev = pygame.Rect(self.rect_casa.left + 16, self.rect_casa.top + 98, 36, 44)
-        self.btn_casa_next = pygame.Rect(self.rect_casa.right - 52, self.rect_casa.top + 98, 36, 44)
+        self.btn_voltar = Botao((24, 18, 130, 40), "VOLTAR", "voltar", cor=(50, 140, 255),
+                                tamanho_texto=15, icone="◄")
 
-        # Cartão Equipa Visitante
-        self.rect_fora = pygame.Rect(740, 95, 360, 245)
-        self.btn_fora_prev = pygame.Rect(self.rect_fora.left + 16, self.rect_fora.top + 98, 36, 44)
-        self.btn_fora_next = pygame.Rect(self.rect_fora.right - 52, self.rect_fora.top + 98, 36, 44)
+        self.rect_casa = pygame.Rect(130, 96, 420, 252)
+        self.rect_fora = pygame.Rect(WIDTH - 130 - 420, 96, 420, 252)
+        for nome, card in (("casa", self.rect_casa), ("fora", self.rect_fora)):
+            prev = pygame.Rect(card.left + 12, card.top + 104, 34, 46)
+            nxt = pygame.Rect(card.right - 46, card.top + 104, 34, 46)
+            setattr(self, f"btn_{nome}_prev", prev)
+            setattr(self, f"btn_{nome}_next", nxt)
 
-        # Grelha de Equipas (8 equipas)
-        card_w, card_h = 118, 86
-        gap = 14
+        # Grelha com todas as equipas
+        card_w, card_h, gap = 118, 88, 14
         total_w = len(EQUIPAS_LISTA) * card_w + (len(EQUIPAS_LISTA) - 1) * gap
         start_x = (WIDTH - total_w) // 2
-        grid_y = 380
-
         self.grid_rects = []
         for i, eq_id in enumerate(EQUIPAS_LISTA):
-            rx = start_x + i * (card_w + gap)
-            self.grid_rects.append((eq_id, i, pygame.Rect(rx, grid_y, card_w, card_h)))
+            r = pygame.Rect(start_x + i * (card_w + gap), 384, card_w, card_h)
+            self.grid_rects.append((eq_id, i, r))
 
-        # Botões de Seleção de Dificuldade da IA
-        dif_w, dif_h = 135, 36
-        dif_cx = WIDTH // 2
-        self.btn_dif_facil   = pygame.Rect(dif_cx - 215, 508, dif_w, dif_h)
-        self.btn_dif_normal  = pygame.Rect(dif_cx - 68,  508, dif_w + 1, dif_h)
-        self.btn_dif_dificil = pygame.Rect(dif_cx + 80,  508, dif_w, dif_h)
+        # Dificuldade
+        cx = WIDTH // 2
+        self.botoes_dif = [
+            Botao((cx - 222, 512, 140, 38), "FÁCIL", "facil", cor=(40, 180, 90), tamanho_texto=17),
+            Botao((cx - 70, 512, 140, 38), "NORMAL", "normal", cor=(50, 140, 255), tamanho_texto=17),
+            Botao((cx + 82, 512, 140, 38), "DIFÍCIL", "dificil", cor=(230, 70, 70), tamanho_texto=17),
+        ]
+        self.btn_jogar = Botao((WIDTH // 2 - 160, 596, 320, 56), "INICIAR PARTIDA", "iniciar",
+                               cor=(40, 190, 100), tamanho_texto=22, icone="►")
 
-        # Botão Iniciar Partida
-        self.btn_jogar = pygame.Rect(WIDTH // 2 - 140, 592, 280, 50)
-
+    # ------------------------------------------------------------------ #
+    # Lógica                                                             #
+    # ------------------------------------------------------------------ #
     def mudar_casa(self, delta: int):
         self.casa_idx = (self.casa_idx + delta) % len(EQUIPAS_LISTA)
-        # Se for igual à de fora, salta mais um
         if self.casa_idx == self.fora_idx:
             self.casa_idx = (self.casa_idx + delta) % len(EQUIPAS_LISTA)
 
     def mudar_fora(self, delta: int):
         self.fora_idx = (self.fora_idx + delta) % len(EQUIPAS_LISTA)
-        # Se for igual à de casa, salta mais um
         if self.fora_idx == self.casa_idx:
             self.fora_idx = (self.fora_idx + delta) % len(EQUIPAS_LISTA)
+
+    def escolher_casa(self, idx: int):
+        """Escolhe a equipa da casa; se for a mesma da visitante, a visitante passa à seguinte."""
+        self.casa_idx = idx
+        if self.fora_idx == self.casa_idx:
+            self.fora_idx = (self.casa_idx + 1) % len(EQUIPAS_LISTA)
+
+    def escolher_fora(self, idx: int):
+        self.fora_idx = idx
+        if self.casa_idx == self.fora_idx:
+            self.casa_idx = (self.fora_idx + 1) % len(EQUIPAS_LISTA)
 
     def get_equipas(self) -> tuple[str, str]:
         return EQUIPAS_LISTA[self.casa_idx], EQUIPAS_LISTA[self.fora_idx]
@@ -90,16 +248,15 @@ class TeamSelectMenu:
         self.dificuldade = ordem[(idx + 1) % len(ordem)]
 
     def handle_event(self, event: pygame.event.Event) -> str | None:
-        """
-        Retorna 'iniciar' se o utilizador confirmou a partida,
-        'sair' se fechou a janela, ou None para continuar no menu.
-        """
+        """Devolve 'iniciar', 'voltar', 'sair' ou None."""
         if event.type == pygame.QUIT:
             return "sair"
 
         if event.type == pygame.KEYDOWN:
             if event.key in (pygame.K_RETURN, pygame.K_SPACE, pygame.K_KP_ENTER):
                 return "iniciar"
+            elif event.key in (pygame.K_ESCAPE, pygame.K_BACKSPACE):
+                return "voltar"
             elif event.key in (pygame.K_LEFT, pygame.K_a):
                 self.mudar_casa(-1)
             elif event.key in (pygame.K_RIGHT, pygame.K_d):
@@ -116,265 +273,306 @@ class TeamSelectMenu:
                 self.dificuldade = "normal"
             elif event.key in (pygame.K_g, pygame.K_F3):
                 self.dificuldade = "dificil"
-            elif event.key in (pygame.K_1, pygame.K_2, pygame.K_3, pygame.K_4,
-                               pygame.K_5, pygame.K_6, pygame.K_7, pygame.K_8):
+            elif pygame.K_1 <= event.key <= pygame.K_8:
                 idx = event.key - pygame.K_1
                 if 0 <= idx < len(EQUIPAS_LISTA):
-                    self.casa_idx = idx
+                    self.escolher_casa(idx)
 
         elif event.type == pygame.MOUSEBUTTONDOWN and event.button in (1, 3):
             mpos = event.pos
+            if event.button == 1:
+                if self.btn_jogar.por_cima(mpos):
+                    return "iniciar"
+                if self.btn_voltar.por_cima(mpos):
+                    return "voltar"
+                for b in self.botoes_dif:
+                    if b.por_cima(mpos):
+                        self.dificuldade = b.acao
+                        return None
+                if self.btn_casa_prev.collidepoint(mpos):
+                    self.mudar_casa(-1)
+                elif self.btn_casa_next.collidepoint(mpos):
+                    self.mudar_casa(1)
+                elif self.btn_fora_prev.collidepoint(mpos):
+                    self.mudar_fora(-1)
+                elif self.btn_fora_next.collidepoint(mpos):
+                    self.mudar_fora(1)
 
-            # Botão Iniciar Partida
-            if self.btn_jogar.collidepoint(mpos) and event.button == 1:
-                return "iniciar"
-
-            # Botões de Dificuldade
-            if self.btn_dif_facil.collidepoint(mpos) and event.button == 1:
-                self.dificuldade = "facil"
-            elif self.btn_dif_normal.collidepoint(mpos) and event.button == 1:
-                self.dificuldade = "normal"
-            elif self.btn_dif_dificil.collidepoint(mpos) and event.button == 1:
-                self.dificuldade = "dificil"
-
-            # Setas Equipa Casa
-            elif self.btn_casa_prev.collidepoint(mpos):
-                self.mudar_casa(-1)
-            elif self.btn_casa_next.collidepoint(mpos):
-                self.mudar_casa(1)
-
-            # Setas Equipa Visitante
-            elif self.btn_fora_prev.collidepoint(mpos):
-                self.mudar_fora(-1)
-            elif self.btn_fora_next.collidepoint(mpos):
-                self.mudar_fora(1)
-
-            # Clicar nos cartões da grelha de equipas
             for eq_id, idx, r in self.grid_rects:
                 if r.collidepoint(mpos):
                     if event.button == 1:
-                        # Clique esquerdo: seleciona Equipa da Casa
-                        self.casa_idx = idx
-                        if self.fora_idx == self.casa_idx:
-                            self.fora_idx = (self.casa_idx + 1) % len(EQUIPAS_LISTA)
-                    elif event.button == 3:
-                        # Clique direito: seleciona Equipa Visitante
-                        self.fora_idx = idx
-                        if self.casa_idx == self.fora_idx:
-                            self.casa_idx = (self.fora_idx + 1) % len(EQUIPAS_LISTA)
+                        self.escolher_casa(idx)     # clique esquerdo = casa
+                    else:
+                        self.escolher_fora(idx)     # clique direito = visitante
                     break
-
         return None
 
     def update(self, dt: float):
         self.anim_t += dt
 
+    # ------------------------------------------------------------------ #
+    # Desenho                                                            #
+    # ------------------------------------------------------------------ #
     def draw(self):
-        screen = self.screen
-        screen.fill((10, 16, 32))
-
-        # ── 1. Título do Cabeçalho ──────────────────────────────────────
-        # Faixa decorativa no topo
-        pygame.draw.rect(screen, (15, 26, 52), (0, 0, WIDTH, 75))
-        pygame.draw.line(screen, (35, 70, 140), (0, 75), (WIDTH, 75), 2)
-
-        t_title = self.font_header.render("STICKMANIA PAP  •  SELEÇÃO DE EQUIPAS", True, (255, 255, 255))
-        screen.blit(t_title, (WIDTH // 2 - t_title.get_width() // 2, 12))
-
-        t_sub = self.font_sub.render("Escolhe a tua equipa e a equipa adversária para entrar no ringue", True, (140, 180, 240))
-        screen.blit(t_sub, (WIDTH // 2 - t_sub.get_width() // 2, 48))
-
-        # ── 2. Cartões Principais (Casa vs Visitante) ───────────────────
+        s = self.screen
         id_casa, id_fora = self.get_equipas()
-        info_casa = obter_info_equipa(id_casa)
-        info_fora = obter_info_equipa(id_fora)
-
-        # Cartão Casa
-        self._desenhar_card_equipa(
-            self.rect_casa, "A TUA EQUIPA (CASA / HUMANO)", info_casa,
-            self.btn_casa_prev, self.btn_casa_next, is_casa=True
-        )
-
-        # Insígnia VS no Centro
-        vs_x = WIDTH // 2
-        vs_y = self.rect_casa.centery
-        pulso = 1.0 + 0.04 * math.sin(self.anim_t * 4.0)
-        raio_vs = int(32 * pulso)
-
-        pygame.draw.circle(screen, (22, 38, 76), (vs_x, vs_y), raio_vs + 4)
-        pygame.draw.circle(screen, (220, 180, 40), (vs_x, vs_y), raio_vs, 3)
-        t_vs = self.font_vs.render("VS", True, (255, 225, 70))
-        screen.blit(t_vs, (vs_x - t_vs.get_width() // 2, vs_y - t_vs.get_height() // 2))
-
-        # Cartão Visitante
-        self._desenhar_card_equipa(
-            self.rect_fora, "EQUIPA ADVERSÁRIA (VISITANTE / IA)", info_fora,
-            self.btn_fora_prev, self.btn_fora_next, is_casa=False
-        )
-
-        # ── 3. Grelha Inferior de Todas as Equipas ──────────────────────
-        sub_grid = self.font_card_title.render("TODAS AS EQUIPAS DISPONÍVEIS (Clica com o rato para selecionar):", True, (170, 200, 255))
-        screen.blit(sub_grid, (WIDTH // 2 - sub_grid.get_width() // 2, 355))
-
+        info_casa, info_fora = obter_info_equipa(id_casa), obter_info_equipa(id_fora)
+        kit_casa, kit_fora = definir_equipamentos(id_casa, id_fora)
         mpos = pygame.mouse.get_pos()
+
+        fundo_menu(s, self.anim_t, kit_casa["principal"], kit_fora["principal"])
+
+        # Cabeçalho
+        texto(s, "SELEÇÃO DE EQUIPAS", 34, COR_TEXTO, (WIDTH // 2, 34), sombra=True)
+        texto(s, "Escolhe a tua equipa e o adversário  •  as cores do equipamento e do ringue mudam com a escolha",
+              14, COR_TEXTO_SUAVE, (WIDTH // 2, 68), negrito=False)
+        self.btn_voltar.draw(s, mpos)
+
+        # Cartões principais
+        self._desenhar_card(self.rect_casa, "A TUA EQUIPA  •  CASA", info_casa, kit_casa,
+                            self.btn_casa_prev, self.btn_casa_next, virar=False)
+        self._desenhar_card(self.rect_fora, "ADVERSÁRIO  •  VISITANTE (IA)", info_fora, kit_fora,
+                            self.btn_fora_prev, self.btn_fora_next, virar=True)
+
+        # VS + pré-visualização do ringue
+        self._desenhar_centro(info_casa)
+
+        # Grelha
+        texto(s, "TODAS AS EQUIPAS   •   clique esquerdo = casa   •   clique direito = visitante",
+              13, (170, 200, 255), (WIDTH // 2, 368))
         for eq_id, idx, r in self.grid_rects:
-            info = obter_info_equipa(eq_id)
-            is_c = (idx == self.casa_idx)
-            is_f = (idx == self.fora_idx)
-            hover = r.collidepoint(mpos)
+            self._desenhar_mini_card(eq_id, idx, r, mpos)
 
-            # Cor de fundo e borda
-            if is_c:
-                cor_bg = (20, 50, 110)
-                cor_borda = (60, 160, 255)
-                borda_w = 3
-            elif is_f:
-                cor_bg = (80, 20, 25)
-                cor_borda = (255, 70, 80)
-                borda_w = 3
-            elif hover:
-                cor_bg = (25, 40, 75)
-                cor_borda = (140, 190, 255)
-                borda_w = 2
-            else:
-                cor_bg = (14, 22, 44)
-                cor_borda = (35, 55, 100)
-                borda_w = 1
+        # Dificuldade
+        texto(s, "DIFICULDADE DA IA", 14, (200, 220, 255), (WIDTH // 2, 496))
+        for b in self.botoes_dif:
+            b.ativo = (b.acao == self.dificuldade)
+            b.draw(s, mpos)
+        desc = DIFICULDADES.get(self.dificuldade, {}).get("descricao", "")
+        texto(s, desc, 13, (160, 195, 240), (WIDTH // 2, 568), negrito=False)
 
-            pygame.draw.rect(screen, cor_bg, r, border_radius=8)
-            pygame.draw.rect(screen, cor_borda, r, borda_w, border_radius=8)
+        # Botão principal (pulsa ligeiramente para chamar a atenção)
+        self.btn_jogar.draw(s, mpos, focado=(math.sin(self.anim_t * 3) > 0.6))
 
-            # Emblema pequeno
-            logo_sm = carregar_logo_equipa(eq_id, (44, 44))
-            if logo_sm:
-                lw, lh = logo_sm.get_size()
-                screen.blit(logo_sm, (r.centerx - lw // 2, r.top + 8 + (44 - lh) // 2))
+        texto(s, "[A/D] casa   [W/S] visitante   [1-8] escolher casa   [TAB] dificuldade   [ENTER] começar   [ESC] voltar",
+              12, (110, 140, 190), (WIDTH // 2, 682), negrito=False)
 
-            # Nome curto / Sigla
-            t_nm = self.font_grid.render(info["sigla"], True, (255, 255, 255))
-            screen.blit(t_nm, (r.centerx - t_nm.get_width() // 2, r.bottom - 32))
-
-            # Tag de Casa / Fora
-            if is_c:
-                tag = self.font_hint.render("CASA", True, (100, 200, 255))
-                screen.blit(tag, (r.centerx - tag.get_width() // 2, r.bottom - 16))
-            elif is_f:
-                tag = self.font_hint.render("FORA", True, (255, 120, 120))
-                screen.blit(tag, (r.centerx - tag.get_width() // 2, r.bottom - 16))
-            else:
-                tag = self.font_hint.render(f"#{idx+1}", True, (90, 120, 170))
-                screen.blit(tag, (r.centerx - tag.get_width() // 2, r.bottom - 16))
-
-        # ── 4. Seletor de Dificuldade da IA ─────────────────────────────
-        t_dif_label = self.font_card_title.render("DIFICULDADE DA IA ADVERSÁRIA:", True, (200, 220, 255))
-        screen.blit(t_dif_label, (WIDTH // 2 - t_dif_label.get_width() // 2, 482))
-
-        difs = [
-            ("facil",   "FÁCIL",   self.btn_dif_facil,   (40, 180, 90),  (25, 90, 50)),
-            ("normal",  "NORMAL",  self.btn_dif_normal,  (50, 140, 255), (20, 60, 120)),
-            ("dificil", "DIFÍCIL", self.btn_dif_dificil, (255, 70, 70),  (130, 30, 30)),
-        ]
-
-        for dif_id, label, r_btn, cor_ativa, cor_inativa in difs:
-            is_active = (self.dificuldade == dif_id)
-            hover = r_btn.collidepoint(mpos)
-
-            if is_active:
-                bg = cor_ativa
-                borda = (255, 255, 255)
-                b_w = 2
-                t_cor = (255, 255, 255)
-            elif hover:
-                bg = (30, 48, 90)
-                borda = cor_ativa
-                b_w = 2
-                t_cor = (220, 235, 255)
-            else:
-                bg = (16, 26, 50)
-                borda = (40, 65, 120)
-                b_w = 1
-                t_cor = (160, 185, 225)
-
-            pygame.draw.rect(screen, bg, r_btn, border_radius=8)
-            pygame.draw.rect(screen, borda, r_btn, b_w, border_radius=8)
-
-            txt = self.font_btn.render(label, True, t_cor)
-            screen.blit(txt, (r_btn.centerx - txt.get_width() // 2, r_btn.centery - txt.get_height() // 2))
-
-        # Descrição da dificuldade ativa
-        cfg_dif = DIFICULDADES.get(self.dificuldade, {})
-        desc_dif = cfg_dif.get("descricao", "")
-        t_desc = self.font_hint.render(desc_dif, True, (160, 195, 240))
-        screen.blit(t_desc, (WIDTH // 2 - t_desc.get_width() // 2, 554))
-
-        # ── 5. Botão Grande Iniciar Partida ─────────────────────────────
-        hover_jogar = self.btn_jogar.collidepoint(mpos)
-        if hover_jogar:
-            cor_btn_bg = (30, 160, 80)
-            cor_btn_bd = (90, 240, 140)
-        else:
-            cor_btn_bg = (20, 130, 60)
-            cor_btn_bd = (50, 200, 100)
-
-        pygame.draw.rect(screen, cor_btn_bg, self.btn_jogar, border_radius=10)
-        pygame.draw.rect(screen, cor_btn_bd, self.btn_jogar, 2, border_radius=10)
-
-        t_jogar = self.font_btn.render("INICIAR PARTIDA  ►", True, (255, 255, 255))
-        screen.blit(t_jogar, (self.btn_jogar.centerx - t_jogar.get_width() // 2,
-                              self.btn_jogar.centery - t_jogar.get_height() // 2))
-
-        # Atalhos rápidos de teclado
-        hint = self.font_hint.render("Atalhos: [TAB ou F/N/G] Dificuldade  |  [A/D] Equipa Casa  |  [W/S] Equipa Fora  |  [ENTER] Começar", True, (120, 150, 200))
-        screen.blit(hint, (WIDTH // 2 - hint.get_width() // 2, 656))
-
-    def _desenhar_card_equipa(self, rect: pygame.Rect, titulo: str, info: dict,
-                              btn_prev: pygame.Rect, btn_next: pygame.Rect, is_casa: bool):
-        screen = self.screen
-        cor_primaria = info.get("cor_primaria", (20, 50, 120))
+    def _desenhar_card(self, rect, titulo, info, kit, btn_prev, btn_next, virar: bool):
+        s = self.screen
+        cor = info.get("cor_primaria", (20, 50, 120))
         mpos = pygame.mouse.get_pos()
 
-        # Fundo do cartão com contorno com a cor da equipa
-        pygame.draw.rect(screen, (14, 22, 44), rect, border_radius=12)
-        # Cabeçalho do cartão com a cor da equipa
-        header_r = pygame.Rect(rect.left, rect.top, rect.width, 36)
-        pygame.draw.rect(screen, cor_primaria, header_r, border_top_left_radius=12, border_top_right_radius=12)
-        pygame.draw.rect(screen, (50, 90, 180), rect, 2, border_radius=12)
+        painel(s, rect, cor=COR_PAINEL, borda=misturar(cor_visivel_em_escuro(cor), (255, 255, 255), 0.2),
+               largura_borda=2)
+        faixa_equipa(s, (rect.left, rect.top, rect.width, 38), cor)
+        texto(s, titulo, 14, cor_texto_sobre(cor), (rect.centerx, rect.top + 19))
 
-        t_tit = self.font_card_title.render(titulo, True, (255, 255, 255))
-        screen.blit(t_tit, (rect.centerx - t_tit.get_width() // 2, rect.top + 9))
+        # Emblema (esquerda) e jogador com o equipamento (direita)
+        logo = carregar_logo_equipa(info["id"], (104, 104))
+        if logo:
+            s.blit(logo, logo.get_rect(center=(rect.left + 140, rect.top + 108)))
+        cx_kit = rect.right - 140
+        pygame.draw.ellipse(s, (6, 10, 22), (cx_kit - 34, rect.top + 156, 68, 12))
+        jogador = sprite_equipamento(kit, 120, self.anim_t, virar=virar)
+        s.blit(jogador, jogador.get_rect(midbottom=(cx_kit, rect.top + 166)))
 
-        # Logótipo Oficial Grande (100x100)
-        logo = carregar_logo_equipa(info["id"], (106, 106))
-        logo_y = rect.top + 52
-        if logo is not None:
-            lw, lh = logo.get_size()
-            screen.blit(logo, (rect.centerx - lw // 2, logo_y + (106 - lh) // 2))
+        # Nome e detalhes
+        texto(s, info["nome"], 24, COR_TEXTO, (rect.centerx, rect.top + 190))
+        linha = f"{info['sigla']}   •   EQUIPAMENTO {'ALTERNATIVO' if kit['alternativo'] else 'PRINCIPAL'}"
+        cor_linha = COR_DESTAQUE if kit["alternativo"] else (150, 185, 240)
+        texto(s, linha, 12, cor_linha, (rect.centerx, rect.top + 216))
 
-        # Nome da Equipa
-        t_nm = self.font_team_name.render(info["nome"], True, (255, 255, 255))
-        screen.blit(t_nm, (rect.centerx - t_nm.get_width() // 2, rect.top + 172))
+        # Amostras de cor: camisola e detalhes
+        x0 = rect.centerx - 26
+        amostra_cor(s, kit["principal"], (x0, rect.top + 228, 22, 14))
+        amostra_cor(s, kit["secundaria"], (x0 + 30, rect.top + 228, 22, 14))
 
-        # Sigla e Detalhes
-        sigla_txt = f"SIGLA OFICIAL: {info['sigla']}   •   CORES DO CLUBE"
-        t_sig = self.font_team_sub.render(sigla_txt, True, (150, 185, 240))
-        screen.blit(t_sig, (rect.centerx - t_sig.get_width() // 2, rect.top + 206))
-
-        # Amostras das cores oficiais do clube
-        cor_p = info.get("cor_primaria", (255, 255, 255))
-        cor_s = info.get("cor_secundaria", (255, 255, 255))
-        c_x = rect.centerx - 24
-        c_y = rect.top + 228
-        pygame.draw.rect(screen, cor_p, (c_x, c_y, 22, 14), border_radius=3)
-        pygame.draw.rect(screen, (255, 255, 255), (c_x, c_y, 22, 14), 1, border_radius=3)
-        pygame.draw.rect(screen, cor_s, (c_x + 28, c_y, 22, 14), border_radius=3)
-        pygame.draw.rect(screen, (255, 255, 255), (c_x + 28, c_y, 22, 14), 1, border_radius=3)
-
-        # Botões de seta < e >
-        for btn, seta in [(btn_prev, "◄"), (btn_next, "►")]:
+        for btn, seta in ((btn_prev, "◄"), (btn_next, "►")):
             hover = btn.collidepoint(mpos)
-            bg_c = (35, 65, 130) if hover else (22, 38, 76)
-            bd_c = (80, 140, 255) if hover else (45, 80, 160)
-            pygame.draw.rect(screen, bg_c, btn, border_radius=6)
-            pygame.draw.rect(screen, bd_c, btn, 1, border_radius=6)
-            t_seta = self.font_btn.render(seta, True, (255, 255, 255))
-            screen.blit(t_seta, (btn.centerx - t_seta.get_width() // 2, btn.centery - t_seta.get_height() // 2))
+            pygame.draw.rect(s, (35, 65, 130) if hover else (22, 38, 76), btn, border_radius=8)
+            pygame.draw.rect(s, (110, 160, 255) if hover else (45, 80, 160), btn, 1, border_radius=8)
+            texto(s, seta, 18, (255, 255, 255), btn.center)
+
+    def _desenhar_centro(self, info_casa):
+        s = self.screen
+        cx = WIDTH // 2
+        cy = 150
+        pulso = 1.0 + 0.05 * math.sin(self.anim_t * 4.0)
+        raio = int(36 * pulso)
+        pygame.draw.circle(s, (22, 38, 76), (cx, cy), raio + 5)
+        pygame.draw.circle(s, COR_DESTAQUE, (cx, cy), raio, 3)
+        texto(s, "VS", 30, (255, 225, 70), (cx, cy))
+
+        # Mini ringue com as linhas na cor da equipa da casa
+        r = pygame.Rect(cx - 78, 222, 156, 88)
+        cor_l = cor_linhas_campo(info_casa.get("cor_primaria", (30, 95, 210)))
+        pygame.draw.rect(s, (235, 238, 245), r.inflate(8, 8), border_radius=18)
+        pygame.draw.rect(s, (224, 178, 122), r, border_radius=14)
+        for y in range(r.top + 6, r.bottom, 8):
+            pygame.draw.line(s, (210, 165, 110), (r.left + 6, y), (r.right - 6, y), 1)
+        pygame.draw.line(s, cor_l, (r.centerx, r.top + 2), (r.centerx, r.bottom - 2), 2)
+        pygame.draw.circle(s, cor_l, r.center, 16, 2)
+        pygame.draw.rect(s, cor_l, (r.left + 14, r.centery - 24, 26, 48), 2)
+        pygame.draw.rect(s, cor_l, (r.right - 40, r.centery - 24, 26, 48), 2)
+        texto(s, "RINGUE DA CASA", 11, (170, 200, 255), (cx, r.bottom + 18))
+
+    def _desenhar_mini_card(self, eq_id, idx, r, mpos):
+        s = self.screen
+        info = obter_info_equipa(eq_id)
+        e_casa, e_fora = idx == self.casa_idx, idx == self.fora_idx
+        hover = r.collidepoint(mpos)
+
+        if e_casa:
+            bg, borda, bw = (20, 50, 110), (80, 170, 255), 3
+        elif e_fora:
+            bg, borda, bw = (80, 20, 30), (255, 90, 100), 3
+        elif hover:
+            bg, borda, bw = (25, 40, 75), (140, 190, 255), 2
+        else:
+            bg, borda, bw = (14, 22, 44), (35, 55, 100), 1
+
+        sobe = -3 if hover else 0
+        rr = r.move(0, sobe)
+        pygame.draw.rect(s, bg, rr, border_radius=10)
+        # Faixa inferior com as cores do clube
+        cor_p, cor_s = info.get("cor_primaria", (40, 40, 40)), info.get("cor_secundaria", (255, 255, 255))
+        pygame.draw.rect(s, cor_p, (rr.left + 10, rr.bottom - 7, rr.width // 2 - 10, 3))
+        pygame.draw.rect(s, cor_s, (rr.centerx, rr.bottom - 7, rr.width // 2 - 10, 3))
+        pygame.draw.rect(s, borda, rr, bw, border_radius=10)
+
+        logo = carregar_logo_equipa(eq_id, (42, 42))
+        if logo:
+            s.blit(logo, logo.get_rect(center=(rr.centerx, rr.top + 28)))
+        texto(s, info["sigla"], 12, (255, 255, 255), (rr.centerx, rr.bottom - 32))
+
+        if e_casa:
+            etiqueta, cor_et = "CASA", (110, 200, 255)
+        elif e_fora:
+            etiqueta, cor_et = "FORA", (255, 130, 130)
+        else:
+            etiqueta, cor_et = f"#{idx + 1}", (90, 120, 170)
+        texto(s, etiqueta, 11, cor_et, (rr.centerx, rr.bottom - 17))
+
+
+# ====================================================================== #
+# Menu de Pausa                                                          #
+# ====================================================================== #
+
+class MenuPausa:
+    def __init__(self, screen: pygame.Surface):
+        self.screen = screen
+        self.t = 0.0
+        bw, bh, x = 300, 50, WIDTH // 2 - 150
+        y0 = 248
+        self.lista = ListaBotoes([
+            Botao((x, y0, bw, bh), "CONTINUAR", "continuar", cor=(40, 190, 100), icone="►"),
+            Botao((x, y0 + 62, bw, bh), "REINICIAR PARTIDA", "reiniciar", cor=(255, 180, 40)),
+            Botao((x, y0 + 124, bw, bh), "CONTROLOS", "controlos", cor=(50, 140, 255)),
+            Botao((x, y0 + 186, bw, bh), "MENU PRINCIPAL", "menu", cor=(150, 110, 255)),
+            Botao((x, y0 + 248, bw, bh), "SAIR DO JOGO", "sair", cor=(230, 70, 70)),
+        ])
+
+    def handle_event(self, event) -> str | None:
+        if event.type == pygame.QUIT:
+            return "sair"
+        if event.type == pygame.KEYDOWN and event.key in (pygame.K_ESCAPE, pygame.K_p):
+            return "continuar"
+        return self.lista.handle_event(event)
+
+    def update(self, dt: float):
+        self.t += dt
+
+    def draw(self, game):
+        s = self.screen
+        escurecer_ecra(s, 165)
+        caixa = pygame.Rect(WIDTH // 2 - 200, 110, 400, 470)
+        painel(s, caixa, alpha=240)
+        texto(s, "PAUSA", 40, COR_TEXTO, (WIDTH // 2, caixa.top + 44), sombra=True)
+
+        # Resultado atual
+        info_c = obter_info_equipa(game.equipa_casa_id)
+        info_f = obter_info_equipa(game.equipa_fora_id)
+        mins, segs = divmod(max(0, int(game.tempo_restante)), 60)
+        resumo = f"{info_c['sigla']}  {game.golos_azul} - {game.golos_vermelho}  {info_f['sigla']}"
+        texto(s, resumo, 18, COR_DESTAQUE, (WIDTH // 2, caixa.top + 88))
+        texto(s, f"{game.parte}.ª parte  •  faltam {mins:02d}:{segs:02d}", 13, COR_TEXTO_SUAVE,
+              (WIDTH // 2, caixa.top + 112), negrito=False)
+
+        self.lista.draw(s)
+
+
+# ====================================================================== #
+# Fim de Jogo                                                            #
+# ====================================================================== #
+
+class EcraFimJogo:
+    def __init__(self, screen: pygame.Surface):
+        self.screen = screen
+        self.t = 0.0
+        y, bw, bh = 506, 230, 52
+        cx = WIDTH // 2
+        self.lista = ListaBotoes([
+            Botao((cx - bw - bw // 2 - 16, y, bw, bh), "JOGAR DE NOVO", "reiniciar", cor=(40, 190, 100), icone="►"),
+            Botao((cx - bw // 2, y, bw, bh), "MUDAR EQUIPAS", "equipas", cor=(50, 140, 255)),
+            Botao((cx + bw // 2 + 16, y, bw, bh), "MENU PRINCIPAL", "menu", cor=(150, 110, 255)),
+        ])
+
+    def handle_event(self, event) -> str | None:
+        if event.type == pygame.QUIT:
+            return "sair"
+        if event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_r:
+                return "reiniciar"
+            if event.key == pygame.K_ESCAPE:
+                return "menu"
+            # Botões estão lado a lado: esquerda/direita também navegam
+            if event.key in (pygame.K_LEFT, pygame.K_a):
+                self.lista.foco = (self.lista.foco - 1) % len(self.lista.botoes)
+                return None
+            if event.key in (pygame.K_RIGHT, pygame.K_d):
+                self.lista.foco = (self.lista.foco + 1) % len(self.lista.botoes)
+                return None
+        return self.lista.handle_event(event)
+
+    def update(self, dt: float):
+        self.t += dt
+
+    def draw(self, game):
+        s = self.screen
+        escurecer_ecra(s, 175)
+        caixa = pygame.Rect(WIDTH // 2 - 420, 90, 840, 510)
+        painel(s, caixa, alpha=242)
+        texto(s, "FIM DO JOGO", 42, COR_TEXTO, (WIDTH // 2, caixa.top + 48), sombra=True)
+
+        info_c = obter_info_equipa(game.equipa_casa_id)
+        info_f = obter_info_equipa(game.equipa_fora_id)
+        kit_c, kit_f = game.kit_casa, game.kit_fora
+
+        # Equipas lado a lado com o resultado no meio
+        for info, kit, cx, virar in ((info_c, kit_c, caixa.left + 190, False),
+                                     (info_f, kit_f, caixa.right - 190, True)):
+            logo = carregar_logo_equipa(info["id"], (110, 110))
+            if logo:
+                s.blit(logo, logo.get_rect(center=(cx - 50 if not virar else cx + 50, caixa.top + 190)))
+            jog = sprite_equipamento(kit, 110, self.t, virar=virar)
+            s.blit(jog, jog.get_rect(midbottom=(cx + 60 if not virar else cx - 60, caixa.top + 250)))
+            texto(s, info["nome"], 22, COR_TEXTO, (cx, caixa.top + 286))
+
+        resultado = f"{game.golos_azul}  -  {game.golos_vermelho}"
+        texto(s, resultado, 64, (255, 255, 255), (WIDTH // 2, caixa.top + 196), sombra=True)
+
+        if game.golos_azul > game.golos_vermelho:
+            msg, cor = f"VITÓRIA DO {info_c['nome'].upper()}!", cor_visivel_em_escuro(kit_c["principal"], 120)
+        elif game.golos_vermelho > game.golos_azul:
+            msg, cor = f"VITÓRIA DO {info_f['nome'].upper()}!", cor_visivel_em_escuro(kit_f["principal"], 120)
+        else:
+            msg, cor = "EMPATE!", COR_DESTAQUE
+        texto(s, msg, 30, cor, (WIDTH // 2, caixa.top + 350), sombra=True)
+
+        faltas = f"Faltas:  {info_c['sigla']} {game.faltas_azul}   •   {info_f['sigla']} {game.faltas_vermelho}"
+        texto(s, faltas, 14, COR_TEXTO_SUAVE, (WIDTH // 2, caixa.top + 392), negrito=False)
+
+        self.lista.draw(s)
+        texto(s, "[R] jogar de novo   [ESC] menu principal", 12, (110, 140, 190),
+              (WIDTH // 2, caixa.bottom - 18), negrito=False)
+

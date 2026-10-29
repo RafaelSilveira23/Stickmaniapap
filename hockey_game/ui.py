@@ -7,10 +7,10 @@ Desenvolvido para corresponder à interface moderna do mockup:
   3. Joystick virtual / D-pad com setas direcionais reativas
   4. Botões de ação arcade (Remate, Passe, Acelerar, Defender)
 """
-import math
 import pygame
 from settings import *
 from team import carregar_logo_equipa, obter_info_equipa
+from cores import cor_texto_sobre, cor_visivel_em_escuro, clarear
 
 
 class HUDController:
@@ -70,8 +70,13 @@ class HUDController:
         info_casa = obter_info_equipa(getattr(game, "equipa_casa_id", "fc_porto"))
         info_fora = obter_info_equipa(getattr(game, "equipa_fora_id", "riba_dave"))
 
-        # ── 1. Linha da Equipa da Casa (Topo - Azul) ─────────────────────
-        cor_casa = info_casa.get("cor_primaria", (15, 60, 160))
+        # Cores das linhas = cores do equipamento usado nesta partida
+        kit_casa = getattr(game, "kit_casa", None)
+        kit_fora = getattr(game, "kit_fora", None)
+
+        # ── 1. Linha da Equipa da Casa ───────────────────────────────────
+        cor_casa = kit_casa["principal"] if kit_casa else info_casa.get("cor_primaria", (15, 60, 160))
+        txt_casa = cor_texto_sobre(cor_casa)
         r_casa = pygame.Rect(sc_x, sc_y, card_w, linha_h)
         pygame.draw.rect(screen, cor_casa, r_casa, border_top_left_radius=8)
 
@@ -79,20 +84,21 @@ class HUDController:
         self._desenhar_logo_placar(screen, info_casa["id"], sc_x + 8, sc_y + 2, info_casa)
 
         # Nome da equipa
-        t_casa = self.font_title.render(info_casa["nome"], True, (255, 255, 255))
+        t_casa = self.font_title.render(info_casa["nome"], True, txt_casa)
         screen.blit(t_casa, (sc_x + 38, sc_y + 4))
 
         # Faltas e Resultado da equipa da casa
         f_casa = getattr(game, "faltas_azul", 0)
-        cor_f_c = (255, 195, 60) if f_casa >= 8 else (190, 215, 255)
+        cor_f_c = (255, 195, 60) if f_casa >= 8 else txt_casa
         t_f_casa = self.font_key.render(f"F:{f_casa}", True, cor_f_c)
         screen.blit(t_f_casa, (sc_x + card_w - 58, sc_y + 8))
 
-        g_casa = self.font_score.render(str(game.golos_azul), True, (255, 255, 255))
+        g_casa = self.font_score.render(str(game.golos_azul), True, txt_casa)
         screen.blit(g_casa, (sc_x + card_w - 24, sc_y + 2))
 
-        # ── 2. Linha da Equipa Visitante (Fundo - Vermelho) ─────────────
-        cor_fora = info_fora.get("cor_primaria", (135, 20, 25))
+        # ── 2. Linha da Equipa Visitante ─────────────────────────────────
+        cor_fora = kit_fora["principal"] if kit_fora else info_fora.get("cor_primaria", (135, 20, 25))
+        txt_fora = cor_texto_sobre(cor_fora)
         r_fora = pygame.Rect(sc_x, sc_y + linha_h, card_w, linha_h)
         pygame.draw.rect(screen, cor_fora, r_fora, border_bottom_left_radius=8)
 
@@ -100,16 +106,16 @@ class HUDController:
         self._desenhar_logo_placar(screen, info_fora["id"], sc_x + 8, sc_y + linha_h + 2, info_fora)
 
         # Nome da equipa
-        t_fora = self.font_title.render(info_fora["nome"], True, (255, 255, 255))
+        t_fora = self.font_title.render(info_fora["nome"], True, txt_fora)
         screen.blit(t_fora, (sc_x + 38, sc_y + linha_h + 4))
 
         # Faltas e Resultado da equipa visitante
         f_fora = getattr(game, "faltas_vermelho", 0)
-        cor_f_f = (255, 195, 60) if f_fora >= 8 else (190, 215, 255)
+        cor_f_f = (255, 195, 60) if f_fora >= 8 else txt_fora
         t_f_fora = self.font_key.render(f"F:{f_fora}", True, cor_f_f)
         screen.blit(t_f_fora, (sc_x + card_w - 58, sc_y + linha_h + 8))
 
-        g_fora = self.font_score.render(str(game.golos_vermelho), True, (255, 255, 255))
+        g_fora = self.font_score.render(str(game.golos_vermelho), True, txt_fora)
         screen.blit(g_fora, (sc_x + card_w - 24, sc_y + linha_h + 2))
 
         # Divisória subtil entre as duas linhas
@@ -117,7 +123,6 @@ class HUDController:
 
         # ── 3. Bloco do Cronómetro e Parte (à direita do placar) ────────
         time_x = sc_x + card_w
-        r_timer = pygame.Rect(time_x, sc_y, timer_w, total_h)
         # Fundo azul escuro translúcido com cantos direitos arredondados
         surf_timer = pygame.Surface((timer_w, total_h), pygame.SRCALPHA)
         pygame.draw.rect(surf_timer, (10, 18, 36, 235), (0, 0, timer_w, total_h),
@@ -257,11 +262,18 @@ class HUDController:
         pygame.draw.rect(screen, (15, 25, 50), map_r, border_radius=6)
         pygame.draw.rect(screen, (50, 110, 230), map_r, 1, border_radius=6)
 
-        # Linha central e círculo central
+        # Linha central e círculo central (na cor das linhas do ringue da casa)
+        cor_linhas = cor_visivel_em_escuro(getattr(game.rink, "cor_linhas", (50, 110, 230)), 80)
         mcx = map_r.centerx
         mcy = map_r.centery
-        pygame.draw.line(screen, (50, 110, 230), (mcx, map_r.top + 2), (mcx, map_r.bottom - 2), 1)
-        pygame.draw.circle(screen, (50, 110, 230), (mcx, mcy), 14, 1)
+        pygame.draw.line(screen, cor_linhas, (mcx, map_r.top + 2), (mcx, map_r.bottom - 2), 1)
+        pygame.draw.circle(screen, cor_linhas, (mcx, mcy), 14, 1)
+
+        # Cores dos pontos = cores dos equipamentos (clareadas para se verem no fundo escuro)
+        kit_c = getattr(game, "kit_casa", None)
+        kit_f = getattr(game, "kit_fora", None)
+        cor_c = cor_visivel_em_escuro(kit_c["principal"] if kit_c else (40, 130, 240))
+        cor_f = cor_visivel_em_escuro(kit_f["principal"] if kit_f else (240, 50, 50))
 
         # Fatores de escala campo real -> mini-mapa
         r = game.rink.rect
@@ -280,28 +292,28 @@ class HUDController:
         pygame.draw.rect(screen, (220, 60, 60), (bal_esq_x - 6, bal_esq_y - 8, 6, 16), 1)
         pygame.draw.rect(screen, (220, 60, 60), (bal_dir_x,     bal_dir_y - 8, 6, 16), 1)
 
-        # Jogadores Vermelhos (pontos vermelhos)
+        # Equipa visitante
         for j in game.equipa_vermelha:
             pos = to_map(j.pos_x, j.pos_y)
-            pygame.draw.circle(screen, (240, 50, 50), pos, 3)
+            pygame.draw.circle(screen, (0, 0, 0), pos, 4)
+            pygame.draw.circle(screen, cor_f, pos, 3)
 
-        # Guarda-redes Vermelho
-        pos_gr_v = to_map(game.gr_vermelho.pos_x, game.gr_vermelho.pos_y)
-        pygame.draw.circle(screen, (255, 120, 80), pos_gr_v, 3)
+        # Guarda-redes visitante (quadrado para se distinguir)
+        gx, gy = to_map(game.gr_vermelho.pos_x, game.gr_vermelho.pos_y)
+        pygame.draw.rect(screen, clarear(cor_f, 0.3), (gx - 3, gy - 3, 6, 6))
 
-        # Jogadores Azuis (pontos azuis)
+        # Equipa da casa
         for j in game.equipa_azul:
             pos = to_map(j.pos_x, j.pos_y)
             if j == game.jogador_humano:
-                # Jogador controlado: círculo pulsante ou realçado
-                pygame.draw.circle(screen, (255, 255, 255), pos, 5, 1)
-                pygame.draw.circle(screen, (40, 180, 255), pos, 3)
-            else:
-                pygame.draw.circle(screen, (40, 130, 240), pos, 3)
+                # Jogador controlado: realçado com um anel branco
+                pygame.draw.circle(screen, (255, 255, 255), pos, 6, 1)
+            pygame.draw.circle(screen, (0, 0, 0), pos, 4)
+            pygame.draw.circle(screen, cor_c, pos, 3)
 
-        # Guarda-redes Azul
-        pos_gr_a = to_map(game.gr_azul.pos_x, game.gr_azul.pos_y)
-        pygame.draw.circle(screen, (80, 220, 255), pos_gr_a, 3)
+        # Guarda-redes da casa
+        gx, gy = to_map(game.gr_azul.pos_x, game.gr_azul.pos_y)
+        pygame.draw.rect(screen, clarear(cor_c, 0.3), (gx - 3, gy - 3, 6, 6))
 
         # Bola (ponto amarelo brilhante)
         bx, by = to_map(game.bola.pos_x, game.bola.pos_y)
@@ -318,8 +330,10 @@ class HUDController:
 
         # Avatar do Jogador (Retângulo de retrato no lado esquerdo)
         av_rect = pygame.Rect(rect.left + 16, rect.top + 16, 72, 72)
+        kit = getattr(jogador, "kit", None)
+        cor_kit = cor_visivel_em_escuro(kit["principal"]) if kit else (60, 120, 230)
         pygame.draw.rect(screen, (20, 35, 75), av_rect, border_radius=6)
-        pygame.draw.rect(screen, (60, 120, 230), av_rect, 1, border_radius=6)
+        pygame.draw.rect(screen, cor_kit, av_rect, 2, border_radius=6)
 
         # Desenhar avatar estilizado (sprite recortado ou cabeça do jogador)
         if hasattr(jogador, "image"):
