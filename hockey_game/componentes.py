@@ -236,8 +236,8 @@ class ListaBotoes:
 # Pré-visualização do equipamento                                        #
 # ====================================================================== #
 
-_PASTA_FRAMES = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                             "..", "sprites_v3", "frames", "jogador")
+_PASTA_AZUL = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                           "..", "sprites_v2", "hd", "frames", "azul")
 _cache_preview = {}
 
 
@@ -246,26 +246,26 @@ _cache_ampliado = {}
 
 def sprite_equipamento(kit: dict, tamanho: int, t: float = 0.0, virar: bool = False) -> pygame.Surface:
     """
-    Jogador a patinar com o equipamento da equipa (ciclo de 8 frames da spritesheet nova).
-    Para ser rápido, a recoloração é feita numa imagem um pouco mais pequena
-    e só depois ampliada com suavização.
+    Jogador parado com o equipamento da equipa (animado com 3 frames).
+    Para ser rápido, a recoloração é feita numa imagem pequena (metade do tamanho)
+    e só depois ampliada - o estilo pixel-art mantém-se nítido.
     """
-    base = max(64, int(tamanho * 0.75))
+    base = max(48, tamanho // 2)
     chave = (base, virar)
     if chave not in _cache_preview:
         frames = []
-        for i in range(1, 9):
-            img = pygame.image.load(os.path.join(_PASTA_FRAMES, f"patinar_{i:02d}.png")).convert_alpha()
-            img = pygame.transform.smoothscale(img, (base, base))
+        for i in (1, 2, 3):
+            img = pygame.image.load(os.path.join(_PASTA_AZUL, f"parado_{i:02d}.png")).convert_alpha()
+            img = pygame.transform.scale(img, (base, base))
             if virar:
                 img = pygame.transform.flip(img, True, False)
             frames.append(img)
         _cache_preview[chave] = frames
-    pequenos = recolorir_frames(("preview_v3", base, virar), _cache_preview[chave], kit)
-    idx = int(t * 10) % len(pequenos)
+    pequenos = recolorir_frames(("preview", base, virar), _cache_preview[chave], kit)
+    idx = int(t * 2.5) % len(pequenos)
     chave_amp = (id(pequenos[idx]), tamanho)
     if chave_amp not in _cache_ampliado:
-        _cache_ampliado[chave_amp] = pygame.transform.smoothscale(pequenos[idx], (tamanho, tamanho))
+        _cache_ampliado[chave_amp] = pygame.transform.scale(pequenos[idx], (tamanho, tamanho))
     return _cache_ampliado[chave_amp]
 
 

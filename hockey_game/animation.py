@@ -142,28 +142,6 @@ def load_animation_from_folder(
     return Animation(frames, fps=fps, loop=loop)
 
 
-def carregar_spritesheet(png: str, json_path: str,
-                         scale: tuple[int, int] | None = None) -> dict[str, "Animation"]:
-    """
-    Corta uma spritesheet em animações, usando o .json que a acompanha
-    (gerado por ferramentas/gerar_sprites.py).
-    Cada linha da folha é uma animação; o .json diz quantos frames tem, a velocidade e se repete.
-    """
-    import json
-    folha = pygame.image.load(png).convert_alpha()
-    with open(json_path, encoding="utf-8") as f:
-        info = json.load(f)
-    w, h = info["celula"]
-    anims = {}
-    for nome, a in info["animacoes"].items():
-        frames = []
-        for i in range(a["frames"]):
-            frame = folha.subsurface((i * w, a["row"] * h, w, h)).copy()
-            frames.append(redimensionar(frame, scale) if scale else frame)
-        anims[nome] = Animation(frames, fps=a.get("fps", 8.0), loop=a.get("loop", True))
-    return anims
-
-
 def load_single_frame(path: str, scale: tuple[int, int] | None = None,
                       alinhar: bool = False) -> Animation:
     """Para frames únicos (ex: parado com uma única imagem)."""
