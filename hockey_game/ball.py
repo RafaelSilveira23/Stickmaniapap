@@ -42,6 +42,8 @@ class Ball(pygame.sprite.Sprite):
         self.pos_y = float(pos[1])
         self.vel   = pygame.math.Vector2(0, 0)
         self.dono  = None
+        self.recetor = None        # colega a quem o passe se destina (vai ao encontro da bola)
+        self._recetor_timer = 0.0
 
         self._cooldown_dono  = None
         self._cooldown_timer = 0.0
@@ -51,8 +53,14 @@ class Ball(pygame.sprite.Sprite):
 
     # ------------------------------------------------------------------ #
 
+    def marcar_recetor(self, jogador, tempo: float = 1.6):
+        """Indica quem deve ir receber o passe que acabou de ser feito."""
+        self.recetor = jogador
+        self._recetor_timer = tempo
+
     def definir_dono(self, jogador):
         self.dono = jogador
+        self.recetor = None
         self.vel.update(0, 0)
         self._cooldown_dono  = None
         self._cooldown_timer = 0.0
@@ -92,6 +100,11 @@ class Ball(pygame.sprite.Sprite):
             if self._cooldown_timer <= 0:
                 self._cooldown_dono  = None
                 self._cooldown_timer = 0.0
+
+        if self._recetor_timer > 0:
+            self._recetor_timer -= dt
+            if self._recetor_timer <= 0 or self.vel.length() < 30:
+                self.recetor = None
 
         if self.dono is not None:
             self.rect.center = (round(self.pos_x), round(self.pos_y))
@@ -257,6 +270,7 @@ class Ball(pygame.sprite.Sprite):
         self.dono = None
         self._cooldown_dono = None
         self._cooldown_timer = 0.0
+        self.recetor = None
 
     def repor(self, pos):
         self.pos_x = float(pos[0])
@@ -266,6 +280,7 @@ class Ball(pygame.sprite.Sprite):
         self._cooldown_dono  = None
         self._cooldown_timer = 0.0
         self._angulo = 0.0
+        self.recetor = None
         self.image = self._imagem_base.copy()
         self.rect.center = pos
 

@@ -15,6 +15,7 @@ from cores import definir_equipamentos, misturar, cor_texto_sobre
 from componentes import COR_DESTAQUE
 
 DURACAO_PARTE = 60 * 5   # 5 minutos por parte
+DIFICULDADE_EQUIPA_HUMANA = "normal"   # nível dos colegas e do GR do jogador humano
 
 
 class Game:
@@ -144,7 +145,7 @@ class Game:
             else:
                 agente = AgentIA(p, papel, "azul", pos_base,
                                  bal_prop_azul, bal_adv_azul,
-                                 dificuldade=self.dificuldade)
+                                 dificuldade=DIFICULDADE_EQUIPA_HUMANA)
                 self.agentes_azul.append(agente)
 
         # ── Equipa Vermelha (Riba d'Ave) — lado esquerdo (toda IA) ───────
@@ -187,7 +188,7 @@ class Game:
             equipa="azul", lado="dir",
             baliza_rect=r.zona_gr_dir,
             pos_x_fixo=r.linha_golo_dir_x - 4,
-            dificuldade=self.dificuldade
+            dificuldade=DIFICULDADE_EQUIPA_HUMANA
         )
         self.gr_vermelho = Goalkeeper(
             equipa="vermelho", lado="esq",
@@ -198,6 +199,11 @@ class Game:
         self.gr_azul.kit     = self.kit_casa
         self.gr_vermelho.kit = self.kit_fora
         self.grupo_gr = pygame.sprite.Group(self.gr_azul, self.gr_vermelho)
+        # A IA precisa de saber onde está o GR adversário para rematar para o outro canto
+        for a in self.agentes_azul:
+            a.gr_adversario = self.gr_vermelho
+        for a in self.agentes_vermelhos:
+            a.gr_adversario = self.gr_azul
 
     def _pos_tatica_azul(self, papel: str, pos_inicial: tuple) -> tuple:
         cx = RINK_X + RINK_W // 2
@@ -401,6 +407,7 @@ class Game:
                 dir_passe = pygame.math.Vector2(melhor_colega.pos_x - self.jogador_humano.pos_x,
                                                 melhor_colega.pos_y - self.jogador_humano.pos_y).normalize()
                 self.jogador_humano.fazer_passe(self.bola, dir_passe)
+                self.bola.marcar_recetor(melhor_colega)
             else:
                 self.jogador_humano.fazer_passe(self.bola, direcao)
 
@@ -471,7 +478,8 @@ class Game:
         pos_base = getattr(antigo, "pos_tatica", self._pos_tatica_azul(papel, (antigo.pos_x, antigo.pos_y)))
         agente   = AgentIA(antigo, papel, "azul", pos_base,
                            self.rink.baliza_dir, self.rink.baliza_esq,
-                           dificuldade=self.dificuldade)
+                           dificuldade=DIFICULDADE_EQUIPA_HUMANA,
+                           gr_adversario=getattr(self, "gr_vermelho", None))
         self.agentes_azul.append(agente)
 
         self.agentes_azul = [a for a in self.agentes_azul if a.jogador != novo]
@@ -669,14 +677,14 @@ class Game:
         self._msg_timer     = 2.5
 
     def definir_dificuldade(self, nivel: str):
-        """Define e propaga a dificuldade para todos os jogadores e guarda-redes da IA."""
+        """
+        Define a dificuldade da equipa ADVERSÁRIA (jogadores e guarda-redes).
+        Os colegas e o guarda-redes do jogador humano ficam sempre no nível normal,
+        senão no "Difícil" a nossa equipa também ficava mais forte.
+        """
         self.dificuldade = nivel
         for agente in self.agentes_vermelhos:
             agente.definir_dificuldade(nivel)
-        for agente in self.agentes_azul:
-            agente.definir_dificuldade(nivel)
-        if hasattr(self, "gr_azul"):
-            self.gr_azul.definir_dificuldade(nivel)
         if hasattr(self, "gr_vermelho"):
             self.gr_vermelho.definir_dificuldade(nivel)
 
@@ -765,6 +773,10 @@ class Game:
             self.bola.definir_dono(vitima)
             vitima.tem_bola = True
             self.bola.seguir_jogador(vitima)
+
+        # Quem marca o livre fica protegido durante um instante
+        if self.bola.dono is not None:
+            self.bola.dono._cooldown_desarme = 1.0
 
         # Afastar os defesas adversários para a distância regulamentar (mínimo 90px)
         for j in self.todos_jogadores:
@@ -875,9 +887,11 @@ class Game:
             self._msg_texto = f"GOLO!  {info_fora['nome'].upper()}"
         self._msg_timer = 2.5
         self._msg_equipa = equipa
-        self._repor_posicoes()
+        # Recomeça com a bola a equipa que sofreu o golo
+        self._repor_posicoes(saida="vermelho" if equipa == "azul" else "azul")
 
-    def _repor_posicoes(self):
+    def _repor_posicoes(self, saida: str = "azul"):
+        """Volta a pôr todos nas posições iniciais. 'saida' = equipa que fica com a bola."""
         self._cancelar_mira()
         cx = RINK_X + RINK_W // 2
         cy = RINK_Y + RINK_H // 2
@@ -911,10 +925,18 @@ class Game:
             j.rect.center = pos
             j.tem_bola = False
 
-        # Dá a bola ao jogador humano
-        self.bola.definir_dono(self.jogador_humano)
-        self.jogador_humano.tem_bola = True
-        self.bola.seguir_jogador(self.jogador_humano)
+        # Dá a bola à equipa que faz a saída (humano, ou o primeiro avançado vermelho)
+        if saida == "azul":
+            dono = self.jogador_humano
+        else:
+            dono = list(self.equipa_vermelha)[0]
+        self.bola.definir_dono(dono)
+        dono.tem_bola = True
+        self.bola.seguir_jogador(dono)
+        for j in self.todos_jogadores:
+            j._bloqueio_desarme = 0.0
+            j._estado_action = None
+        dono._cooldown_desarme = 1.0
 
         # Repor guarda-redes
         self.gr_azul.pos_y     = float(self.rink.rect.centery)
@@ -926,7 +948,7 @@ class Game:
             self.tempo_restante = float(DURACAO_PARTE)
             self._msg_texto = "Intervalo  —  2.ª Parte"
             self._msg_timer = 3.0
-            self._repor_posicoes()
+            self._repor_posicoes(saida="vermelho")
         else:
             self._cancelar_mira()
             self.jogo_ativo = False

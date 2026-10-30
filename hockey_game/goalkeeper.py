@@ -9,6 +9,7 @@ Diferenças em relação ao Player de campo:
 """
 import os
 import math
+import random
 import pygame
 from settings import *
 from animation import AnimationController, load_animation_from_folder, load_single_frame
@@ -96,18 +97,24 @@ class Goalkeeper(pygame.sprite.Sprite):
 
         # Cooldown da animação de defesa
         self._defender_timer = 0.0
+        # Memória das últimas posições da bola: o GR reage ao que viu há 'reacao' segundos
+        self._tempo = 0.0
+        self._historico = []
+        self._a_ler_remate = False
+        self._erro_atual = 0.0
         self.definir_dificuldade(dificuldade)
 
     def definir_dificuldade(self, nivel: str):
         self.dificuldade = nivel
+        # speed: velocidade máxima | reacao: atraso (s) | raio: alcance do corpo e do stick (px)
         if nivel == "facil":
-            self.speed = 170
+            self.speed, self.reacao, self.raio_defesa, self.erro_leitura = 170, 0.22, 14, 28
             self.alerta_dist = 175
         elif nivel == "dificil":
-            self.speed = 310
+            self.speed, self.reacao, self.raio_defesa, self.erro_leitura = 280, 0.11, 18, 15
             self.alerta_dist = 280
         else:
-            self.speed = 240
+            self.speed, self.reacao, self.raio_defesa, self.erro_leitura = 230, 0.16, 16, 22
             self.alerta_dist = 220
 
     # ================================================================== #
@@ -115,6 +122,7 @@ class Goalkeeper(pygame.sprite.Sprite):
     # ================================================================== #
 
     def update(self, dt: float, bola):
+        self._tempo += dt
         self._ia_decidir(bola)
         self._mover(dt)
         self._atualizar_animacao(dt, bola)
@@ -128,9 +136,28 @@ class Goalkeeper(pygame.sprite.Sprite):
         Define _target_y: o GR tenta alinhar-se verticalmente com a bola.
         Não sai dos limites da baliza.
         """
-        # Alvo = posição Y da bola, clampada aos limites da baliza
-        alvo_y = max(self._y_min, min(self._y_max, bola.pos_y))
-        self._target_y = alvo_y
+        # O GR não é perfeito: reage à posição da bola de há 'reacao' segundos.
+        self._historico.append((self._tempo, bola.pos_x, bola.pos_y, bola.vel.x, bola.vel.y))
+        while len(self._historico) > 1 and self._historico[1][0] <= self._tempo - self.reacao:
+            self._historico.pop(0)
+        _, bx, by, bvx, bvy = self._historico[0]
+        y_visto = by
+        # Remate em direção à baliza: vai para o ponto onde a bola vai cruzar a linha
+        para_mim = (bvx < -150) if self.lado == "esq" else (bvx > 150)
+        if para_mim and bola.dono is None:
+            if not self._a_ler_remate:
+                # Novo remate: o GR "lê" a trajetória com algum erro (mais erro = mais fácil)
+                self._a_ler_remate = True
+                self._erro_atual = random.uniform(-self.erro_leitura, self.erro_leitura)
+            y_visto = by + bvy * (self.pos_x - bx) / bvx + self._erro_atual
+        else:
+            self._a_ler_remate = False
+        # Bola longe: fica mais perto do meio da baliza (cobre melhor os dois lados)
+        centro = (self._y_min + self._y_max) / 2
+        dist = math.hypot(bola.pos_x - self.pos_x, bola.pos_y - self.pos_y)
+        if dist > self.alerta_dist:
+            y_visto = centro + (y_visto - centro) * 0.5
+        self._target_y = max(self._y_min, min(self._y_max, y_visto))
 
         # Ativar animação de defender quando a bola se aproxima
         dist = math.hypot(bola.pos_x - self.pos_x, bola.pos_y - self.pos_y)
@@ -214,7 +241,7 @@ class Goalkeeper(pygame.sprite.Sprite):
             return False
 
         dist = math.hypot(bola.pos_x - self.pos_x, bola.pos_y - self.pos_y)
-        raio_colisao = GR_SIZE[0] // 2 + 6
+        raio_colisao = self.raio_defesa + 5   # corpo/stick do GR + raio da bola
 
         if dist < raio_colisao and dist > 0.1:
             # Ressalta: inverte componente X (a bola vinha em direção ao GR)

@@ -18,6 +18,7 @@ TAMANHO_TELA   = (PLAYER_SIZE[0] + 2 * _MARGEM_X, PLAYER_SIZE[1] + 2 * _MARGEM_Y
 PICK_UP_DIST   = 30
 ACELERACAO     = 2000
 SEP_JOGADORES  = 38
+_RAIO_CORPO    = 14     # "raio" do jogador para as colisões com as balizas
 
 # Constantes de animação
 _BLEND_DURACAO  = 0.08    # segundos de transição suave entre estados
@@ -172,7 +173,10 @@ class Player(pygame.sprite.Sprite):
         # Estabilidade física e gestão de quedas/faltas
         self._imunidade_queda_timer = 0.0   # tempo restante de imunidade a nova queda
         self._desestabilizado_timer = 0.0   # tempo de ligeiro desequilíbrio após desarme limpo
-        self._cooldown_desarme      = 0.0   # cooldown entre desarmes para evitar perda instantânea
+        self._cooldown_desarme      = 0.0   # proteção de quem tem a bola (não pode ser desarmado)
+        self._bloqueio_desarme      = 0.0   # quem acabou de perder/falhar um desarme não pode tentar logo
+        self._rink_rect = None              # guardados no update para as colisões
+        self._rink = None
 
     def aplicar_equipamento(self, kit: dict):
         """Troca as cores do equipamento (ex.: quando se muda de equipa a meio do jogo)."""
@@ -193,6 +197,9 @@ class Player(pygame.sprite.Sprite):
             self._desestabilizado_timer = max(0.0, self._desestabilizado_timer - dt)
         if self._cooldown_desarme > 0:
             self._cooldown_desarme = max(0.0, self._cooldown_desarme - dt)
+        if self._bloqueio_desarme > 0:
+            self._bloqueio_desarme = max(0.0, self._bloqueio_desarme - dt)
+        self._rink_rect, self._rink = rink_rect, rink
 
         if self.humano:
             self._input_humano()
@@ -278,31 +285,41 @@ class Player(pygame.sprite.Sprite):
     def _mover(self, dt: float, rink_rect: pygame.Rect, rink=None):
         self.pos_x += self.vel_x * dt
         self.pos_y += self.vel_y * dt
+        self._limitar(rink_rect, rink)
 
+    def _limitar(self, rink_rect, rink=None):
+        """Mantém o jogador dentro do rinque e fora da estrutura das balizas."""
+        if rink_rect is None:
+            return
         mx = PLAYER_SIZE[0] // 2
         my = PLAYER_SIZE[1] // 2
 
         self.pos_x = max(rink_rect.left  + mx, min(rink_rect.right  - mx, self.pos_x))
         self.pos_y = max(rink_rect.top   + my, min(rink_rect.bottom - my, self.pos_y))
 
-        # Não atravessar a estrutura e redes das balizas (permite patinar livremente atrás delas)
+        # Não atravessar a estrutura e redes das balizas (permite patinar livremente atrás delas).
+        # O obstáculo é alargado pelo "raio" do jogador e o jogador é encostado à borda mais perto,
+        # sem saltos; a velocidade contra a baliza é anulada (desliza ao longo dela).
         if rink is not None:
+            R = _RAIO_CORPO
             for obs in (rink.obstaculo_baliza_esq, rink.obstaculo_baliza_dir):
-                if obs.collidepoint(self.pos_x, self.pos_y):
-                    dx_left   = abs(self.pos_x - obs.left)
-                    dx_right  = abs(self.pos_x - obs.right)
-                    dy_top    = abs(self.pos_y - obs.top)
-                    dy_bottom = abs(self.pos_y - obs.bottom)
-                    min_dist = min(dx_left, dx_right, dy_top, dy_bottom)
-
-                    if min_dist == dx_left:
-                        self.pos_x = obs.left - mx
-                    elif min_dist == dx_right:
-                        self.pos_x = obs.right + mx
-                    elif min_dist == dy_top:
-                        self.pos_y = obs.top - my
+                o = obs.inflate(2 * R, 2 * R)
+                if o.collidepoint(self.pos_x, self.pos_y):
+                    d_esq, d_dir = self.pos_x - o.left, o.right - self.pos_x
+                    d_cima, d_baixo = self.pos_y - o.top, o.bottom - self.pos_y
+                    m = min(d_esq, d_dir, d_cima, d_baixo)
+                    if m == d_esq:
+                        self.pos_x = o.left
+                        self.vel_x = min(0.0, self.vel_x)
+                    elif m == d_dir:
+                        self.pos_x = o.right
+                        self.vel_x = max(0.0, self.vel_x)
+                    elif m == d_cima:
+                        self.pos_y = o.top
+                        self.vel_y = min(0.0, self.vel_y)
                     else:
-                        self.pos_y = obs.bottom + my
+                        self.pos_y = o.bottom
+                        self.vel_y = max(0.0, self.vel_y)
 
         self.rect.center = (round(self.pos_x), round(self.pos_y))
 
@@ -312,84 +329,99 @@ class Player(pygame.sprite.Sprite):
 
     def empurrar_separar(self, outro: "Player", bola=None) -> dict | None:
         """
-        Se dois jogadores se sobrepõem, empurra-os para fora um do outro.
-        Gera desarmes limpos (sem queda) na maioria das disputas, e quedas/faltas
-        apenas em choques a alta velocidade ou cargas por trás.
-        Retorna dicionário com dados da falta ou None.
+        Colisão entre dois jogadores.
+          1. Separa-os (cada um anda metade da sobreposição) e mantém-nos dentro do rinque.
+          2. Anula a velocidade com que vinham um contra o outro (choque inelástico):
+             assim não ficam a empurrar-se frame a frame (era isto que os fazia "tremer").
+          3. Se um deles tem a bola e o outro é adversário, há uma TENTATIVA de desarme:
+             pode ganhar a bola, falhar, ou (em choques fortes) fazer falta.
+        Retorna um dicionário com os dados da falta, ou None.
         """
         dx = self.pos_x - outro.pos_x
         dy = self.pos_y - outro.pos_y
         dist = (dx * dx + dy * dy) ** 0.5
 
-        if dist >= SEP_JOGADORES or dist <= 0.1:
+        if dist >= SEP_JOGADORES:
             return None
+        if dist <= 0.1:
+            # Exatamente no mesmo sítio: escolher uma direção qualquer
+            dx, dy, dist = random.uniform(-1, 1), random.uniform(-1, 1), 1.0
+            dist = max(0.1, math.hypot(dx, dy))
 
-        # Sobreposição física → empurrar metade cada
-        overlap = (SEP_JOGADORES - dist) / 2
         nx = dx / dist
         ny = dy / dist
+
+        # Velocidade de aproximação ANTES de corrigir (usada para saber se o choque foi forte)
+        v_rel = (self.vel_x - outro.vel_x) * nx + (self.vel_y - outro.vel_y) * ny
+
+        # 1) Separação
+        overlap = (SEP_JOGADORES - dist) / 2
         self.pos_x  += nx * overlap
         self.pos_y  += ny * overlap
         outro.pos_x -= nx * overlap
         outro.pos_y -= ny * overlap
-        self.rect.center  = (round(self.pos_x),  round(self.pos_y))
-        outro.rect.center = (round(outro.pos_x), round(outro.pos_y))
 
-        # Se pertencerem à mesma equipa, não há desarme nem falta
+        # 2) Anular a velocidade de um contra o outro (cada um perde metade)
+        if v_rel < 0:
+            imp = -v_rel / 2
+            self.vel_x  += nx * imp
+            self.vel_y  += ny * imp
+            outro.vel_x -= nx * imp
+            outro.vel_y -= ny * imp
+
+        self._limitar(self._rink_rect, self._rink)
+        outro._limitar(outro._rink_rect, outro._rink)
+
+        # Colegas de equipa: só se afastam
         if self.equipa == outro.equipa:
             return None
 
-        # Determinar quem é o portador e o defensor
-        portador = None
-        defensor = None
-        dir_impacto = None
-
+        # 3) Quem tem a bola?
         if outro.tem_bola:
-            portador = outro
-            defensor = self
-            dir_impacto = pygame.math.Vector2(-nx, -ny)
+            portador, defensor = outro, self
         elif self.tem_bola:
-            portador = self
-            defensor = outro
-            dir_impacto = pygame.math.Vector2(nx, ny)
-
-        if not portador:
+            portador, defensor = self, outro
+        else:
             return None
 
-        # Cooldown para não processar múltiplos desarmes consecutivos
-        if portador._cooldown_desarme > 0:
+        # Proteções: quem acabou de ganhar a bola fica uns instantes protegido,
+        # e quem acabou de a perder (ou falhou um desarme) não pode tentar logo outra vez.
+        if portador._cooldown_desarme > 0 or defensor._bloqueio_desarme > 0:
+            return None
+        if defensor._estado_action == "colisao":
             return None
 
-        portador._cooldown_desarme = 0.40
+        # Direção do choque: do defensor para o portador
+        dir_impacto = pygame.math.Vector2(portador.pos_x - defensor.pos_x,
+                                          portador.pos_y - defensor.pos_y)
+        if dir_impacto.length_squared() == 0:
+            dir_impacto = pygame.math.Vector2(1, 0)
+        dir_impacto.normalize_ip()
 
-        # Velocidade e agressividade da abordagem
         vel_def = math.hypot(defensor.vel_x, defensor.vel_y)
-        is_sprint = getattr(defensor, "_sprint_ativo", False) or (vel_def > 210)
+        forca_choque = abs(v_rel)
+        is_sprint = getattr(defensor, "_sprint_ativo", False) or (vel_def > 230)
 
-        # Verificar se a carga foi por trás
+        # Carga por trás: o defensor vem na mesma direção em que o portador está virado
         carga_por_tras = False
-        if hasattr(portador, "vetor_direcao") and portador.vetor_direcao.length_squared() > 0:
-            v_def_vec = pygame.math.Vector2(defensor.vel_x, defensor.vel_y)
-            if v_def_vec.length_squared() > 0:
-                dot = portador.vetor_direcao.dot(v_def_vec.normalize())
-                if dot > 0.50 and vel_def > 130:
-                    carga_por_tras = True
+        if portador.vetor_direcao.length_squared() > 0 and vel_def > 130:
+            v_def_vec = pygame.math.Vector2(defensor.vel_x, defensor.vel_y).normalize()
+            carga_por_tras = portador.vetor_direcao.dot(v_def_vec) > 0.55
 
-        # Decisão de Queda vs Desarme Limpo:
-        # Jogadores caem MUITO MENOS, apenas sob choque violento!
+        # Falta? Só em choques fortes (muito menos do que antes)
         deve_cair = False
         if portador._imunidade_queda_timer <= 0:
-            if is_sprint and vel_def > 200:
-                deve_cair = (random.random() < 0.28)
-            elif carga_por_tras:
-                deve_cair = (random.random() < 0.40)
-            elif vel_def > 250:
-                deve_cair = (random.random() < 0.32)
+            if carga_por_tras and forca_choque > 110:
+                deve_cair = random.random() < 0.40
+            elif is_sprint and forca_choque > 180:
+                deve_cair = random.random() < 0.22
+            elif forca_choque > 300:
+                deve_cair = random.random() < 0.25
 
         if deve_cair:
-            # Queda espetacular com falta
             portador.sofrer_queda(bola, dir_impacto)
             portador._imunidade_queda_timer = 2.5
+            defensor._bloqueio_desarme = 0.8
             return {
                 "tipo": "falta",
                 "infrator": defensor,
@@ -397,21 +429,26 @@ class Player(pygame.sprite.Sprite):
                 "queda": True,
                 "pos": (portador.pos_x, portador.pos_y)
             }
+
+        # Probabilidade de ganhar a bola: depende da defesa de um e da velocidade/controlo do outro
+        p = 0.42 + (defensor.stat_defesa - 0.5 * portador.stat_velocidade - 30) / 100
+        if defensor.humano:
+            p += 0.18          # o jogador humano consegue desarmar com mais facilidade
+        if is_sprint:
+            p += 0.08
+        p = max(0.15, min(0.85, p))
+
+        if random.random() < p:
+            # Desarme: a bola salta para o lado do defensor, que fica com ela
+            portador.desarme_limpo(bola, -dir_impacto)
+            portador._bloqueio_desarme = 0.8     # quem perdeu não pode roubar logo de volta
+            defensor._cooldown_desarme = 0.0
         else:
-            # Desarme limpo: a bola solta-se mas o jogador FICA EM PÉ!
-            portador.desarme_limpo(bola, dir_impacto)
-
-            # Pequena probabilidade de falta por obstrução em cargas rápidas mesmo sem queda
-            if (is_sprint or carga_por_tras) and random.random() < 0.12:
-                return {
-                    "tipo": "falta",
-                    "infrator": defensor,
-                    "vitima": portador,
-                    "queda": False,
-                    "pos": (portador.pos_x, portador.pos_y)
-                }
-
-            return None
+            # Falhou: o portador segura a bola e o defensor perde uns instantes
+            defensor._bloqueio_desarme = 0.5
+            portador._cooldown_desarme = 0.35
+            defensor._desestabilizado_timer = 0.25
+        return None
 
     # ------------------------------------------------------------------ #
     # Interação com a bola                                                 #
@@ -438,6 +475,8 @@ class Player(pygame.sprite.Sprite):
         if dist < PICK_UP_DIST and bola.pode_ser_apanhada_por(self):
             bola.definir_dono(self)
             self.tem_bola = True
+            # Acabou de ganhar a bola: fica protegido de desarmes durante um instante
+            self._cooldown_desarme = 0.6
 
     # ------------------------------------------------------------------ #
     # Ações                                                                #
