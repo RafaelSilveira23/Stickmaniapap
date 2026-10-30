@@ -6,7 +6,7 @@ import math
 import pygame
 from settings import *
 from animation import AnimationController, load_animation_from_names
-from cores import recolorir_frames
+from cores import recolorir_frames, escurecer_stick
 
 # ---------- Constantes ----------
 PLAYER_SPEED   = 200
@@ -79,6 +79,7 @@ def _carregar_animacoes(equipa: str, kit: dict | None = None) -> dict:
     anims = {}
     for estado, nomes, fps, loop in _ANIMACOES_JOGADOR:
         anim = load_animation_from_names(pasta, nomes, fps=fps, loop=loop, scale=s)
+        anim.frames = escurecer_stick(("jogador", estado, s), anim.frames)
         if kit:
             anim.frames = recolorir_frames((estado, s, "v2"), anim.frames, kit)
         anims[estado] = anim

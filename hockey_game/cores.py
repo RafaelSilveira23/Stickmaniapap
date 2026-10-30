@@ -212,3 +212,38 @@ def recolorir_frames(chave_origem, frames: list, kit: dict) -> list:
     if chave not in _cache_frames:
         _cache_frames[chave] = [recolorir_superficie(f, kit) for f in frames]
     return _cache_frames[chave]
+
+
+# ====================================================================== #
+# Stick mais escuro (madeira castanha, como na imagem de referência)     #
+# ====================================================================== #
+
+_cache_stick = {}
+
+
+def escurecer_stick(chave, frames: list, sat_min: float = 0.2) -> list:
+    """
+    Escurece a madeira do stick nos sprites.
+    A pele e o stick têm cores parecidas; separamo-los assim:
+      - o stick é mais amarelado (matiz >= 29°) e a pele mais avermelhada;
+      - só mexemos abaixo da cabeça (a partir de 40% da altura do sprite).
+    """
+    if chave in _cache_stick:
+        return _cache_stick[chave]
+    novos = []
+    for f in frames:
+        out = f.copy()
+        w, h = out.get_size()
+        out.lock()
+        for y in range(int(h * 0.40), h):
+            for x in range(w):
+                r, g, b, a = out.get_at((x, y))
+                if a == 0:
+                    continue
+                hue, sat, val = colorsys.rgb_to_hsv(r / 255, g / 255, b / 255)
+                if 29 / 360 <= hue <= 50 / 360 and sat > sat_min and val > 0.35:
+                    out.set_at((x, y), (int(r * 0.74), int(g * 0.60), int(b * 0.50), a))
+        out.unlock()
+        novos.append(out)
+    _cache_stick[chave] = novos
+    return novos

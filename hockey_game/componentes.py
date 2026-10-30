@@ -260,7 +260,8 @@ def sprite_equipamento(kit: dict, tamanho: int, t: float = 0.0, virar: bool = Fa
             if virar:
                 img = pygame.transform.flip(img, True, False)
             frames.append(img)
-        _cache_preview[chave] = frames
+        from cores import escurecer_stick
+        _cache_preview[chave] = escurecer_stick(("preview", base, virar), frames)
     pequenos = recolorir_frames(("preview", base, virar), _cache_preview[chave], kit)
     idx = int(t * 2.5) % len(pequenos)
     chave_amp = (id(pequenos[idx]), tamanho)

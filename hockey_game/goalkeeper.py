@@ -12,7 +12,7 @@ import math
 import pygame
 from settings import *
 from animation import AnimationController, load_animation_from_folder, load_single_frame
-from cores import cor_texto_sobre
+from cores import cor_texto_sobre, escurecer_stick
 from player import sombra_oval
 
 # Tamanho do sprite do guarda-redes no ecrã
@@ -33,7 +33,7 @@ def _pasta_gr():
 def _carregar_animacoes_gr() -> dict:
     pasta = _pasta_gr()
     s = GR_SIZE
-    return {
+    anims = {
         "parado":        load_single_frame(os.path.join(pasta, "parado.png"), scale=s),
         "mover_cima":    load_single_frame(os.path.join(pasta, "mover_cima.png"),    scale=s),
         "mover_baixo":   load_single_frame(os.path.join(pasta, "mover_baixo.png"),   scale=s),
@@ -42,6 +42,10 @@ def _carregar_animacoes_gr() -> dict:
         "defender":      load_animation_from_folder(pasta, "defender", fps=8.0,
                                                     loop=True, scale=s),
     }
+    for estado, anim in anims.items():
+        # o stick do GR é quase creme (pouco saturado), por isso aceitamos menos saturação
+        anim.frames = escurecer_stick(("gr", estado, s), anim.frames, sat_min=0.08)
+    return anims
 
 
 class Goalkeeper(pygame.sprite.Sprite):
