@@ -442,6 +442,9 @@ class AgentIA:
         j = self.jogador
         tx = max(_X_MIN, min(_X_MAX, tx))
         ty = max(_Y_MIN, min(_Y_MAX, ty))
+        if chegar:
+            # Posições táticas nunca em cima do guarda-redes (ir à bola ou pressionar pode)
+            tx, ty = self._fora_da_area_gr(tx, ty)
         dx, dy = tx - j.pos_x, ty - j.pos_y
         dist = math.hypot(dx, dy)
 
@@ -500,6 +503,17 @@ class AgentIA:
                 j.direcao = "direita" if vx > 0 else "esquerda"
             else:
                 j.direcao = "baixo" if vy > 0 else "cima"
+
+    def _fora_da_area_gr(self, tx, ty):
+        """
+        A zona logo à frente de cada baliza é do guarda-redes: a IA não escolhe ficar lá
+        (antes o defensor que fazia cobertura ia parar em cima do próprio guarda-redes).
+        """
+        for linha, s in ((self.linha_prop, self.sentido), (self.linha_adv, -self.sentido)):
+            frente = (tx - linha) * s           # distância à linha de golo, para o lado do campo
+            if abs(ty - self.baliza_y) < 55 and -40 < frente < 50:
+                tx = linha + s * 50
+        return tx, ty
 
     def _adversario_mais_perto(self, adversarios):
         """O adversário mais perto que esteja à frente ou ao lado (não conta quem vem atrás)."""

@@ -327,6 +327,24 @@ class Player(pygame.sprite.Sprite):
     # Colisões entre jogadores (separação física)                         #
     # ------------------------------------------------------------------ #
 
+    def afastar_de(self, x: float, y: float, raio: float):
+        """Empurra este jogador para fora de um círculo fixo (ex.: o guarda-redes)."""
+        dx, dy = self.pos_x - x, self.pos_y - y
+        d = math.hypot(dx, dy)
+        if d >= raio:
+            return
+        if d < 0.1:
+            dx, dy, d = 0.0, 1.0, 1.0
+        nx, ny = dx / d, dy / d
+        self.pos_x = x + nx * raio
+        self.pos_y = y + ny * raio
+        # Anula a velocidade contra o guarda-redes (desliza à volta dele)
+        vn = self.vel_x * nx + self.vel_y * ny
+        if vn < 0:
+            self.vel_x -= vn * nx
+            self.vel_y -= vn * ny
+        self._limitar(self._rink_rect, self._rink)
+
     def empurrar_separar(self, outro: "Player", bola=None) -> dict | None:
         """
         Colisão entre dois jogadores.

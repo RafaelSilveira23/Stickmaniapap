@@ -30,8 +30,8 @@ def _pas(self, b, d):
     _p(self, b, d)
 PL.Player.fazer_passe = _pas
 _bq = GK.Goalkeeper.bloquear_bola
-def _blq(self, b):
-    r = _bq(self, b)
+def _blq(self, b, *a):
+    r = _bq(self, b, *a)
     if r: soma("defesas_gr", 1)
     return r
 GK.Goalkeeper.bloquear_bola = _blq

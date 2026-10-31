@@ -16,6 +16,7 @@ from componentes import COR_DESTAQUE
 
 DURACAO_PARTE = 60 * 5   # 5 minutos por parte
 DIFICULDADE_EQUIPA_HUMANA = "normal"   # nível dos colegas e do GR do jogador humano
+RAIO_GR_CORPO = 30                       # distância mínima entre um jogador e um guarda-redes
 
 
 class Game:
@@ -575,17 +576,21 @@ class Game:
                 if evento and evento.get("tipo") == "falta" and not falta_detetada and self._falta_cooldown <= 0:
                     falta_detetada = evento
 
+        # Os jogadores de campo também chocam com os guarda-redes (antes atravessavam-nos).
+        # Só o jogador é empurrado: o guarda-redes não sai da baliza.
+        for gr in (self.gr_azul, self.gr_vermelho):
+            for j in todos:
+                j.afastar_de(gr.pos_x, gr.pos_y, RAIO_GR_CORPO)
+
         if falta_detetada and self.jogo_ativo:
             self.assinalar_falta(falta_detetada["infrator"], falta_detetada["vitima"], falta_detetada.get("pos"))
 
         # Atualizar bola (com física de tabelas e balizas)
-        resultado = self.bola.update(dt, self.rink, todos_jogadores=todos)
-
-        # Guarda-redes
+        # Guarda-redes primeiro (posicionam-se), depois a bola (que já testa as defesas deles)
         self.gr_azul.update(dt, self.bola)
         self.gr_vermelho.update(dt, self.bola)
-        self.gr_azul.bloquear_bola(self.bola)
-        self.gr_vermelho.bloquear_bola(self.bola)
+        resultado = self.bola.update(dt, self.rink, todos_jogadores=todos,
+                                     guarda_redes=(self.gr_azul, self.gr_vermelho))
 
         # Golos
         if resultado == "golo_azul":
@@ -995,16 +1000,33 @@ class Game:
         #    quem está mais ao fundo do campo é desenhado primeiro (fica por trás).
         r = self.rink
         atores = sorted(list(self.todos_jogadores) + list(self.grupo_gr), key=lambda s: s.pos_y)
-        # Atrás das balizas = os pés estão mais ao fundo do que o poste de cima
-        atras  = [a for a in atores if a.pos_y < r.baliza_topo_y]
-        frente = [a for a in atores if a.pos_y >= r.baliza_topo_y]
 
         b = self.bola
         bola_na_rede = (r.baliza_topo_y <= b.pos_y <= r.baliza_base_y and
                         (b.pos_x < r.linha_golo_esq_x or b.pos_x > r.linha_golo_dir_x))
 
+        # A bola também entra na ordem de profundidade: se passar atrás de um jogador ou do
+        # guarda-redes, fica tapada por ele (antes era sempre desenhada por cima de todos).
+        # A bola no stick conta um pouco mais à frente, para ficar à frente de quem a conduz.
+        def profundidade(s):
+            if s is b:
+                return b.pos_y + (8 if b.dono is not None else 0)
+            return s.pos_y
+
+        itens = list(atores) + ([] if bola_na_rede else [b])
+        itens.sort(key=profundidade)
+        # Atrás das balizas = os pés estão mais ao fundo do que o poste de cima
+        atras  = [a for a in itens if profundidade(a) < r.baliza_topo_y]
+        frente = [a for a in itens if profundidade(a) >= r.baliza_topo_y]
+
+        def desenhar(a):
+            if a is b:
+                self._desenhar_bola(cam)
+            else:
+                self._desenhar_ator(a, cam)
+
         for a in atras:
-            self._desenhar_ator(a, cam)
+            desenhar(a)
         if bola_na_rede:
             self._desenhar_bola(cam)
 
@@ -1012,9 +1034,7 @@ class Game:
         self.rink.draw_frente(self.screen)
 
         for a in frente:
-            self._desenhar_ator(a, cam)
-        if not bola_na_rede:
-            self._desenhar_bola(cam)
+            desenhar(a)
 
         # 5. Indicadores por cima dos jogadores (usam o retângulo no ecrã)
         for a in atores:

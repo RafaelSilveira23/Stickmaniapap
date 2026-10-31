@@ -100,21 +100,20 @@ class Goalkeeper(pygame.sprite.Sprite):
         # Memória das últimas posições da bola: o GR reage ao que viu há 'reacao' segundos
         self._tempo = 0.0
         self._historico = []
-        self._a_ler_remate = False
-        self._erro_atual = 0.0
         self.definir_dificuldade(dificuldade)
 
     def definir_dificuldade(self, nivel: str):
         self.dificuldade = nivel
         # speed: velocidade máxima | reacao: atraso (s) | raio: alcance do corpo e do stick (px)
+        # antecipacao: que parte da trajetória do remate o GR consegue prever (0 a 1)
         if nivel == "facil":
-            self.speed, self.reacao, self.raio_defesa, self.erro_leitura = 170, 0.22, 14, 28
+            self.speed, self.reacao, self.raio_defesa, self.antecipacao = 170, 0.22, 16, 0.52
             self.alerta_dist = 175
         elif nivel == "dificil":
-            self.speed, self.reacao, self.raio_defesa, self.erro_leitura = 280, 0.11, 18, 15
+            self.speed, self.reacao, self.raio_defesa, self.antecipacao = 280, 0.11, 18, 0.70
             self.alerta_dist = 280
         else:
-            self.speed, self.reacao, self.raio_defesa, self.erro_leitura = 230, 0.16, 16, 22
+            self.speed, self.reacao, self.raio_defesa, self.antecipacao = 230, 0.16, 17, 0.60
             self.alerta_dist = 220
 
     # ================================================================== #
@@ -142,21 +141,20 @@ class Goalkeeper(pygame.sprite.Sprite):
             self._historico.pop(0)
         _, bx, by, bvx, bvy = self._historico[0]
         y_visto = by
-        # Remate em direção à baliza: vai para o ponto onde a bola vai cruzar a linha
+        # Remate em direção à baliza: o GR calcula onde a bola vai cruzar a linha de golo,
+        #   y_cruz = y + vy * (x_GR - x) / vx
+        # mas só antecipa PARTE do caminho ('antecipacao'): um remate feito direto para ele é
+        # sempre defendido; um remate bem colocado no canto pode entrar se ele não chegar a tempo.
         para_mim = (bvx < -150) if self.lado == "esq" else (bvx > 150)
-        if para_mim and bola.dono is None:
-            if not self._a_ler_remate:
-                # Novo remate: o GR "lê" a trajetória com algum erro (mais erro = mais fácil)
-                self._a_ler_remate = True
-                self._erro_atual = random.uniform(-self.erro_leitura, self.erro_leitura)
-            y_visto = by + bvy * (self.pos_x - bx) / bvx + self._erro_atual
-        else:
-            self._a_ler_remate = False
-        # Bola longe: fica mais perto do meio da baliza (cobre melhor os dois lados)
         centro = (self._y_min + self._y_max) / 2
-        dist = math.hypot(bola.pos_x - self.pos_x, bola.pos_y - self.pos_y)
-        if dist > self.alerta_dist:
-            y_visto = centro + (y_visto - centro) * 0.5
+        if para_mim and bola.dono is None:
+            y_cruz = by + bvy * (self.pos_x - bx) / bvx
+            y_visto = by + (y_cruz - by) * self.antecipacao
+        else:
+            # Bola longe: fica mais perto do meio da baliza (cobre melhor os dois lados)
+            dist = math.hypot(bola.pos_x - self.pos_x, bola.pos_y - self.pos_y)
+            if dist > self.alerta_dist:
+                y_visto = centro + (y_visto - centro) * 0.5
         self._target_y = max(self._y_min, min(self._y_max, y_visto))
 
         # Ativar animação de defender quando a bola se aproxima
@@ -231,34 +229,54 @@ class Goalkeeper(pygame.sprite.Sprite):
     # Bloquear a bola (chamado por game.py após update da bola)           #
     # ------------------------------------------------------------------ #
 
-    def bloquear_bola(self, bola) -> bool:
+    def bloquear_bola(self, bola, pos_anterior=None) -> bool:
         """
-        Verifica se o GR está a bloquear a bola.
-        Se a bola colidir com o corpo do GR, ressalta.
-        Retorna True se bloqueou.
+        Verifica se o GR defende a bola. Se sim, a bola ressalta no corpo/stick dele.
+
+        A bola anda ~10 px por frame, por isso não basta ver onde ela está agora: podia
+        "saltar" por cima do GR entre dois frames. Por isso vemos o caminho todo que a bola
+        fez neste frame (o segmento entre a posição anterior e a atual) e procuramos o ponto
+        desse caminho mais perto do GR.
+        Retorna True se defendeu.
         """
         if bola.dono is not None:
             return False
 
-        dist = math.hypot(bola.pos_x - self.pos_x, bola.pos_y - self.pos_y)
         raio_colisao = self.raio_defesa + 5   # corpo/stick do GR + raio da bola
-
-        if dist < raio_colisao and dist > 0.1:
-            # Ressalta: inverte componente X (a bola vinha em direção ao GR)
-            nx = (bola.pos_x - self.pos_x) / dist
-            ny = (bola.pos_y - self.pos_y) / dist
-            dot = bola.vel.x * nx + bola.vel.y * ny
-            if dot < 0:
-                bola.vel.x -= 2 * dot * nx
-                bola.vel.y -= 2 * dot * ny
-                bola.vel   *= 0.8
-                # Empurra a bola para fora
-                bola.pos_x += nx * (raio_colisao - dist + 2)
-                bola.pos_y += ny * (raio_colisao - dist + 2)
-                # Ativa animação de defender
-                self._defender_timer = 0.5
-                return True
-        return False
+        ax, ay = pos_anterior if pos_anterior is not None else (bola.pos_x, bola.pos_y)
+        bx, by = bola.pos_x, bola.pos_y
+        sx, sy = bx - ax, by - ay
+        comp2 = sx * sx + sy * sy
+        t = 1.0
+        if comp2 > 1e-9:
+            t = max(0.0, min(1.0, ((self.pos_x - ax) * sx + (self.pos_y - ay) * sy) / comp2))
+        px, py = ax + sx * t, ay + sy * t          # ponto do caminho mais perto do GR
+        dist = math.hypot(px - self.pos_x, py - self.pos_y)
+        if dist >= raio_colisao:
+            return False
+        if dist < 0.1:
+            # Bola a vir direitinha ao centro do GR: ressalta para a frente da baliza
+            nx, ny = (1.0, 0.0) if self.lado == "esq" else (-1.0, 0.0)
+        else:
+            nx, ny = (px - self.pos_x) / dist, (py - self.pos_y) / dist
+        dot = bola.vel.x * nx + bola.vel.y * ny
+        if dot >= 0:
+            return False                           # a bola já se está a afastar do GR
+        bola.vel.x -= 2 * dot * nx
+        bola.vel.y -= 2 * dot * ny
+        bola.vel *= 0.8
+        # A bola fica encostada ao GR, do lado de onde veio
+        bola.pos_x = self.pos_x + nx * (raio_colisao + 1)
+        bola.pos_y = self.pos_y + ny * (raio_colisao + 1)
+        # Uma defesa manda sempre a bola para a FRENTE da baliza (antes, um toque de raspão
+        # podia desviar a bola e ela continuava a entrar, o que parecia um "frango").
+        frente = 1.0 if self.lado == "esq" else -1.0
+        if bola.vel.x * frente < 60:
+            bola.vel.x = frente * max(60.0, abs(bola.vel.x) * 0.6)
+        if (bola.pos_x - self.pos_x) * frente < 6:
+            bola.pos_x = self.pos_x + frente * 6
+        self._defender_timer = 0.5
+        return True
 
     # ------------------------------------------------------------------ #
     # Desenho extra (número por cima)                                      #
