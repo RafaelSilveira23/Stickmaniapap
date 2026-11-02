@@ -113,7 +113,7 @@ class Goalkeeper(pygame.sprite.Sprite):
             self.speed, self.reacao, self.raio_defesa, self.antecipacao = 280, 0.11, 18, 0.70
             self.alerta_dist = 280
         else:
-            self.speed, self.reacao, self.raio_defesa, self.antecipacao = 230, 0.16, 17, 0.60
+            self.speed, self.reacao, self.raio_defesa, self.antecipacao = 230, 0.16, 17, 0.56
             self.alerta_dist = 220
 
     # ================================================================== #

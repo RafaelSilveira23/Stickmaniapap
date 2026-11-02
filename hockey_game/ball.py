@@ -61,6 +61,13 @@ class Ball(pygame.sprite.Sprite):
         # Acontecimentos deste frame para os sons (tacada, tabela, poste, defesa).
         # Quem os usa (o Game) lê a lista e limpa-a; a bola não sabe nada de som.
         self.eventos = []
+        # Último jogador de cada equipa a tocar na bola (para saber quem marcou o golo)
+        self.ultimo_por_equipa = {}
+
+    def _tocar(self, jogador):
+        equipa = getattr(jogador, "equipa", None)
+        if equipa is not None:
+            self.ultimo_por_equipa[equipa] = jogador
 
     def _evento(self, tipo: str, forca: float):
         self.eventos.append((tipo, forca, self.pos_x, self.pos_y))
@@ -74,6 +81,7 @@ class Ball(pygame.sprite.Sprite):
         self._recetor_timer = tempo
 
     def definir_dono(self, jogador):
+        self._tocar(jogador)
         self.dono = jogador
         self.recetor = None
         self.vel.update(0, 0)
@@ -350,6 +358,7 @@ class Ball(pygame.sprite.Sprite):
                     self.vel.y -= 2 * dot_rel * ny
                     # Absorção de energia no impacto
                     self.vel   *= 0.75
+                    self._tocar(j)            # um desvio num jogador também conta como toque
                     # Transferir parte do impulso ao jogador (se aplicável)
                     self.pos_x += nx * (RAIO_COLISAO - dist + 1)
                     self.pos_y += ny * (RAIO_COLISAO - dist + 1)
@@ -391,6 +400,7 @@ class Ball(pygame.sprite.Sprite):
         self._seguido = None
         self.image = self._imagem_base.copy()
         self.rect.center = pos
+        self.ultimo_por_equipa = {}
 
     def pode_ser_apanhada_por(self, jogador):
         if self.dono is not None:

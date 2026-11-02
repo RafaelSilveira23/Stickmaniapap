@@ -258,6 +258,9 @@ class EcraCampeonato:
         self._tabela_cache = list(camp.classificacao())
         self._formas = {l["equipa_id"]: camp.forma(l["equipa_id"]) for l in self._tabela_cache}
         self._prob = None if camp.terminado else camp.probabilidades_proximo_jogo()
+        self._marcadores = list(camp.melhores_marcadores(7))
+        if camp.terminado:
+            self.aba = "marcadores"        # no fim da época mostra logo quem foi o melhor marcador
         self._criar_botoes()
         if self.camp.terminado and self.camp.posicao_do_jogador() == 1:
             rnd = random.Random(7)
@@ -286,8 +289,9 @@ class EcraCampeonato:
             seta=False, tamanho=18)
         self.btn_menu = BotaoMenu((WIDTH - 310, 640, 270, 50), "MENU PRINCIPAL", "", "menu",
                                   (150, 110, 255), "casa", seta=False, tamanho=18)
-        self.aba_res = pygame.Rect(1000, 398, 110, 28)
-        self.aba_cal = pygame.Rect(1116, 398, 110, 28)
+        self.aba_res = pygame.Rect(900, 398, 104, 28)
+        self.aba_cal = pygame.Rect(1010, 398, 104, 28)
+        self.aba_mar = pygame.Rect(1120, 398, 104, 28)
         self.foco = 0                       # 0 = jogar / nova época, 1 = simular (setas ← →)
 
     @property
@@ -328,7 +332,8 @@ class EcraCampeonato:
             if event.key == pygame.K_ESCAPE:
                 return "menu"
             if event.key == pygame.K_TAB:
-                self.aba = "calendario" if self.aba == "resultados" else "resultados"
+                ordem = ["resultados", "calendario", "marcadores"]
+                self.aba = ordem[(ordem.index(self.aba) + 1) % len(ordem)]
                 som.ui("mover")
             if event.key in (pygame.K_LEFT, pygame.K_RIGHT, pygame.K_a, pygame.K_d) and self.btn_simular:
                 self.foco = 1 - self.foco
@@ -352,6 +357,8 @@ class EcraCampeonato:
                 self.aba = "resultados"
             elif self.aba_cal.collidepoint(p):
                 self.aba = "calendario"
+            elif self.aba_mar.collidepoint(p):
+                self.aba = "marcadores"
         elif event.type == pygame.MOUSEMOTION:
             if self.btn_simular is not None:
                 if self.btn_simular.por_cima(event.pos):
@@ -398,7 +405,7 @@ class EcraCampeonato:
         for b in self._botoes:
             b.draw(s)
         dica = "ENTER  nova época" if camp.terminado else "ENTER  jogar     S  simular     ← →  escolher"
-        texto(s, dica + "     TAB  resultados / calendário     ESC  menu principal", 12, (120, 145, 195),
+        texto(s, dica + "     TAB  resultados / calendário / marcadores     ESC  menu principal", 12, (120, 145, 195),
               (WIDTH // 2, 704), negrito=False)
 
         for x, y, _, _, cor in self._confetis:
@@ -557,7 +564,8 @@ class EcraCampeonato:
     def _painel_jogos(self, caixa):
         s = self.screen
         _vidro(s, caixa, 14, 225)
-        for r, nome, aba in ((self.aba_res, "RESULTADOS", "resultados"), (self.aba_cal, "CALENDÁRIO", "calendario")):
+        for r, nome, aba in ((self.aba_res, "RESULTADOS", "resultados"), (self.aba_cal, "CALENDÁRIO", "calendario"),
+                             (self.aba_mar, "MARCADORES", "marcadores")):
             ativa = self.aba == aba
             pygame.draw.rect(s, (40, 80, 150) if ativa else (20, 32, 62), r, border_radius=8)
             pygame.draw.rect(s, (110, 170, 255) if ativa else (45, 70, 130), r, 1, border_radius=8)
@@ -573,11 +581,41 @@ class EcraCampeonato:
                 return
             for k, p in enumerate(self.camp.jogos_da_jornada(j)):
                 self._linha_jogo(pygame.Rect(caixa.left + 14, y0 + k * 44, caixa.width - 28, 38), p, eu)
+        elif self.aba == "marcadores":
+            self._lista_marcadores(caixa, y0, eu)
         else:
-            _titulo_painel(s, caixa, "OS TEUS JOGOS")
+            _titulo_painel(s, caixa, "TEUS JOGOS")
             for k, p in enumerate(self.camp.jogos_do_jogador()):
                 self._linha_jogo(pygame.Rect(caixa.left + 14, y0 + k * 25, caixa.width - 28, 23), p, eu,
                                  compacto=True)
+
+    def _lista_marcadores(self, caixa, y0, eu):
+        """Os 7 melhores marcadores do campeonato (os da equipa do jogador a azul)."""
+        s = self.screen
+        _titulo_painel(s, caixa, "GOLOS")
+        if not self._marcadores:
+            texto(s, "Ainda não houve golos.", 14, COR_TEXTO_SUAVE, (caixa.centerx, caixa.centery + 16),
+                  negrito=False)
+            return
+        f = fonte(14)
+        for k, m in enumerate(self._marcadores):
+            r = pygame.Rect(caixa.left + 14, y0 + k * 25, caixa.width - 28, 23)
+            if m["equipa_id"] == eu:
+                pygame.draw.rect(s, COR_LINHA_JOGADOR, r, border_radius=6)
+            cor_pos = COR_DESTAQUE if k == 0 else COR_TEXTO_SUAVE
+            texto(s, f"{k + 1}.", 13, cor_pos, (r.left + 18, r.centery))
+            logo = carregar_logo_equipa(m["equipa_id"], (18, 18))
+            if logo:
+                s.blit(logo, logo.get_rect(center=(r.left + 46, r.centery)))
+            # Nomes compridos são cortados com "…" para não passarem por cima dos golos
+            nome = m["nome"]
+            while f.size(nome)[0] > 300 and len(nome) > 4:
+                nome = nome[:-2] + "…"
+            texto(s, nome, 14, COR_TEXTO, (r.left + 64, r.centery), ancora="midleft")
+            texto(s, obter_info_equipa(m["equipa_id"])["sigla"], 11, COR_TEXTO_SUAVE,
+                  (r.right - 74, r.centery))
+            texto(s, f"{m['golos']} golo{'s' if m['golos'] != 1 else ''}", 14, COR_DESTAQUE,
+                  (r.right - 10, r.centery), ancora="midright")
 
     def _linha_jogo(self, r, p, eu, compacto=False):
         s = self.screen

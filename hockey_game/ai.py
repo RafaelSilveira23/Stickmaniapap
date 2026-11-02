@@ -48,7 +48,7 @@ DIFICULDADES = {
         "raio_perseguir": 135,
         "remate_cooldown": 2.2,
         "passe_cooldown": 1.8,
-        "dist_remate": 170,
+        "dist_remate": 195,
         "erro_mira": 0.22,           # ~12.5 graus de dispersão
         "agressividade": 0.30,
         "reacao": 0.35,              # segundos que a IA demora a reagir a uma mudança de posse
@@ -64,7 +64,7 @@ DIFICULDADES = {
         "raio_perseguir": 190,
         "remate_cooldown": 1.4,
         "passe_cooldown": 1.0,
-        "dist_remate": 225,
+        "dist_remate": 255,
         "erro_mira": 0.08,           # ~4.5 graus de dispersão
         "agressividade": 0.60,
         "reacao": 0.20,
@@ -433,11 +433,12 @@ class AgentIA:
         x = base_x + (bx - _CENTRO_X) * 0.35
         y = base_y + (by - _CENTRO_Y) * 0.30
         if atacar:
-            avanco = {"avancado": 230, "medio": 150, "defesa": 70}.get(self.papel, 100)
+            # Com 4 jogadores de campo, os médios sobem quase até ao avançado (fazem de alas)
+            avanco = {"avancado": 250, "medio": 215, "defesa": 120}.get(self.papel, 100)
             x += s * avanco
-            # Os avançados abrem para as alas para receber
-            if self.papel == "avancado":
-                y = base_y + (base_y - _CENTRO_Y) * 0.6
+            # Os médios abrem para as alas para receber e rematar de ângulo
+            if self.papel == "medio":
+                y = base_y + (base_y - _CENTRO_Y) * 0.35
         elif atacar is False:
             recuo = {"avancado": 60, "medio": 90, "defesa": 50}.get(self.papel, 60)
             x -= s * recuo

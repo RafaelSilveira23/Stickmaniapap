@@ -988,6 +988,26 @@ class EcraFimJogo:
             s.blit(jog, jog.get_rect(midbottom=(cx + 60 if not virar else cx - 60, caixa.top + 250)))
             texto(s, info["nome"], 22, COR_TEXTO, (cx, caixa.top + 286))
 
+        # Marcadores de cada equipa (nome e minuto), por baixo do nome do clube
+        for equipa, cx in (("azul", caixa.left + 190), ("vermelho", caixa.right - 190)):
+            # Os golos do mesmo jogador ficam juntos: "Hélder Nunes 3', 8'"
+            por_jogador = {}
+            for m in getattr(game, "marcadores", []):
+                if m["equipa"] == equipa:
+                    por_jogador.setdefault(m["nome"] or "Golo", []).append(f"{m['minuto']}'")
+            linhas, atual = [], ""
+            for nome, minutos in por_jogador.items():
+                item = f"{nome} {', '.join(minutos)}"
+                prox = f"{atual}   •   {item}" if atual else item
+                if fonte(13, False).size(prox)[0] > 330 and atual:
+                    linhas.append(atual)
+                    prox = item
+                atual = prox
+            if atual:
+                linhas.append(atual)
+            for k, linha in enumerate(linhas[:2]):
+                texto(s, linha, 13, COR_TEXTO_SUAVE, (cx, caixa.top + 312 + k * 18), negrito=False)
+
         resultado = f"{game.golos_azul}  -  {game.golos_vermelho}"
         texto(s, resultado, 64, (255, 255, 255), (WIDTH // 2, caixa.top + 196), sombra=True)
 

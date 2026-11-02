@@ -11,7 +11,7 @@ from ball import Ball
 from ai import AgentIA
 from goalkeeper import Goalkeeper
 from ui import HUDController
-from team import EQUIPAS_LISTA, obter_info_equipa
+from team import EQUIPAS_LISTA, obter_info_equipa, obter_plantel
 from menu import MenuPrincipal, EcraControlos, TeamSelectMenu, MenuPausa, EcraFimJogo
 from cores import definir_equipamentos, misturar, cor_texto_sobre
 from componentes import COR_DESTAQUE
@@ -23,6 +23,16 @@ from carreira_menu import EcraCarreiraEscolha, EcraCampeonato
 DURACAO_PARTE = 60 * 5   # 5 minutos por parte
 DIFICULDADE_EQUIPA_HUMANA = "normal"   # nível dos colegas e do GR do jogador humano
 RAIO_GR_CORPO = 30                       # distância mínima entre um jogador e um guarda-redes
+
+# Formação em losango com 4 jogadores de campo (como no hóquei em patins real):
+# (distância à linha do meio, desvio vertical, atributos (velocidade, remate, passe, defesa)).
+# A ordem é a mesma de team.POSICOES_FORMACAO: avançado, médio, médio, defesa.
+FORMACAO = [
+    (70,    0, (87, 86, 75, 57)),     # avançado (o jogador humano começa aqui)
+    (210, -95, (81, 79, 86, 72)),     # médio
+    (210,  95, (80, 77, 88, 74)),     # médio
+    (350,   0, (75, 65, 76, 88)),     # defesa
+]
 CAMINHO_DEFINICOES = os.path.join(PASTA_SAVES, "definicoes.json")
 
 
@@ -91,6 +101,7 @@ class Game:
 
         self.golos_azul     = 0
         self.golos_vermelho = 0
+        self.marcadores     = []
         self.parte          = 1
         self.tempo_restante = float(DURACAO_PARTE)
         self.jogo_ativo     = False
@@ -139,73 +150,47 @@ class Game:
         bal_prop_verm = r.baliza_esq
         bal_adv_verm  = r.baliza_dir
 
-        # ── Equipa Azul (FC Porto) — lado direito ────────────────────────
-        # (pos, papel, numero, nome, (vel, rem, pas, def))
-        dados_azul = [
-            ((cx + 70,  cy),       "avancado", 10, "Silva", (88, 85, 76, 58)),
-            ((cx + 200, cy - 90),  "avancado",  9, "Costa", (84, 88, 72, 55)),
-            ((cx + 200, cy + 90),  "medio",     8, "Ramos", (80, 78, 88, 74)),
-            ((cx + 360, cy - 70),  "defesa",    4, "Faria", (76, 68, 78, 87)),
-            ((cx + 360, cy + 70),  "defesa",    5, "Neves", (74, 62, 74, 90)),
-        ]
-
-        self.equipa_azul    = pygame.sprite.Group()
-        self.agentes_azul   = []
-        self.jogador_humano = None
-
-        for i, (pos, papel, num, nome, stats) in enumerate(dados_azul):
-            humano = (i == 0)
-            p = Player("azul", pos, numero=num, nome=nome, humano=humano, teclas="wasd",
-                       kit=self.kit_casa)
-            p.equipa_id       = self.equipa_casa_id
-            p.papel           = papel
-            p.stat_velocidade = stats[0]
-            p.stat_remate     = stats[1]
-            p.stat_passe      = stats[2]
-            p.stat_defesa     = stats[3]
-            pos_base          = self._pos_tatica_azul(papel, pos)
-            p.pos_tatica      = pos_base
-
-            self.equipa_azul.add(p)
-            if humano:
-                self.jogador_humano = p
-                p.selecionado = True
-            else:
-                agente = AgentIA(p, papel, "azul", pos_base,
-                                 bal_prop_azul, bal_adv_azul,
-                                 dificuldade=DIFICULDADE_EQUIPA_HUMANA)
-                self.agentes_azul.append(agente)
-
-        # ── Equipa Vermelha (Riba d'Ave) — lado esquerdo (toda IA) ───────
-        dados_verm = [
-            ((cx - 70,  cy),       "avancado",  9, "López",  (86, 86, 74, 56)),
-            ((cx - 200, cy - 90),  "avancado", 10, "García", (83, 87, 70, 54)),
-            ((cx - 200, cy + 90),  "medio",     8, "Martín", (79, 76, 85, 72)),
-            ((cx - 360, cy - 70),  "defesa",    4, "Pérez",  (75, 66, 76, 86)),
-            ((cx - 360, cy + 70),  "defesa",    5, "Ruiz",   (73, 60, 72, 88)),
-        ]
-
+        # ── As duas equipas: 4 jogadores de campo com os nomes do plantel de cada clube ──
+        # A equipa azul (a do jogador) fica do lado direito e a vermelha do esquerdo.
+        self.equipa_azul       = pygame.sprite.Group()
         self.equipa_vermelha   = pygame.sprite.Group()
+        self.agentes_azul      = []
         self.agentes_vermelhos = []
+        self.jogador_humano    = None
         self.jogador_humano2   = None
 
-        for pos, papel, num, nome, stats in dados_verm:
-            p = Player("vermelho", pos, numero=num, nome=nome, humano=False,
-                       kit=self.kit_fora)
-            p.equipa_id       = self.equipa_fora_id
-            p.papel           = papel
-            p.stat_velocidade = stats[0]
-            p.stat_remate     = stats[1]
-            p.stat_passe      = stats[2]
-            p.stat_defesa     = stats[3]
-            pos_base          = self._pos_tatica_verm(papel, pos)
-            p.pos_tatica      = pos_base
-
-            self.equipa_vermelha.add(p)
-            agente = AgentIA(p, papel, "vermelho", pos_base,
-                             bal_prop_verm, bal_adv_verm,
-                             dificuldade=self.dificuldade)
-            self.agentes_vermelhos.append(agente)
+        for equipa, lado, equipa_id, kit in (("azul", 1, self.equipa_casa_id, self.kit_casa),
+                                             ("vermelho", -1, self.equipa_fora_id, self.kit_fora)):
+            plantel = obter_plantel(equipa_id)["jogadores"]
+            for i, ((dx, dy, stats), (nome, papel, num)) in enumerate(zip(FORMACAO, plantel)):
+                pos = (cx + lado * dx, cy + dy)
+                humano = equipa == "azul" and i == 0
+                p = Player(equipa, pos, numero=num, nome=nome, humano=humano, teclas="wasd",
+                           kit=kit)
+                p.equipa_id       = equipa_id
+                p.papel           = papel
+                p.stat_velocidade = stats[0]
+                p.stat_remate     = stats[1]
+                p.stat_passe      = stats[2]
+                p.stat_defesa     = stats[3]
+                if equipa == "azul":
+                    pos_base = self._pos_tatica_azul(papel, pos)
+                    p.pos_tatica = pos_base
+                    self.equipa_azul.add(p)
+                    if humano:
+                        self.jogador_humano = p
+                        p.selecionado = True
+                    else:
+                        self.agentes_azul.append(AgentIA(p, papel, "azul", pos_base,
+                                                         bal_prop_azul, bal_adv_azul,
+                                                         dificuldade=DIFICULDADE_EQUIPA_HUMANA))
+                else:
+                    pos_base = self._pos_tatica_verm(papel, pos)
+                    p.pos_tatica = pos_base
+                    self.equipa_vermelha.add(p)
+                    self.agentes_vermelhos.append(AgentIA(p, papel, "vermelho", pos_base,
+                                                          bal_prop_verm, bal_adv_verm,
+                                                          dificuldade=self.dificuldade))
 
         self.todos_jogadores = pygame.sprite.Group(
             *self.equipa_azul, *self.equipa_vermelha
@@ -226,6 +211,8 @@ class Game:
         )
         self.gr_azul.kit     = self.kit_casa
         self.gr_vermelho.kit = self.kit_fora
+        self.gr_azul.nome     = obter_plantel(self.equipa_casa_id)["guarda_redes"]
+        self.gr_vermelho.nome = obter_plantel(self.equipa_fora_id)["guarda_redes"]
         self.grupo_gr = pygame.sprite.Group(self.gr_azul, self.gr_vermelho)
         # A IA precisa de saber onde está o GR adversário para rematar para o outro canto
         # A força de cada clube (a mesma do modo carreira) também conta um pouco no jogo
@@ -492,7 +479,10 @@ class Game:
                 acao = self.ecra_fim.handle_event(event)
                 self._som_acao(acao)
                 if acao == "continuar" and self.modo_carreira:
-                    jornada = self.carreira.registar_jogo_do_jogador(self.golos_azul, self.golos_vermelho)
+                    jornada = self.carreira.registar_jogo_do_jogador(
+                        self.golos_azul, self.golos_vermelho,
+                        marcadores_eu=[m["nome"] for m in self.marcadores if m["equipa"] == "azul"],
+                        marcadores_adv=[m["nome"] for m in self.marcadores if m["equipa"] == "vermelho"])
                     self.abrir_campeonato(destaque=jornada)
                 elif acao == "reiniciar":
                     self.iniciar_partida(self.equipa_casa_id, self.equipa_fora_id, self.dificuldade)
@@ -879,6 +869,7 @@ class Game:
         # Reiniciar marcador e cronómetro
         self.golos_azul     = 0
         self.golos_vermelho = 0
+        self.marcadores     = []        # golos deste jogo: {"equipa", "nome", "minuto"}
         self.parte          = 1
         self.tempo_restante = float(DURACAO_PARTE)
         self.jogo_ativo     = True
@@ -1149,8 +1140,9 @@ class Game:
             return  # as duas equipas não podem ser iguais
         self.equipa_casa_id = equipa_id
         self.rink.definir_equipa_casa(equipa_id)
-        for j in self.equipa_azul:
-            j.equipa_id = equipa_id
+        for j, (nome, _p, num) in zip(self.equipa_azul, obter_plantel(equipa_id)["jogadores"]):
+            j.equipa_id, j.nome, j.numero = equipa_id, nome, num
+        self.gr_azul.nome = obter_plantel(equipa_id)["guarda_redes"]
         for a in self.agentes_azul:
             a.definir_forca(FORCA_EQUIPAS.get(equipa_id, 79))
         self._atualizar_equipamentos()
@@ -1162,8 +1154,9 @@ class Game:
         if equipa_id == self.equipa_casa_id:
             return  # as duas equipas não podem ser iguais
         self.equipa_fora_id = equipa_id
-        for j in self.equipa_vermelha:
-            j.equipa_id = equipa_id
+        for j, (nome, _p, num) in zip(self.equipa_vermelha, obter_plantel(equipa_id)["jogadores"]):
+            j.equipa_id, j.nome, j.numero = equipa_id, nome, num
+        self.gr_vermelho.nome = obter_plantel(equipa_id)["guarda_redes"]
         for a in self.agentes_vermelhos:
             a.definir_forca(FORCA_EQUIPAS.get(equipa_id, 79))
         self._atualizar_equipamentos()
@@ -1192,12 +1185,19 @@ class Game:
     def _golo(self, equipa: str):
         info_casa = obter_info_equipa(self.equipa_casa_id)
         info_fora = obter_info_equipa(self.equipa_fora_id)
+        # Marcador: o último jogador da equipa que marcou a tocar na bola
+        marcador = self.bola.ultimo_por_equipa.get(equipa)
+        nome = marcador.nome if marcador is not None else None
+        decorrido = (self.parte - 1) * DURACAO_PARTE + (DURACAO_PARTE - max(0.0, self.tempo_restante))
+        self.marcadores.append({"equipa": equipa, "nome": nome, "minuto": int(decorrido // 60) + 1})
         if equipa == "azul":
             self.golos_azul += 1
             self._msg_texto = f"GOLO!  {info_casa['nome'].upper()}"
         else:
             self.golos_vermelho += 1
             self._msg_texto = f"GOLO!  {info_fora['nome'].upper()}"
+        if nome:
+            self._msg_texto += f"  •  {nome}"
         self._msg_timer = 2.5
         self._msg_equipa = equipa
         som.tocar("golo")
@@ -1211,20 +1211,8 @@ class Game:
         cy = RINK_Y + RINK_H // 2
         self.bola.repor((cx, cy))
 
-        posicoes_azul = [
-            (cx + 70,  cy),
-            (cx + 200, cy - 90),
-            (cx + 200, cy + 90),
-            (cx + 360, cy - 70),
-            (cx + 360, cy + 70),
-        ]
-        posicoes_verm = [
-            (cx - 70,  cy),
-            (cx - 200, cy - 90),
-            (cx - 200, cy + 90),
-            (cx - 360, cy - 70),
-            (cx - 360, cy + 70),
-        ]
+        posicoes_azul = [(cx + dx, cy + dy) for dx, dy, _ in FORMACAO]
+        posicoes_verm = [(cx - dx, cy + dy) for dx, dy, _ in FORMACAO]
         for j, pos in zip(list(self.equipa_azul), posicoes_azul):
             j.pos_x, j.pos_y = float(pos[0]), float(pos[1])
             j.vel_x = j.vel_y = 0.0

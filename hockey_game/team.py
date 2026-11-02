@@ -86,6 +86,64 @@ EQUIPAS_LISTA = [
     "crp_lavra",
 ]
 
+# ── Planteis: guarda-redes + 4 jogadores de campo (como no hóquei em patins real) ──
+# Os jogadores de campo estão pela ordem das posições da formação em losango:
+#   avançado, médio (em cima), médio (em baixo), defesa.
+# Para mudar um nome, basta editar aqui (o modo carreira atualiza a base de dados sozinho).
+PLANTEIS = {
+    "fc_porto": {
+        "guarda_redes": "Xavi Malián",
+        "jogadores": ["Hélder Nunes", "Gonçalo Alves", "Carlo di Benedetto", "Ezequiel Mena"],
+    },
+    "benfica": {
+        "guarda_redes": "Pedro Henriques",
+        "jogadores": ["Pau Bargalló", "Roberto di Benedetto", "Nil Roca", "Gonçalo Pinto"],
+    },
+    "sporting": {
+        "guarda_redes": "Xano Edo",
+        "jogadores": ['Gonzalo "Nolito" Romero', "Alessandro Verona", "Facundo Bridge", "Rafael Bessa"],
+    },
+    "oc_barcelos": {
+        "guarda_redes": "Guillem Torrents",
+        "jogadores": ["Luís Querido", "Miguel Rocha", "Carlos Ramos", "Pedro Silva"],
+    },
+    "ud_oliveirense": {
+        "guarda_redes": "Bernardo Mendes",
+        "jogadores": ["Bruno di Benedetto", "João Souto", "Joan Galbas", "Diogo Lemos"],
+    },
+    "valongo": {
+        "guarda_redes": "Gonçalo Bento",
+        "jogadores": ['Rui Silva "Folhetas"', "João Pedro", "João Maló", "Franco Pósito"],
+    },
+    "riba_dave": {
+        "guarda_redes": "Álvaro Shedha",
+        "jogadores": ["Pedro Martins", "Filipe Almeida", "Ivo Silva", "Martim Lopes"],
+    },
+    "crp_lavra": {
+        "guarda_redes": "Santiago Morales",
+        "jogadores": ["Rafael Silveira", "Tomás Teixeira", "Tiago Mendes", "Martim Constantino"],
+    },
+}
+
+# Posição e número da camisola de cada lugar da formação (o 1 é sempre do guarda-redes)
+POSICOES_FORMACAO = [("avancado", 10), ("medio", 7), ("medio", 8), ("defesa", 4)]
+
+
+def obter_plantel(equipa_id: str) -> dict:
+    """
+    Plantel de uma equipa: {"guarda_redes": nome, "jogadores": [(nome, posicao, numero), ...]}.
+    Se a equipa não tiver plantel definido, usa nomes genéricos.
+    """
+    equipa_id = EQUIPAS_ALIASES.get(equipa_id, equipa_id)
+    dados = PLANTEIS.get(equipa_id, {})
+    nomes = list(dados.get("jogadores", []))
+    nomes += [f"Jogador {i + 1}" for i in range(len(nomes), len(POSICOES_FORMACAO))]
+    return {
+        "guarda_redes": dados.get("guarda_redes", "Guarda-redes"),
+        "jogadores": [(nome, pos, num) for nome, (pos, num) in zip(nomes, POSICOES_FORMACAO)],
+    }
+
+
 EQUIPAS_ALIASES = {
     "porto": "fc_porto",
     "fcp": "fc_porto",

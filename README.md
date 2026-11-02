@@ -42,7 +42,11 @@ No Windows também se pode fazer duplo clique em `jogar.bat`.
   - A força do clube também conta no jogo (os clubes fortes patinam um pouco mais depressa)
 - **Sons** criados por síntese no código (sem ficheiros de fora): apito, tacadas, tabelas, postes,
   defesas, golo com buzina e público; volume dos efeitos e do público nas Definições
-- 8 equipas portuguesas com emblemas
+  - **Melhores marcadores**: cada golo fica com o nome de quem marcou (no jogo e nos jogos simulados),
+    gravado nas tabelas `jogador` e `estatistica`; separador MARCADORES no ecrã do campeonato
+- 8 equipas portuguesas com emblemas e **planteis reais**: 4 jogadores de campo + guarda-redes, como no
+  hóquei em patins (formação em losango: avançado, dois médios e defesa)
+- Os nomes aparecem no cartão do jogador, nas faltas, nos golos ("GOLO! FC PORTO • Hélder Nunes") e no fim do jogo
 - **Equipamentos com as cores de cada clube**; se as cores das duas equipas forem parecidas, a equipa visitante joga com o equipamento alternativo
 - **Linhas do ringue na cor da equipa da casa**, ajustadas automaticamente para se verem bem no piso de madeira
 - IA com 3 níveis de dificuldade, sistema de faltas, livres diretos e penáltis
@@ -80,6 +84,7 @@ No Windows também se pode fazer duplo clique em `jogar.bat`.
 | `hockey_game/ui.py` | HUD (marcador, mini-mapa, cartão do jogador) |
 
 Para mudar as cores de uma equipa, edita `cor_primaria`, `cor_secundaria` e `padrao` (`"liso"` ou `"riscas"`) em `hockey_game/team.py`.
+Para mudar os jogadores, edita `PLANTEIS` no mesmo ficheiro (guarda-redes + 4 jogadores de campo, pela ordem avançado, médio, médio, defesa).
 
 ## Créditos
 

@@ -10,7 +10,7 @@ Como funciona:
 
 Tudo fica numa base de dados SQLite (saves/carreira.db), por isso dá para fechar o jogo
 e continuar mais tarde. As tabelas seguem o modelo de dados do relatório:
-  equipa, torneio, partida, classificacao
+  equipa, torneio, partida, classificacao, jogador e estatistica (golos de cada jogador em cada partida)
 Todas as consultas usam parâmetros (?), nunca texto colado na SQL.
 """
 import math
@@ -19,7 +19,7 @@ import random
 import sqlite3
 from datetime import datetime
 
-from team import EQUIPAS_LISTA, EQUIPAS_INFO
+from team import EQUIPAS_LISTA, EQUIPAS_INFO, obter_plantel
 
 PASTA_SAVES = os.path.join(os.path.dirname(os.path.abspath(__file__)), "saves")
 CAMINHO_BD = os.path.join(PASTA_SAVES, "carreira.db")
@@ -78,7 +78,25 @@ CREATE TABLE IF NOT EXISTS classificacao (
     pontos          INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (torneio_id, equipa_id)
 );
+CREATE TABLE IF NOT EXISTS jogador (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    equipa_id   TEXT NOT NULL REFERENCES equipa(id),
+    nome        TEXT NOT NULL,
+    numero      INTEGER NOT NULL CHECK (numero BETWEEN 1 AND 99),
+    posicao     TEXT NOT NULL CHECK (posicao IN ('guarda_redes', 'avancado', 'medio', 'defesa')),
+    UNIQUE (equipa_id, nome)
+);
+CREATE TABLE IF NOT EXISTS estatistica (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    partida_id  INTEGER NOT NULL REFERENCES partida(id),
+    jogador_id  INTEGER NOT NULL REFERENCES jogador(id),
+    golos       INTEGER NOT NULL DEFAULT 0 CHECK (golos >= 0),
+    UNIQUE (partida_id, jogador_id)
+);
 """
+
+# Probabilidade de cada posição marcar um golo num jogo simulado (o avançado marca mais)
+PESO_GOLO_POSICAO = {"avancado": 0.40, "medio": 0.23, "defesa": 0.14}
 
 
 def gerar_calendario(equipas: list) -> list:
@@ -182,6 +200,16 @@ class Campeonato:
                 "INSERT OR IGNORE INTO equipa (id, nome, sigla, forca) VALUES (?, ?, ?, ?)",
                 [(e, EQUIPAS_INFO[e]["nome"], EQUIPAS_INFO[e]["sigla"], FORCA_EQUIPAS.get(e, 75))
                  for e in EQUIPAS_LISTA])
+            # Jogadores dos planteis (team.py). Se um nome já existe, só atualiza o número e a posição
+            # ("upsert"): assim os golos de épocas antigas não se perdem.
+            for e in EQUIPAS_LISTA:
+                plantel = obter_plantel(e)
+                linhas = [(e, plantel["guarda_redes"], 1, "guarda_redes")]
+                linhas += [(e, nome, num, pos) for nome, pos, num in plantel["jogadores"]]
+                self.con.executemany(
+                    "INSERT INTO jogador (equipa_id, nome, numero, posicao) VALUES (?, ?, ?, ?) "
+                    "ON CONFLICT (equipa_id, nome) DO UPDATE SET numero = excluded.numero, "
+                    "posicao = excluded.posicao", linhas)
         self.torneio_id = None
         self._carregar_ativo()
 
@@ -334,13 +362,57 @@ class Campeonato:
     # Registar resultados                                                  #
     # ------------------------------------------------------------------ #
 
-    def _registar(self, partida_id: int, casa: str, fora: str, gc: int, gf: int, simulado: bool = False):
-        """Grava o resultado de uma partida e atualiza a classificação das duas equipas."""
+    def _id_jogador(self, equipa_id: str, nome: str) -> int:
+        linha = self.con.execute("SELECT id FROM jogador WHERE equipa_id = ? AND nome = ?",
+                                 (equipa_id, nome)).fetchone()
+        if linha:
+            return linha["id"]
+        # Nome que não está no plantel (não devia acontecer): acrescenta-o
+        return self.con.execute(
+            "INSERT INTO jogador (equipa_id, nome, numero, posicao) VALUES (?, ?, 99, 'medio')",
+            (equipa_id, nome)).lastrowid
+
+    def _gravar_marcadores(self, partida_id: int, equipa_id: str, golos: int, nomes, rnd: random.Random):
+        """
+        Grava quem marcou os golos de uma equipa numa partida.
+        'nomes' são os marcadores conhecidos (no jogo jogado vêm do Game); os golos que faltam
+        são sorteados entre os jogadores de campo, com mais hipóteses para o avançado.
+        """
+        nomes = [n for n in (nomes or []) if n][:golos]
+        campo = obter_plantel(equipa_id)["jogadores"]
+        pesos = [PESO_GOLO_POSICAO.get(pos, 0.2) for _n, pos, _num in campo]
+        while len(nomes) < golos:
+            nomes.append(rnd.choices([n for n, _p, _num in campo], weights=pesos)[0])
+        contagem = {}
+        for n in nomes:
+            contagem[n] = contagem.get(n, 0) + 1
+        for nome, g in contagem.items():
+            self.con.execute(
+                "INSERT INTO estatistica (partida_id, jogador_id, golos) VALUES (?, ?, ?) "
+                "ON CONFLICT (partida_id, jogador_id) DO UPDATE SET golos = golos + excluded.golos",
+                (partida_id, self._id_jogador(equipa_id, nome), g))
+
+    def melhores_marcadores(self, n: int = 10) -> list:
+        """Tabela dos melhores marcadores do campeonato (soma dos golos de todas as partidas)."""
+        return self.con.execute(
+            "SELECT j.nome, j.equipa_id, j.posicao, SUM(e.golos) AS golos "
+            "FROM estatistica e JOIN jogador j ON j.id = e.jogador_id "
+            "JOIN partida p ON p.id = e.partida_id "
+            "WHERE p.torneio_id = ? AND e.golos > 0 "
+            "GROUP BY j.id ORDER BY golos DESC, j.nome ASC LIMIT ?",
+            (self.torneio_id, n)).fetchall()
+
+    def _registar(self, partida_id: int, casa: str, fora: str, gc: int, gf: int, simulado: bool = False,
+                  marc_casa=None, marc_fora=None, rnd: random.Random | None = None):
+        """Grava o resultado de uma partida, os marcadores e atualiza a classificação das duas equipas."""
         if gc < 0 or gf < 0:
             raise ValueError("não pode haver golos negativos")
         self.con.execute(
             "UPDATE partida SET golos_casa = ?, golos_fora = ?, jogada = 1, simulado = ? "
             "WHERE id = ? AND jogada = 0", (gc, gf, int(simulado), partida_id))
+        rnd = rnd or random.Random()
+        self._gravar_marcadores(partida_id, casa, gc, marc_casa, rnd)
+        self._gravar_marcadores(partida_id, fora, gf, marc_fora, rnd)
         for eq, marcados, sofridos in ((casa, gc, gf), (fora, gf, gc)):
             v = int(marcados > sofridos)
             e = int(marcados == sofridos)
@@ -354,7 +426,8 @@ class Campeonato:
                 (v, e, d, marcados, sofridos, pts, self.torneio_id, eq))
 
     def registar_jogo_do_jogador(self, golos_jogador: int, golos_adversario: int,
-                                 semente: int | None = None, simulado: bool = False) -> int:
+                                 semente: int | None = None, simulado: bool = False,
+                                 marcadores_eu=None, marcadores_adv=None) -> int:
         """
         Grava o resultado do jogo do jogador (jogado ou simulado) e simula os outros jogos
         dessa jornada. Tudo numa transação. Devolve o número da jornada.
@@ -364,8 +437,10 @@ class Campeonato:
             raise RuntimeError("o campeonato já terminou")
         if jogo["casa_id"] == self.equipa_jogador:
             gc, gf = golos_jogador, golos_adversario
+            mc, mf = marcadores_eu, marcadores_adv
         else:
             gc, gf = golos_adversario, golos_jogador
+            mc, mf = marcadores_adv, marcadores_eu
         rnd = random.Random(semente)
         with self.con:
             # Os outros jogos são simulados ANTES de gravar o do jogador, para a "forma"
@@ -373,9 +448,9 @@ class Campeonato:
             outros = [(p, self._simular(p["casa_id"], p["fora_id"], rnd))
                       for p in self.jogos_da_jornada(jogo["jornada"])
                       if not p["jogada"] and not p["do_jogador"]]
-            self._registar(jogo["id"], jogo["casa_id"], jogo["fora_id"], gc, gf, simulado)
+            self._registar(jogo["id"], jogo["casa_id"], jogo["fora_id"], gc, gf, simulado, mc, mf, rnd)
             for p, (a, b) in outros:
-                self._registar(p["id"], p["casa_id"], p["fora_id"], a, b, True)
+                self._registar(p["id"], p["casa_id"], p["fora_id"], a, b, True, rnd=rnd)
             por_jogar = self.con.execute(
                 "SELECT COUNT(*) FROM partida WHERE torneio_id = ? AND jogada = 0",
                 (self.torneio_id,)).fetchone()[0]

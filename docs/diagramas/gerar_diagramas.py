@@ -21,7 +21,7 @@ def casos_de_uso():
 
     esq = [("uc1", "Escolher equipas"), ("uc2", "Escolher dificuldade"), ("uc3", "Ver definições\n(controlos, ecrã inteiro)"),
            ("uc4", "Jogar partida"), ("uc5", "Pausar / continuar"), ("uc6", "Ver resultado final"),
-           ("uc7", "Jogar o modo carreira\n(campeonato)"), ("uc8", "Consultar classificação\ne calendário")]
+           ("uc7", "Jogar o modo carreira\n(campeonato)"), ("uc8", "Consultar classificação,\ncalendário e marcadores")]
     for i, (id, txt) in enumerate(esq):
         planeado = "implementar" in txt
         d.caixa(id, 215, 55 + i * 78, 225, 54, txt, "elipse", "amarelo" if planeado else "azul",
@@ -273,9 +273,9 @@ def classes():
     d.seta("game", "camp", "0..1", exato=True, pontos=[(420, 225), (362, 225), (362, 460), (310, 460)],
            pos_texto=0.55)
     d.seta("game", "ball", "1")
-    d.seta("game", "player", "10", pontos=[(700, 330)])
+    d.seta("game", "player", "8", pontos=[(700, 330)])
     d.seta("game", "gr", "2", exato=True, pontos=[(440, 240), (440, 295), (345, 295), (345, 590), (380, 590)], pos_texto=0.55)
-    d.seta("game", "ia", "9", exato=True, pontos=[(720, 150), (790, 150), (790, 395), (1105, 395), (1105, 440)], pos_texto=0.75)
+    d.seta("game", "ia", "7", exato=True, pontos=[(720, 150), (790, 150), (790, 395), (1105, 395), (1105, 440)], pos_texto=0.75)
     d.seta("ia", "player")
     d.caixa("tctrl", 985, 490, 60, 20, "controla", "texto", tam=11)
     d.seta("player", "anim", "1", exato=True, pontos=[(760, 615), (760, 715), (165, 715), (165, 650)], pos_texto=0.5)
@@ -301,10 +301,10 @@ def modelo_dados():
     T("partida", 440, 220, 240, 185, "Partida",
       ["PK id", "FK torneio_id", "jornada", "FK casa_id", "FK fora_id", "golos_casa", "golos_fora",
        "jogada", "do_jogador", "simulado"])
-    T("jogador", 20, 260, 240, 140, "Jogador (futuro)",
-      ["PK id", "FK equipa_id", "nome", "numero", "posicao", "velocidade", "remate"], "amarelo", True)
-    T("estat", 860, 260, 240, 140, "Estatistica (futuro)",
-      ["PK id", "FK partida_id", "FK jogador_id", "golos", "remates", "passes", "faltas"], "amarelo", True)
+    T("jogador", 20, 260, 240, 115, "Jogador",
+      ["PK id", "FK equipa_id", "nome", "numero", "posicao"])
+    T("estat", 860, 260, 240, 100, "Estatistica",
+      ["PK id", "FK partida_id", "FK jogador_id", "golos"])
 
     d.seta("equipa", "torneio", "1 : N\n(equipa do jogador)", ponta=False, exato=True,
            pontos=[(260, 70), (440, 70)])
@@ -314,12 +314,12 @@ def modelo_dados():
     d.seta("torneio", "class", "1 : N", ponta=False, exato=True, pontos=[(680, 100), (860, 100)])
     d.seta("equipa", "class", "1 : N", ponta=False, exato=True,
            pontos=[(140, 20), (140, 5), (980, 5), (980, 20)], pos_texto=0.5)
-    d.seta("equipa", "jogador", "1 : N", ponta=False, tracejado=True, exato=True,
+    d.seta("equipa", "jogador", "1 : N", ponta=False, exato=True,
            pontos=[(80, 120), (80, 260)])
-    d.seta("partida", "estat", "1 : N", ponta=False, tracejado=True, exato=True,
+    d.seta("partida", "estat", "1 : N", ponta=False, exato=True,
            pontos=[(680, 330), (860, 330)])
-    d.seta("jogador", "estat", "1 : N", ponta=False, tracejado=True, exato=True,
-           pontos=[(140, 400), (140, 435), (980, 435), (980, 400)], pos_texto=0.5)
+    d.seta("jogador", "estat", "1 : N", ponta=False, exato=True,
+           pontos=[(140, 375), (140, 435), (980, 435), (980, 360)], pos_texto=0.5)
     return d
 
 
