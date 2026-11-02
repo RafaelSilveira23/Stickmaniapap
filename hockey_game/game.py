@@ -18,6 +18,8 @@ from componentes import COR_DESTAQUE
 from graficos import sombra_suave
 from sons import som
 from efeitos import Efeitos, contornar
+from remate_pov import RematePOV, MEIA_BOCA
+import random
 from carreira import Campeonato, CAMINHO_BD, PASTA_SAVES, FORCA_EQUIPAS
 from carreira_menu import EcraCarreiraEscolha, EcraCampeonato
 
@@ -107,6 +109,11 @@ class Game:
         self.efeitos        = Efeitos()      # estilo arcade (liga/desliga nas Definições)
         self.efeitos.ativo  = self.estilo_arcade
         self._reposicao_pendente = None      # depois de um golo, a festa dura um pouco antes de repor
+        self.remate_pov     = None           # ecrã do remate na primeira pessoa (quando está aberto)
+        self.modo_teste     = False          # MODO TESTE: só o jogador contra o guarda-redes
+        self.teste          = {"remates": 0, "golos": 0, "defesas": 0, "fora": 0}
+        self._teste_espera  = 0.0
+        self._teste_livre   = 0.0
         self._dono_anterior = None
         self.parte          = 1
         self.tempo_restante = float(DURACAO_PARTE)
@@ -425,6 +432,8 @@ class Game:
                     self.abrir_selecao_equipas()
                 elif acao == "carreira":
                     self.abrir_escolha_carreira()
+                elif acao == "teste":
+                    self.iniciar_teste()
                 elif acao == "definicoes":
                     self._abrir_definicoes("menu_principal")
                 elif acao == "sair":
@@ -543,6 +552,15 @@ class Game:
                     self.running = False
             return
 
+        # ── Remate na primeira pessoa ────────────────────────────────────
+        if self.remate_pov is not None:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    self.running = False
+                else:
+                    self.remate_pov.handle_event(event)
+            return
+
         # ── Partida a decorrer ───────────────────────────────────────────
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -556,6 +574,8 @@ class Game:
                         self.abrir_pausa()
                 elif event.key == pygame.K_F3:
                     self.show_debug = not self.show_debug
+                elif self.modo_teste and event.key == pygame.K_r:
+                    self._teste_novo_remate()
                 elif self.modo_carreira and event.key in (pygame.K_F4, pygame.K_t, pygame.K_y, pygame.K_1,
                                                           pygame.K_2, pygame.K_3, pygame.K_4, pygame.K_5,
                                                           pygame.K_6, pygame.K_7, pygame.K_8):
@@ -651,32 +671,123 @@ class Game:
                 self.jogador_humano.fazer_passe(self.bola, direcao)
 
     def _acao_remate(self):
-        """Ao premir X: entra em modo de mira. Ao premir novamente: confirma e remata."""
-        if not self.jogo_ativo:
+        """Ao premir X com a bola: abre o remate na primeira pessoa (apontar e escolher a força)."""
+        if not self.jogo_ativo or self.remate_pov is not None:
             return
-        if not self.jogador_humano.tem_bola:
+        j = self.jogador_humano
+        if not j.tem_bola:
             return
-
-        if not self._mira_ativa:
-            # Entrar em modo de mira
-            self._mira_ativa     = True
-            self._mira_forca     = 0.3
-            self._mira_forca_dir = 1.0
-            # Direção inicial: para a baliza adversária
-            bx = self.jogador_humano.pos_x
-            by = self.jogador_humano.pos_y
-            # Equipa azul ataca para a esquerda; outros para a direita
-            if self.jogador_humano.equipa == "azul":
-                alvo_x = self.rink.linha_golo_esq_x
-            else:
-                alvo_x = self.rink.linha_golo_dir_x
-            alvo_y = (self.rink.baliza_topo_y + self.rink.baliza_base_y) / 2
-            v = pygame.math.Vector2(alvo_x - bx, alvo_y - by)
+        gx, cy = self.rink.linha_golo_esq_x, self.rink.rect.centery
+        if j.pos_x - gx < 30:
+            # Atrás da linha de golo não se vê a baliza: remate rápido para o meio dela
+            v = pygame.math.Vector2(gx - j.pos_x, cy - j.pos_y)
             if v.length_squared() > 0:
-                self._mira_direcao = v.normalize()
+                from ball import REMATE_FORCA
+                j.fazer_remate_com_forca(self.bola, v.normalize(), REMATE_FORCA * 0.7)
+            return
+        self.remate_pov = RematePOV(self.screen, self.rink, j, self.gr_vermelho, self.dificuldade,
+                                    limite_tempo=None if self.modo_teste else 5.0,
+                                    cor_linhas=self.rink.cor_linhas)
+
+    def _aplicar_remate(self, res):
+        """Depois do remate na primeira pessoa, põe a bola no sítio certo do jogo 2D."""
+        self.remate_pov = None
+        if res is None:                     # cancelou com ESC: continua com a bola
+            return
+        j, b = self.jogador_humano, self.bola
+        gx, cy = self.rink.linha_golo_esq_x, self.rink.rect.centery
+        r, u, v = res["resultado"], res["u"], res["velocidade"]
+        lado = 1 if u >= 0 else -1
+        j._comecar_acao("remate", 0.30)
+        j.tem_bola = False
+        b.libertar(pygame.math.Vector2(0, 0), dono_anterior=j)
+        b.eventos.clear()                   # os sons já tocaram no ecrã do remate
+        if self.modo_teste:
+            self.teste["remates"] += 1
+            chave = {"golo": "golos", "defesa": "defesas"}.get(r, "fora")
+            self.teste[chave] += 1
+            self._teste_espera = 1.6
+        if r == "golo":
+            b.pos_x, b.pos_y = gx - 16, cy + max(-28, min(28, u))
+            b.vel.update(-60, 0)
+            self._golo("azul")
+        elif r == "defesa":
+            self.gr_vermelho.pos_y = cy + res["u_gr"]
+            b.pos_x, b.pos_y = gx + 26, cy + res["u_gr"] + lado * 8
+            b.vel.update(v * 0.3, random.uniform(-1, 1) * v * 0.2)
+            sx, sy = self.rink.camera.projetar(gx, b.pos_y)
+            self._efeitos_bola("defesa", v, sx, sy)
+        elif r == "poste":
+            b.pos_x, b.pos_y = gx + 8, cy + lado * (MEIA_BOCA + 7)
+            b.vel.update(v * 0.35, lado * v * 0.25)
+            sx, sy = self.rink.camera.projetar(gx, b.pos_y)
+            self._efeitos_bola("poste", v, sx, sy)
         else:
-            # Confirmar remate
-            self._confirmar_remate()
+            if abs(u) > MEIA_BOCA + 3:      # ao lado da baliza
+                b.pos_x, b.pos_y = gx - 10, cy + lado * min(abs(u) + 10, 75)
+                b.vel.update(-v * 0.3, lado * 40)
+            else:                           # por cima da barra: cai atrás da baliza
+                b.pos_x, b.pos_y = gx - 70, cy + u
+                b.vel.update(-v * 0.2, lado * 40)
+        b.rect.center = (round(b.pos_x), round(b.pos_y))
+
+    # ------------------------------------------------------------------ #
+    # MODO TESTE: treinar remates contra o guarda-redes                   #
+    # ------------------------------------------------------------------ #
+
+    def iniciar_teste(self):
+        """Só o jogador e o guarda-redes adversário; remates ilimitados e contagem dos golos."""
+        self.iniciar_partida(self.equipa_casa_id, self.equipa_fora_id)
+        self.modo_teste = True
+        humano = self.jogador_humano
+        for j in list(self.equipa_azul):
+            if j is not humano:
+                self.equipa_azul.remove(j)
+        self.agentes_azul = []
+        self.equipa_vermelha.empty()
+        self.agentes_vermelhos = []
+        self.todos_jogadores = pygame.sprite.Group(humano)
+        self.tempo_restante = 1e9
+        self.teste = {"remates": 0, "golos": 0, "defesas": 0, "fora": 0}
+        self._teste_novo_remate()
+        self._msg_texto = "MODO TESTE  •  aproxima-te e carrega em X"
+        self._msg_timer = 2.5
+        self._msg_equipa = "azul"
+
+    def _teste_novo_remate(self):
+        """Põe o jogador com a bola num sítio novo à frente da baliza."""
+        r = self.rink.rect
+        gx, cy = self.rink.linha_golo_esq_x, r.centery
+        j = self.jogador_humano
+        j.pos_x = gx + random.uniform(130, 420)
+        j.pos_y = max(r.top + 40, min(r.bottom - 40, cy + random.uniform(-170, 170)))
+        j.vel_x = j.vel_y = 0.0
+        j.set_target(0.0, 0.0)
+        j.rect.center = (round(j.pos_x), round(j.pos_y))
+        self.bola.repor((j.pos_x, j.pos_y))
+        self.bola.definir_dono(j)
+        j.tem_bola = True
+        self.bola.seguir_jogador(j)
+        self.gr_vermelho.pos_y = float(cy)
+        self._teste_espera = 0.0
+        self._teste_livre = 0.0
+        self._reposicao_pendente = None
+
+    def _update_teste(self, dt: float):
+        """Depois de cada remate (ou se a bola ficar perdida), o jogador volta a ter a bola."""
+        if self._reposicao_pendente is not None:
+            return
+        if self._teste_espera > 0:
+            self._teste_espera -= dt
+            if self._teste_espera <= 0:
+                self._teste_novo_remate()
+            return
+        if self.bola.dono is None and self.bola.vel.length() < 20:
+            self._teste_livre += dt
+            if self._teste_livre > 2.0:
+                self._teste_novo_remate()
+        else:
+            self._teste_livre = 0.0
 
     def _confirmar_remate(self):
         if not self._mira_ativa:
@@ -757,6 +868,14 @@ class Game:
 
         if not self.jogo_ativo:
             return
+
+        if self.remate_pov is not None:
+            self.remate_pov.update(dt)
+            if self.remate_pov.terminado:
+                self._aplicar_remate(self.remate_pov.resultado)
+            return
+        if self.modo_teste:
+            self._update_teste(dt)
 
         # Estilo arcade: pausa curta nos impactos e câmara lenta depois dos golos
         dt_real = dt
@@ -913,6 +1032,8 @@ class Game:
         # Repor estados da partida anterior (mira aberta, pausa, ...)
         self._cancelar_mira()
         self.pausado = False
+        self.modo_teste = False
+        self.remate_pov = None
 
         # Reiniciar contadores de faltas
         self.faltas_azul     = 0
@@ -1078,7 +1199,7 @@ class Game:
         if self.jogo_ativo and not self.fim_jogo:
             self._cancelar_mira()
             self.pausado = True
-            self.menu_pausa = MenuPausa(self.screen, modo_carreira=self.modo_carreira)
+            self.menu_pausa = MenuPausa(self.screen, modo_carreira=self.modo_carreira, modo_teste=self.modo_teste)
 
     def abrir_selecao_equipas(self):
         """Vai para o ecrã de seleção de equipas, mantendo as últimas escolhas e a dificuldade."""
@@ -1185,6 +1306,8 @@ class Game:
 
     def ir_para_menu_principal(self, casa_id: str = None, fora_id: str = None):
         self._cancelar_mira()
+        self.modo_teste = False
+        self.remate_pov = None
         self.modo_carreira = False
         self.pausado = False
         self.jogo_ativo = False
@@ -1295,6 +1418,9 @@ class Game:
     def _repor_posicoes(self, saida: str = "azul"):
         """Volta a pôr todos nas posições iniciais. 'saida' = equipa que fica com a bola."""
         self._cancelar_mira()
+        if self.modo_teste:
+            self._teste_novo_remate()
+            return
         cx = RINK_X + RINK_W // 2
         cy = RINK_Y + RINK_H // 2
         self.bola.repor((cx, cy))
@@ -1368,6 +1494,8 @@ class Game:
                 self.ecra_controlos.draw(por_cima_do_jogo=True)
             else:
                 self.ecra_controlos.draw()
+        elif self.remate_pov is not None:
+            self.remate_pov.draw()
         else:
             self._draw_cena()
             if self.pausado:

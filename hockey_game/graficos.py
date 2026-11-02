@@ -153,6 +153,12 @@ def icone(nome: str, tamanho: int, cor=(255, 255, 255)) -> pygame.Surface:
             # Pé e base
             pygame.draw.rect(s, c, (T * 0.45, T * 0.54, T * 0.10, T * 0.20))
             pygame.draw.rect(s, c, (T * 0.28, T * 0.74, T * 0.44, T * 0.12), border_radius=int(T * 0.03))
+        elif nome == "alvo":
+            # Alvo (círculos) para o modo teste
+            for k, r in enumerate((0.46, 0.32, 0.18)):
+                pygame.draw.circle(s, c, (m, m), T * r, int(T * 0.07) if k < 2 else 0)
+            pygame.draw.line(s, c, (m, T * 0.0), (m, T * 0.22), int(T * 0.06))
+            pygame.draw.line(s, c, (m, T * 0.78), (m, T), int(T * 0.06))
         elif nome == "avancar":
             # Dois triângulos (avançar rápido = simular)
             for x0 in (T * 0.12, T * 0.48):

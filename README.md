@@ -21,7 +21,8 @@ No Windows também se pode fazer duplo clique em `jogar.bat`.
 | SHIFT | Sprint |
 | C / TAB / ESPAÇO | Trocar para o jogador mais perto da bola |
 | Z | Passe |
-| X | Abrir a mira de remate; X ou clique para rematar |
+| X | Remate na primeira pessoa: rato/setas apontam à baliza, manter X (ou o botão do rato) dá a força, largar remata |
+| R | No MODO TESTE: novo remate noutro sítio |
 | ESC / P | Pausa (ESC também cancela a mira) |
 | F4 | Mudar a dificuldade da IA |
 | F11 | Ecrã inteiro |
@@ -53,7 +54,10 @@ No Windows também se pode fazer duplo clique em `jogar.bat`.
 - **Equipamentos com as cores de cada clube**; se as cores das duas equipas forem parecidas, a equipa visitante joga com o equipamento alternativo
 - **Linhas do ringue na cor da equipa da casa**, ajustadas automaticamente para se verem bem no piso de madeira
 - IA com 3 níveis de dificuldade, sistema de faltas, livres diretos e penáltis
-- Mira de remate com barra de força
+- **Remate na primeira pessoa**: a câmara passa para os olhos do jogador; apontas a qualquer ponto da baliza
+  (também em altura) e escolhes a força — mais força é mais rápido mas menos preciso. O guarda-redes tem
+  tempo de reação, mergulho e pode adivinhar o lado (`hockey_game/remate_pov.py`)
+- **MODO TESTE** no menu principal: só tu contra o guarda-redes, para treinar remates (golos / remates no marcador)
 - **Animações de patinagem melhoradas**: o jogador vira-se para o lado para onde patina,
   inclina-se ao acelerar e para trás ao travar, balança a cada passada, tem sombra no chão
   e larga raspas dos patins nas travagens e nas viragens rápidas
@@ -75,6 +79,8 @@ No Windows também se pode fazer duplo clique em `jogar.bat`.
 | `hockey_game/carreira_menu.py` | Ecrãs do modo carreira (escolha da equipa e campeonato) |
 | `hockey_game/componentes.py` | Botões, painéis e fundos reutilizáveis da interface |
 | `hockey_game/graficos.py` | Efeitos gráficos: luzes, sombras suaves, ícones e título desenhados no código |
+| `hockey_game/remate_pov.py` | Remate na primeira pessoa (perspetiva, mira, força e modelo do guarda-redes) |
+| `hockey_game/efeitos.py` | Estilo arcade (tremer, pausa nos impactos, partículas, festa do golo) |
 | `hockey_game/sons.py` | Síntese e reprodução dos sons (os `.wav` ficam em `hockey_game/assets/sounds`) |
 | `ferramentas/analise_simulacao.py` | Verifica se os resultados simulados do modo carreira fazem sentido |
 | `hockey_game/cores.py` | Cores dos equipamentos, contraste e recoloração dos sprites |

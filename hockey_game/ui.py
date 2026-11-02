@@ -129,15 +129,21 @@ class HUDController:
                          border_top_right_radius=8, border_bottom_right_radius=8)
         screen.blit(surf_timer, (time_x, sc_y))
 
-        # Tempo (ex: 12:34)
-        mins = max(0, int(game.tempo_restante)) // 60
-        segs = max(0, int(game.tempo_restante)) % 60
-        t_cron = self.font_time.render(f"{mins:02d}:{segs:02d}", True, (255, 255, 255))
-        screen.blit(t_cron, (time_x + timer_w // 2 - t_cron.get_width() // 2, sc_y + 4))
-
-        # Parte (ex: 1.ª Parte / 2.ª Parte)
         f_parte = pygame.font.SysFont("Arial", 11, bold=True)
-        t_parte = f_parte.render(f"{game.parte}.ª Parte", True, (160, 190, 230))
+        if getattr(game, "modo_teste", False):
+            # MODO TESTE: em vez do tempo, mostra golos / remates
+            t = game.teste
+            t_cron = self.font_time.render(f"{t['golos']}/{t['remates']}", True, (255, 220, 80))
+            screen.blit(t_cron, (time_x + timer_w // 2 - t_cron.get_width() // 2, sc_y + 4))
+            t_parte = f_parte.render("TESTE", True, (160, 190, 230))
+        else:
+            # Tempo (ex: 12:34)
+            mins = max(0, int(game.tempo_restante)) // 60
+            segs = max(0, int(game.tempo_restante)) % 60
+            t_cron = self.font_time.render(f"{mins:02d}:{segs:02d}", True, (255, 255, 255))
+            screen.blit(t_cron, (time_x + timer_w // 2 - t_cron.get_width() // 2, sc_y + 4))
+            # Parte (ex: 1.ª Parte / 2.ª Parte)
+            t_parte = f_parte.render(f"{game.parte}.ª Parte", True, (160, 190, 230))
         screen.blit(t_parte, (time_x + timer_w // 2 - t_parte.get_width() // 2, sc_y + 28))
 
         # Moldura exterior do placar completo

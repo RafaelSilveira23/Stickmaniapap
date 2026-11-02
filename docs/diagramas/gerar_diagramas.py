@@ -14,21 +14,22 @@ PASTA = os.path.dirname(os.path.abspath(__file__))
 # 1. Casos de uso
 # ═══════════════════════════════════════════════════════════════════════
 def casos_de_uso():
-    d = Diagrama("01_casos_de_uso", 1010, 690, "Casos de uso")
-    d.caixa("sis", 190, 10, 630, 670, "Sistema: StickMania", "grupo", "cinza", tam=15)
+    d = Diagrama("01_casos_de_uso", 1010, 770, "Casos de uso")
+    d.caixa("sis", 190, 10, 630, 750, "Sistema: StickMania", "grupo", "cinza", tam=15)
     d.caixa("jog", 60, 290, 50, 90, "Jogador", "ator", "azul")
     d.caixa("ia", 905, 290, 50, 90, "Computador (IA)", "ator", "vermelho")
 
     esq = [("uc1", "Escolher equipas"), ("uc2", "Escolher dificuldade"), ("uc3", "Ver definições\n(controlos, ecrã inteiro)"),
            ("uc4", "Jogar partida"), ("uc5", "Pausar / continuar"), ("uc6", "Ver resultado final"),
-           ("uc7", "Jogar o modo carreira\n(campeonato)"), ("uc8", "Consultar classificação,\ncalendário e marcadores")]
+           ("uc7", "Jogar o modo carreira\n(campeonato)"), ("uc8", "Consultar classificação,\ncalendário e marcadores"),
+           ("uc15", "Treinar remates\n(modo teste)")]
     for i, (id, txt) in enumerate(esq):
         planeado = "implementar" in txt
         d.caixa(id, 215, 55 + i * 78, 225, 54, txt, "elipse", "amarelo" if planeado else "azul",
                 tracejado=planeado, negrito=(id == "uc4"))
         d.seta("jog", id, ponta=False, exato=True, pontos=[(110, 330), (215, 55 + i * 78 + 27)])
 
-    dir_ = [("uc9", "Mover o jogador", 160), ("uc10", "Passar a bola", 230), ("uc11", "Rematar com mira", 300),
+    dir_ = [("uc9", "Mover o jogador", 160), ("uc10", "Passar a bola", 230), ("uc11", "Rematar na 1.ª pessoa", 300),
             ("uc12", "Trocar de jogador", 370)]
     for id, txt, y in dir_:
         d.caixa(id, 565, y, 200, 50, txt, "elipse", "verde")

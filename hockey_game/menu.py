@@ -201,11 +201,13 @@ class MenuPrincipal:
         bw, x = 460, WIDTH // 2 - 230
         self.engrenagem = BotaoEngrenagem((WIDTH - 50, 48))
         self.lista = ListaBotoes([
-            BotaoMenu((x, 300, bw, 78), "JOGO RÁPIDO", "Escolhe dois clubes e joga uma partida",
+            BotaoMenu((x, 290, bw, 70), "JOGO RÁPIDO", "Escolhe dois clubes e joga uma partida",
                       "jogar", (40, 190, 100), "jogar"),
-            BotaoMenu((x, 392, bw, 78), "MODO CARREIRA", "Leva o teu clube ao título do campeonato",
+            BotaoMenu((x, 370, bw, 70), "MODO CARREIRA", "Leva o teu clube ao título do campeonato",
                       "carreira", (255, 175, 40), "trofeu"),
-            BotaoMenu((x + 80, 486, bw - 160, 56), "SAIR", "", "sair", (230, 70, 70), "sair"),
+            BotaoMenu((x, 450, bw, 70), "MODO TESTE", "Treina remates contra o guarda-redes",
+                      "teste", (80, 170, 255), "alvo"),
+            BotaoMenu((x + 80, 532, bw - 160, 50), "SAIR", "", "sair", (230, 70, 70), "sair"),
             self.engrenagem,
         ])
         self._cone = cone_luz(360, 470)
@@ -319,7 +321,7 @@ class MenuPrincipal:
         self.lista.draw(s)
 
         texto(s, "↑ ↓  escolher     ENTER  confirmar", 13, (130, 155, 205),
-              (WIDTH // 2, 574), negrito=False)
+              (WIDTH // 2, 606), negrito=False)
         # Rodapé
         pygame.draw.line(s, (40, 60, 105), (WIDTH // 2 - 220, HEIGHT - 44), (WIDTH // 2 + 220, HEIGHT - 44), 1)
         texto(s, "Projeto PAP  •  Rafael Silveira  •  2026/2027", 13, (110, 130, 175),
@@ -339,9 +341,9 @@ CONTROLOS = [
     ]),
     ("COM A BOLA", [
         ("Z", "Passe para o colega mais bem colocado"),
-        ("X", "Abrir a mira de remate"),
-        ("X  /  Clique", "Rematar (a força depende da barra)"),
-        ("Rato", "Apontar o remate"),
+        ("X", "Remate na primeira pessoa"),
+        ("Rato  /  Setas", "Apontar à baliza (no remate)"),
+        ("Manter X  /  Clique", "Força do remate (larga para rematar)"),
     ]),
     ("JOGO", [
         ("ESC  /  P", "Pausa (ESC também cancela a mira)"),
@@ -880,13 +882,21 @@ class TeamSelectMenu:
 # ====================================================================== #
 
 class MenuPausa:
-    def __init__(self, screen: pygame.Surface, modo_carreira: bool = False):
+    def __init__(self, screen: pygame.Surface, modo_carreira: bool = False, modo_teste: bool = False):
         self.screen = screen
         self.t = 0.0
         self.modo_carreira = modo_carreira
+        self.modo_teste = modo_teste
         bw, bh, x = 300, 50, WIDTH // 2 - 150
         y0 = 248
-        if modo_carreira:
+        if modo_teste:
+            self.lista = ListaBotoes([
+                Botao((x, y0, bw, bh), "CONTINUAR", "continuar", cor=(40, 190, 100), icone="►"),
+                Botao((x, y0 + 62, bw, bh), "DEFINIÇÕES", "controlos", cor=(50, 140, 255)),
+                Botao((x, y0 + 124, bw, bh), "MENU PRINCIPAL", "menu", cor=(150, 110, 255)),
+                Botao((x, y0 + 186, bw, bh), "SAIR DO JOGO", "sair", cor=(230, 70, 70)),
+            ])
+        elif modo_carreira:
             # No modo carreira não há "reiniciar": desistir volta ao campeonato e o jogo não conta
             self.lista = ListaBotoes([
                 Botao((x, y0, bw, bh), "CONTINUAR", "continuar", cor=(40, 190, 100), icone="►"),
@@ -917,18 +927,26 @@ class MenuPausa:
     def draw(self, game):
         s = self.screen
         escurecer_ecra(s, 165)
-        caixa = pygame.Rect(WIDTH // 2 - 200, 110, 400, 470)
+        caixa = pygame.Rect(WIDTH // 2 - 200, 110, 400, 410 if self.modo_teste else 470)
         painel(s, caixa, alpha=240)
         texto(s, "PAUSA", 40, COR_TEXTO, (WIDTH // 2, caixa.top + 44), sombra=True)
 
         # Resultado atual
         info_c = obter_info_equipa(game.equipa_casa_id)
         info_f = obter_info_equipa(game.equipa_fora_id)
-        mins, segs = divmod(max(0, int(game.tempo_restante)), 60)
-        resumo = f"{info_c['sigla']}  {game.golos_azul} - {game.golos_vermelho}  {info_f['sigla']}"
-        texto(s, resumo, 18, COR_DESTAQUE, (WIDTH // 2, caixa.top + 88))
-        texto(s, f"{game.parte}.ª parte  •  faltam {mins:02d}:{segs:02d}", 13, COR_TEXTO_SUAVE,
-              (WIDTH // 2, caixa.top + 112), negrito=False)
+        if self.modo_teste:
+            t = game.teste
+            pct = round(100 * t["golos"] / t["remates"]) if t["remates"] else 0
+            texto(s, f"MODO TESTE  •  {t['golos']} golos em {t['remates']} remates ({pct}%)", 16,
+                  COR_DESTAQUE, (WIDTH // 2, caixa.top + 88))
+            texto(s, f"Defesas: {t['defesas']}   •   Fora / poste: {t['fora']}", 13, COR_TEXTO_SUAVE,
+                  (WIDTH // 2, caixa.top + 112), negrito=False)
+        else:
+            mins, segs = divmod(max(0, int(game.tempo_restante)), 60)
+            resumo = f"{info_c['sigla']}  {game.golos_azul} - {game.golos_vermelho}  {info_f['sigla']}"
+            texto(s, resumo, 18, COR_DESTAQUE, (WIDTH // 2, caixa.top + 88))
+            texto(s, f"{game.parte}.ª parte  •  faltam {mins:02d}:{segs:02d}", 13, COR_TEXTO_SUAVE,
+                  (WIDTH // 2, caixa.top + 112), negrito=False)
 
         self.lista.draw(s)
         if self.modo_carreira:
