@@ -251,11 +251,11 @@ class MenuPrincipal:
 
     def _desenhar_titulo(self, s):
         cx = WIDTH // 2
-        emb = emblema_sticks(96)
+        emb = emblema_sticks(140)
         flutuar = 3 * math.sin(self.t * 1.8)
-        brilho = luz(260, 200, (255, 200, 90), 70)
-        s.blit(brilho, brilho.get_rect(center=(cx, 92)), special_flags=pygame.BLEND_RGB_ADD)
-        s.blit(emb, emb.get_rect(center=(cx, 88 + flutuar)))
+        brilho = luz(300, 200, (255, 210, 150), 70)
+        s.blit(brilho, brilho.get_rect(center=(cx, 84)), special_flags=pygame.BLEND_RGB_ADD)
+        s.blit(emb, emb.get_rect(center=(cx, 76 + flutuar)))
 
         tr = self._titulo.get_rect(center=(cx, 182))
         s.blit(self._titulo, tr)
@@ -326,7 +326,7 @@ class MenuPrincipal:
         pygame.draw.line(s, (40, 60, 105), (WIDTH // 2 - 220, HEIGHT - 44), (WIDTH // 2 + 220, HEIGHT - 44), 1)
         texto(s, "Projeto PAP  •  Rafael Silveira  •  2026/2027", 13, (110, 130, 175),
               (WIDTH // 2, HEIGHT - 26), negrito=False)
-        texto(s, "v10", 12, (80, 100, 145), (18, HEIGHT - 24), ancora="midleft")
+        texto(s, "v11", 12, (80, 100, 145), (18, HEIGHT - 24), ancora="midleft")
 
 
 # ====================================================================== #
@@ -346,7 +346,7 @@ CONTROLOS = [
         ("Manter X  /  Clique", "Força do remate (larga para rematar)"),
     ]),
     ("JOGO", [
-        ("ESC  /  P", "Pausa (ESC também cancela a mira)"),
+        ("ESC  /  P", "Pausa (no ecrã do remate, ESC cancela o remate)"),
         ("F4", "Mudar a dificuldade da IA"),
         ("F11", "Ecrã inteiro"),
         ("F3", "Modo de depuração (FPS)"),
@@ -575,7 +575,7 @@ class EcraControlos:
         emb = emblema_sticks(56)
         s.blit(emb, emb.get_rect(center=(caixa.left + 70, y + 90)))
         texto(s, "STICKMANIA", 20, COR_TEXTO, (caixa.left + 112, y + 70), ancora="midleft")
-        texto(s, "Hóquei em patins 2D  •  versão 10", 12, COR_TEXTO_SUAVE, (caixa.left + 112, y + 94),
+        texto(s, "Hóquei em patins 2D  •  versão 11", 12, COR_TEXTO_SUAVE, (caixa.left + 112, y + 94),
               ancora="midleft", negrito=False)
         texto(s, "Projeto PAP  •  2026/2027", 12, COR_TEXTO_SUAVE, (caixa.left + 112, y + 112),
               ancora="midleft", negrito=False)

@@ -6,6 +6,7 @@ desenhado primeiro com 3 ou 4 vezes o tamanho e depois reduzido com smoothscale
 (super-amostragem). Os resultados ficam em cache, porque são sempre iguais.
 """
 import math
+import os
 import pygame
 
 _cache = {}
@@ -183,8 +184,30 @@ def icone(nome: str, tamanho: int, cor=(255, 255, 255)) -> pygame.Surface:
     return _guardar(("icone", nome, tamanho, tuple(cor[:3])), criar)
 
 
+CAMINHO_EMBLEMA = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "ui", "emblema_sticks.png")
+
+
 def emblema_sticks(tamanho: int) -> pygame.Surface:
-    """Dois sticks de hóquei em patins cruzados com a bola ao meio (emblema do jogo)."""
+    """
+    Emblema do jogo: dois sticks de hóquei em patins cruzados com a bola ao meio.
+    Usa a imagem assets/ui/emblema_sticks.png (o fundo foi tirado com ferramentas/preparar_emblema.py);
+    se a imagem não existir, desenha uma versão simples no código.
+    """
+    def carregar():
+        img = pygame.image.load(CAMINHO_EMBLEMA)
+        if pygame.display.get_surface() is not None:
+            img = img.convert_alpha()
+        return pygame.transform.smoothscale(img, (tamanho, tamanho))
+    if os.path.exists(CAMINHO_EMBLEMA):
+        try:
+            return _guardar(("emblema_img", tamanho), carregar)
+        except pygame.error:
+            pass
+    return _emblema_desenhado(tamanho)
+
+
+def _emblema_desenhado(tamanho: int) -> pygame.Surface:
+    """Versão de reserva do emblema, desenhada com formas."""
     def criar():
         Q = 4
         T = tamanho * Q

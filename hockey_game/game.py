@@ -280,6 +280,12 @@ class Game:
         ampliada mantendo a proporção) e com vsync o desenho fica sincronizado com o
         monitor (sem "rasgos" na imagem). Se o computador não suportar, usa a janela simples.
         """
+        # Ícone da janela: o emblema dos sticks cruzados
+        try:
+            from graficos import CAMINHO_EMBLEMA
+            pygame.display.set_icon(pygame.transform.smoothscale(pygame.image.load(CAMINHO_EMBLEMA), (64, 64)))
+        except (pygame.error, OSError, ImportError):
+            pass
         flags = pygame.SCALED | (pygame.FULLSCREEN if self.ecra_inteiro else 0)
         for tentativa in ({"vsync": 1}, {}):
             try:
