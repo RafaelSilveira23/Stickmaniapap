@@ -324,7 +324,7 @@ class MenuPrincipal:
         pygame.draw.line(s, (40, 60, 105), (WIDTH // 2 - 220, HEIGHT - 44), (WIDTH // 2 + 220, HEIGHT - 44), 1)
         texto(s, "Projeto PAP  •  Rafael Silveira  •  2026/2027", 13, (110, 130, 175),
               (WIDTH // 2, HEIGHT - 26), negrito=False)
-        texto(s, "v8", 12, (80, 100, 145), (18, HEIGHT - 24), ancora="midleft")
+        texto(s, "v10", 12, (80, 100, 145), (18, HEIGHT - 24), ancora="midleft")
 
 
 # ====================================================================== #
@@ -372,32 +372,36 @@ def _interruptor(surf, centro, ligado: bool, k_foco: float):
 class EcraControlos:
     """
     Ecrã de DEFINIÇÕES (abre na engrenagem do menu principal e nas «Definições» da pausa):
-    à esquerda a lista de teclas, à direita o ecrã inteiro e o volume do som.
+    à esquerda a lista de teclas, à direita o ecrã inteiro, o estilo arcade e o volume do som.
     """
     # Itens que podem ter o foco (setas ↑ ↓)
-    ITENS = ("ecra", "efeitos", "publico", "voltar")
+    ITENS = ("ecra", "arcade", "efeitos", "publico", "voltar")
 
     def __init__(self, screen: pygame.Surface):
         self.screen = screen
         self.t = 0.0
         self.ecra_inteiro = False          # o Game atualiza isto antes de desenhar
+        self.estilo_arcade = True
         self.vol_efeitos = 0.8              # 0.0 a 1.0 (o Game lê e grava)
         self.vol_publico = 0.5
         self.arena = None                   # fundo (pavilhão desfocado), dado pelo Game
         self.btn_voltar = Botao((WIDTH // 2 - 140, HEIGHT - 84, 280, 52), "VOLTAR", "voltar",
                                 cor=(50, 140, 255), icone="◄")
-        self.foco = 3
+        self.foco = self.ITENS.index("voltar")
         self._k_foco = [0.0] * len(self.ITENS)
         self._a_arrastar = None             # barra de volume que está a ser arrastada com o rato
         self.rect_painel_teclas = pygame.Rect(70, 118, 730, 500)
         p = self.rect_painel_ecra = pygame.Rect(830, 118, 380, 500)
         self.linhas = {
-            "ecra": pygame.Rect(p.left + 16, p.top + 52, p.width - 32, 50),
-            "efeitos": pygame.Rect(p.left + 16, p.top + 160, p.width - 32, 50),
-            "publico": pygame.Rect(p.left + 16, p.top + 214, p.width - 32, 50),
+            "ecra": pygame.Rect(p.left + 16, p.top + 50, p.width - 32, 48),
+            "arcade": pygame.Rect(p.left + 16, p.top + 100, p.width - 32, 48),
+            "efeitos": pygame.Rect(p.left + 16, p.top + 196, p.width - 32, 48),
+            "publico": pygame.Rect(p.left + 16, p.top + 246, p.width - 32, 48),
         }
         self.rect_interruptor = pygame.Rect(0, 0, 64, 32)
         self.rect_interruptor.center = (p.right - 62, self.linhas["ecra"].centery)
+        self.rect_interruptor_arcade = self.rect_interruptor.copy()
+        self.rect_interruptor_arcade.centery = self.linhas["arcade"].centery
         self.barras = {k: pygame.Rect(p.left + 150, self.linhas[k].centery - 4, 190, 8)
                        for k in ("efeitos", "publico")}
 
@@ -415,7 +419,7 @@ class EcraControlos:
         return (x - b.left) / b.width
 
     def handle_event(self, event) -> str | None:
-        """Devolve 'voltar', 'ecra_inteiro', 'volume_efeitos', 'volume_publico', 'sair' ou None."""
+        """Devolve 'voltar', 'ecra_inteiro', 'estilo_arcade', 'volume_efeitos', 'volume_publico', 'sair' ou None."""
         if event.type == pygame.QUIT:
             return "sair"
         item = self.ITENS[self.foco]
@@ -431,12 +435,16 @@ class EcraControlos:
             if event.key in (pygame.K_RETURN, pygame.K_KP_ENTER, pygame.K_SPACE):
                 if item == "ecra":
                     return "ecra_inteiro"
+                if item == "arcade":
+                    return "estilo_arcade"
                 if item == "voltar":
                     return "voltar"
             if event.key in (pygame.K_LEFT, pygame.K_RIGHT, pygame.K_a, pygame.K_d):
                 passo = 0.1 if event.key in (pygame.K_RIGHT, pygame.K_d) else -0.1
                 if item == "ecra":
                     return "ecra_inteiro"
+                if item == "arcade":
+                    return "estilo_arcade"
                 if item in ("efeitos", "publico"):
                     atual = self.vol_efeitos if item == "efeitos" else self.vol_publico
                     return self._mudar_volume(item, atual + passo)
@@ -455,6 +463,9 @@ class EcraControlos:
             if self.linhas["ecra"].collidepoint(event.pos):
                 self.foco = 0
                 return "ecra_inteiro"
+            if self.linhas["arcade"].collidepoint(event.pos):
+                self.foco = 1
+                return "estilo_arcade"
             for k in ("efeitos", "publico"):
                 if self.linhas[k].collidepoint(event.pos):
                     self.foco = self.ITENS.index(k)
@@ -528,39 +539,48 @@ class EcraControlos:
         # ── Painel do ecrã e do som ──────────────────────────────────────
         caixa = self.rect_painel_ecra
         painel(s, caixa, alpha=228)
-        texto(s, "ECRÃ", 16, COR_DESTAQUE, (caixa.left + 30, caixa.top + 30), ancora="midleft")
+        texto(s, "JOGO", 16, COR_DESTAQUE, (caixa.left + 30, caixa.top + 28), ancora="midleft")
         linha = self.linhas["ecra"]
         self._destaque(s, linha, self._k_foco[0])
         texto(s, "Ecrã inteiro", 16, COR_TEXTO, (caixa.left + 30, linha.centery - 8), ancora="midleft")
         texto(s, "Atalho: F11", 12, COR_TEXTO_SUAVE, (caixa.left + 30, linha.centery + 12),
               ancora="midleft", negrito=False)
         _interruptor(s, self.rect_interruptor.center, self.ecra_inteiro, self._k_foco[0])
+        linha = self.linhas["arcade"]
+        self._destaque(s, linha, self._k_foco[1])
+        texto(s, "Estilo arcade", 16, COR_TEXTO, (caixa.left + 30, linha.centery - 8), ancora="midleft")
+        texto(s, "golos e impactos com mais energia", 11, COR_TEXTO_SUAVE, (caixa.left + 30, linha.centery + 12),
+              ancora="midleft", negrito=False)
+        _interruptor(s, self.rect_interruptor_arcade.center, self.estilo_arcade, self._k_foco[1])
 
-        y = caixa.top + 118
+        y = caixa.top + 156
         pygame.draw.line(s, (40, 65, 120), (caixa.left + 30, y), (caixa.right - 30, y), 1)
         texto(s, "SOM", 16, COR_DESTAQUE, (caixa.left + 30, y + 22), ancora="midleft")
         for i, (k, nome, desc, valor) in enumerate((
                 ("efeitos", "Efeitos", "apito, bola, golos", self.vol_efeitos),
-                ("publico", "Público", "ambiente do pavilhão", self.vol_publico)), start=1):
+                ("publico", "Público", "ambiente do pavilhão", self.vol_publico)), start=2):
             r = self.linhas[k]
             self._destaque(s, r, self._k_foco[i])
             texto(s, nome, 16, COR_TEXTO, (caixa.left + 30, r.centery - 8), ancora="midleft")
             texto(s, desc, 11, COR_TEXTO_SUAVE, (caixa.left + 30, r.centery + 11), ancora="midleft", negrito=False)
             self._barra_volume(s, k, valor, self._k_foco[i])
-        texto(s, "← →  ajustar o volume", 11, COR_TEXTO_SUAVE, (caixa.centerx, caixa.top + 284), negrito=False)
+        texto(s, "← →  ajustar o volume", 11, COR_TEXTO_SUAVE, (caixa.centerx, caixa.top + 312), negrito=False)
 
         # Sobre o jogo
-        y = caixa.top + 306
+        y = caixa.top + 334
         pygame.draw.line(s, (40, 65, 120), (caixa.left + 30, y), (caixa.right - 30, y), 1)
         texto(s, "SOBRE", 16, COR_DESTAQUE, (caixa.left + 30, y + 22), ancora="midleft")
-        emb = emblema_sticks(64)
-        s.blit(emb, emb.get_rect(center=(caixa.centerx, y + 84)))
-        texto(s, "STICKMANIA", 20, COR_TEXTO, (caixa.centerx, y + 132))
-        texto(s, "Hóquei em patins 2D  •  versão 8", 12, COR_TEXTO_SUAVE, (caixa.centerx, y + 154), negrito=False)
-        texto(s, "Projeto PAP  •  2026/2027  •  Python + pygame-ce", 12, COR_TEXTO_SUAVE,
-              (caixa.centerx, y + 174), negrito=False)
+        emb = emblema_sticks(56)
+        s.blit(emb, emb.get_rect(center=(caixa.left + 70, y + 90)))
+        texto(s, "STICKMANIA", 20, COR_TEXTO, (caixa.left + 112, y + 70), ancora="midleft")
+        texto(s, "Hóquei em patins 2D  •  versão 10", 12, COR_TEXTO_SUAVE, (caixa.left + 112, y + 94),
+              ancora="midleft", negrito=False)
+        texto(s, "Projeto PAP  •  2026/2027", 12, COR_TEXTO_SUAVE, (caixa.left + 112, y + 112),
+              ancora="midleft", negrito=False)
+        texto(s, "Python + pygame-ce", 12, COR_TEXTO_SUAVE, (caixa.left + 112, y + 130),
+              ancora="midleft", negrito=False)
 
-        self.btn_voltar.draw(s, (-1, -1), focado=self.foco == 3)
+        self.btn_voltar.draw(s, (-1, -1), focado=self.ITENS[self.foco] == "voltar")
         texto(s, "↑ ↓  escolher     ← →  ajustar     ENTER  confirmar     ESC  voltar", 12, (120, 145, 195),
               (WIDTH // 2, HEIGHT - 16), negrito=False)
 

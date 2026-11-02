@@ -40,6 +40,9 @@ No Windows também se pode fazer duplo clique em `jogar.bat`.
     (validado em 600 épocas com `ferramentas/analise_simulacao.py`)
   - Classificação com a forma (últimos 5 jogos) e probabilidades de vitória/empate/derrota no próximo jogo
   - A força do clube também conta no jogo (os clubes fortes patinam um pouco mais depressa)
+- **Estilo arcade** (liga/desliga nas Definições): "GOLO!" gigante com o nome do marcador, câmara lenta e
+  confetes; nos impactos o jogo congela por um instante, o ecrã treme e saltam faíscas; textos de banda
+  desenhada ("DEFESA!", "POSTE!", "ROUBO!"), rasto da bola e contorno nos jogadores (`hockey_game/efeitos.py`)
 - **Sons** criados por síntese no código (sem ficheiros de fora): apito, tacadas, tabelas, postes,
   defesas, golo com buzina e público; volume dos efeitos e do público nas Definições
   - **Melhores marcadores**: cada golo fica com o nome de quem marcou (no jogo e nos jogos simulados),

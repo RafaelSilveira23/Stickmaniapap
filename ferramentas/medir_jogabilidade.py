@@ -48,6 +48,7 @@ for seed in range(SEEDS):
     random.seed(seed)
     g = G.Game()
     g.iniciar_partida("fc_porto", "benfica", dificuldade="normal")
+    g.efeitos.ativo = False          # mede a física e a IA sem as pausas do estilo arcade
     g._msg_timer = 0
     # O jogador "humano" passa a ser controlado pela IA (para jogo IA vs IA)
     h = g.jogador_humano

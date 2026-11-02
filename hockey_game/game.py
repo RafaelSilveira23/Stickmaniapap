@@ -17,6 +17,7 @@ from cores import definir_equipamentos, misturar, cor_texto_sobre
 from componentes import COR_DESTAQUE
 from graficos import sombra_suave
 from sons import som
+from efeitos import Efeitos, contornar
 from carreira import Campeonato, CAMINHO_BD, PASTA_SAVES, FORCA_EQUIPAS
 from carreira_menu import EcraCarreiraEscolha, EcraCampeonato
 
@@ -41,6 +42,7 @@ class Game:
         pygame.init()
         definicoes = self._ler_definicoes()
         self.ecra_inteiro = bool(definicoes.get("ecra_inteiro", False))
+        self.estilo_arcade = bool(definicoes.get("estilo_arcade", True))
         self.screen = self._criar_janela()
 
         # Som (se não houver placa de som, o jogo continua sem som)
@@ -102,6 +104,10 @@ class Game:
         self.golos_azul     = 0
         self.golos_vermelho = 0
         self.marcadores     = []
+        self.efeitos        = Efeitos()      # estilo arcade (liga/desliga nas Definições)
+        self.efeitos.ativo  = self.estilo_arcade
+        self._reposicao_pendente = None      # depois de um golo, a festa dura um pouco antes de repor
+        self._dono_anterior = None
         self.parte          = 1
         self.tempo_restante = float(DURACAO_PARTE)
         self.jogo_ativo     = False
@@ -296,7 +302,7 @@ class Game:
         try:
             os.makedirs(os.path.dirname(CAMINHO_DEFINICOES), exist_ok=True)
             with open(CAMINHO_DEFINICOES, "w", encoding="utf-8") as f:
-                json.dump({"ecra_inteiro": self.ecra_inteiro,
+                json.dump({"ecra_inteiro": self.ecra_inteiro, "estilo_arcade": self.estilo_arcade,
                            "vol_efeitos": som.vol_efeitos, "vol_publico": som.vol_publico}, f)
         except OSError:
             pass          # não conseguir gravar não impede de jogar
@@ -338,7 +344,8 @@ class Game:
         """Transforma os acontecimentos da bola (tacada, tabela, poste, defesa) em sons."""
         cam = self.rink.camera
         for tipo, forca, x, y in self.bola.eventos:
-            sx = cam.projetar(x, y)[0]
+            sx, sy = cam.projetar(x, y)
+            self._efeitos_bola(tipo, forca, sx, sy)
             if tipo == "tacada":
                 if forca >= 420:
                     som.tocar("remate", 0.55 + 0.45 * min(1.0, forca / 650), sx)
@@ -356,6 +363,43 @@ class Game:
                     som.tocar("publico_uh", 0.7)
         self.bola.eventos.clear()
 
+    def _efeitos_bola(self, tipo: str, forca: float, sx: float, sy: float):
+        """Estilo arcade: faíscas, tremer e textos conforme o que aconteceu à bola."""
+        ef = self.efeitos
+        if tipo == "tacada" and forca >= 420:
+            ef.pausa(0.05)
+            ef.tremer(3, 0.15)
+            ef.faiscas(sx, sy, (255, 235, 140), 12, 300)
+        elif tipo == "tabela" and forca > 200:
+            ef.poeira(sx, sy, 7)
+            if forca > 380:
+                ef.tremer(min(5, forca / 110), 0.18)
+        elif tipo == "poste":
+            ef.faiscas(sx, sy, (210, 230, 255), 16, 340)
+            ef.tremer(6, 0.3)
+            ef.pausa(0.07)
+            ef.texto_pop("POSTE!", sx, sy - 50, (120, 200, 255), 34)
+        elif tipo == "defesa" and forca > 250:
+            ef.faiscas(sx, sy, (255, 255, 255), 10, 240)
+            ef.tremer(3.5, 0.2)
+            ef.pausa(0.05)
+            if forca > 380:
+                ef.texto_pop("DEFESA!", sx, sy - 60, (120, 255, 160), 34)
+
+    def _efeitos_posse(self):
+        """Estilo arcade: quando a bola muda de equipa num choque, aparece "ROUBO!"."""
+        dono = self.bola.dono
+        ant = self._dono_anterior
+        if dono is not None and ant is not None and dono is not ant and dono.equipa != ant.equipa:
+            if math.hypot(dono.pos_x - ant.pos_x, dono.pos_y - ant.pos_y) < 70:
+                sx, sy = self.rink.camera.projetar(dono.pos_x, dono.pos_y)
+                self.efeitos.pausa(0.04)
+                self.efeitos.tremer(2.5, 0.15)
+                self.efeitos.faiscas(sx, sy - 20, (255, 200, 90), 8, 200)
+                self.efeitos.texto_pop("ROUBO!", sx, sy - 70, (255, 170, 60), 26)
+        if dono is not None:
+            self._dono_anterior = dono
+
     def _abrir_definicoes(self, origem: str):
         self._origem_controlos = origem
         self.ecra_controlos.arena = self.rink._surf
@@ -370,6 +414,7 @@ class Game:
             if e.key != pygame.K_F11:
                 pygame.event.post(e)
         self.ecra_controlos.ecra_inteiro = self.ecra_inteiro
+        self.ecra_controlos.estilo_arcade = self.estilo_arcade
 
         # ── Menus (cada ecrã devolve uma "ação") ──────────────────────────
         if self.estado == "menu_principal":
@@ -392,6 +437,10 @@ class Game:
                 self._som_acao(acao)
                 if acao == "ecra_inteiro":
                     self.alternar_ecra_inteiro()
+                elif acao == "estilo_arcade":
+                    self.estilo_arcade = not self.estilo_arcade
+                    self.efeitos.ativo = self.estilo_arcade
+                    self._gravar_definicoes()
                 elif acao in ("volume_efeitos", "volume_publico"):
                     som.definir_volumes(self.ecra_controlos.vol_efeitos, self.ecra_controlos.vol_publico)
                     if acao == "volume_efeitos":
@@ -709,6 +758,22 @@ class Game:
         if not self.jogo_ativo:
             return
 
+        # Estilo arcade: pausa curta nos impactos e câmara lenta depois dos golos
+        dt_real = dt
+        dt = self.efeitos.tempo(dt)
+        if self._reposicao_pendente is not None:
+            saida, falta = self._reposicao_pendente
+            falta -= dt_real
+            if falta <= 0:
+                self._reposicao_pendente = None
+                self._repor_posicoes(saida=saida)
+            else:
+                self._reposicao_pendente = (saida, falta)
+        if dt <= 0:
+            if self._msg_timer > 0:
+                self._msg_timer -= dt_real
+            return
+
         # Cronómetro
         self.tempo_restante -= dt
         if self.tempo_restante <= 0:
@@ -779,7 +844,7 @@ class Game:
             for j in todos:
                 j.afastar_de(gr.pos_x, gr.pos_y, RAIO_GR_CORPO)
 
-        if falta_detetada and self.jogo_ativo:
+        if falta_detetada and self.jogo_ativo and self._reposicao_pendente is None:
             self.assinalar_falta(falta_detetada["infrator"], falta_detetada["vitima"], falta_detetada.get("pos"))
 
         # Atualizar bola (com física de tabelas e balizas)
@@ -791,7 +856,11 @@ class Game:
 
         self._tocar_sons_bola()
 
-        # Golos
+        self._efeitos_posse()
+
+        # Golos (durante a festa de um golo, a bola ainda na rede não conta outra vez)
+        if self._reposicao_pendente is not None:
+            resultado = None
         if resultado == "golo_azul":
             self._golo("azul")
         elif resultado == "golo_vermelho":
@@ -876,6 +945,9 @@ class Game:
         self.fim_jogo       = False
         self.estado         = "jogo"
         self.bola.eventos.clear()
+        self.efeitos.reiniciar()
+        self._reposicao_pendente = None
+        self._dono_anterior = None
         som.tocar("apito_curto")                # apito de início
 
         info_c = obter_info_equipa(casa_id)
@@ -1202,7 +1274,23 @@ class Game:
         self._msg_equipa = equipa
         som.tocar("golo")
         # Recomeça com a bola a equipa que sofreu o golo
-        self._repor_posicoes(saida="vermelho" if equipa == "azul" else "azul")
+        saida = "vermelho" if equipa == "azul" else "azul"
+        if self.efeitos.ativo:
+            # Festa: câmara lenta, ecrã a tremer, confetes e "GOLO!" gigante; só depois se repõe
+            kit = self.kit_casa if equipa == "azul" else self.kit_fora
+            info = info_casa if equipa == "azul" else info_fora
+            cam = self.rink.camera
+            gx = self.rink.linha_golo_esq_x if equipa == "azul" else self.rink.linha_golo_dir_x
+            sx, sy = cam.projetar(gx, self.rink.rect.centery)
+            self.efeitos.golo(info["nome"], nome, kit["principal"])
+            self.efeitos.confetis(sx, sy, [kit["principal"], kit.get("secundaria", (255, 255, 255)),
+                                           (255, 220, 60), (255, 255, 255)], 90)
+            self.efeitos.tremer(11, 0.5)
+            self.efeitos.flash(0.9)
+            self.efeitos.camara_lenta(1.5, 0.25)
+            self._reposicao_pendente = (saida, 2.0)
+        else:
+            self._repor_posicoes(saida=saida)
 
     def _repor_posicoes(self, saida: str = "azul"):
         """Volta a pôr todos nas posições iniciais. 'saida' = equipa que fica com a bola."""
@@ -1235,6 +1323,7 @@ class Game:
         self.bola.definir_dono(dono)
         dono.tem_bola = True
         self.bola.seguir_jogador(dono)
+        self._dono_anterior = dono          # a saída de bola não conta como "roubo"
         for j in self.todos_jogadores:
             j._bloqueio_desarme = 0.0
             j._estado_action = None
@@ -1350,6 +1439,15 @@ class Game:
                 a.draw_extra(self.screen, self.font_num, self.show_debug)
             a.rect = guardado
 
+        # Estilo arcade: partículas por cima do campo e o ecrã a tremer (o marcador não treme)
+        if self.efeitos.ativo:
+            self.efeitos.desenhar_mundo(self.screen)
+            dx, dy = self.efeitos.deslocamento()
+            if dx or dy:
+                copia = self.screen.copy()
+                self.screen.fill(COR_FUNDO)
+                self.screen.blit(copia, (dx, dy))
+
         # 6. Mira e marcador superior
         self._draw_mira()
         self.hud.draw_top_bar(self.screen, self)
@@ -1359,8 +1457,10 @@ class Game:
         self.hud.draw_bottom_panel(self.screen, self)
 
         # 8. Mensagens (golo, intervalo, ...)
-        if self._msg_timer > 0 and not self.fim_jogo:
+        golo_arcade = self.efeitos.ativo and self._msg_texto.startswith("GOLO")
+        if self._msg_timer > 0 and not self.fim_jogo and not golo_arcade:
             self._draw_mensagem(self._msg_texto)
+        self.efeitos.desenhar_ui(self.screen)
         if self.show_debug:
             self._draw_debug()
 
@@ -1379,7 +1479,11 @@ class Game:
         rect.centerx = round(sx)
         # Os patins (centro da imagem + _PES) ficam no ponto do chão projetado
         rect.top = round(sy - (h / 2 + self._PES) * k)
-        self.screen.blit(img, rect)
+        if self.efeitos.ativo:
+            # Contorno grosso, como num desenho animado
+            self.screen.blit(contornar(img, 2), rect.move(-2, -2))
+        else:
+            self.screen.blit(img, rect)
         # Para os indicadores (triângulo, "GR") usamos só a parte visível do sprite
         a.rect_ecra = img.get_bounding_rect().move(rect.topleft)
 
@@ -1394,6 +1498,10 @@ class Game:
         # Sombra suave no chão, um pouco abaixo e à direita (a luz vem de cima, à esquerda)
         sombra = sombra_suave(max(4, round(20 * k)), max(2, round(8 * k)), 120)
         self.screen.blit(sombra, sombra.get_rect(center=(round(sx + 2 * k), round(sy + 5 * k))))
+        self.efeitos.bola(sx, sy, b.vel.length(), b.dono is None)
+        if self.efeitos.ativo:
+            self.efeitos.desenhar_rasto(self.screen)
+            img = contornar(img, 1)
         self.screen.blit(img, img.get_rect(center=(round(sx), round(sy))))
 
     def _draw_mensagem(self, texto: str):
