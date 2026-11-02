@@ -58,6 +58,14 @@ class Ball(pygame.sprite.Sprite):
         self._rink_rect = None
         self._rink = None
 
+        # Acontecimentos deste frame para os sons (tacada, tabela, poste, defesa).
+        # Quem os usa (o Game) lê a lista e limpa-a; a bola não sabe nada de som.
+        self.eventos = []
+
+    def _evento(self, tipo: str, forca: float):
+        self.eventos.append((tipo, forca, self.pos_x, self.pos_y))
+        del self.eventos[:-20]
+
     # ------------------------------------------------------------------ #
 
     def marcar_recetor(self, jogador, tempo: float = 1.6):
@@ -80,6 +88,7 @@ class Ball(pygame.sprite.Sprite):
         self.dono = None
         self._seguido = None
         self.vel.update(velocidade)
+        self._evento("tacada", self.vel.length())
 
     def seguir_jogador(self, jogador):
         """
@@ -198,7 +207,9 @@ class Ball(pygame.sprite.Sprite):
         # Defesa dos guarda-redes ANTES de ver se é golo (senão a bola podia cruzar a
         # linha de golo no mesmo frame em que devia ter batido no GR)
         for gr in guarda_redes:
+            vel_antes = vel_atual
             if gr.bloquear_bola(self, pos_anterior):
+                self._evento("defesa", vel_antes)
                 break
 
         # Verificar se é Golo
@@ -207,10 +218,16 @@ class Ball(pygame.sprite.Sprite):
             return resultado
 
         # Colisão com as Balizas (ressalto nos postes e rede exterior)
+        v0 = pygame.math.Vector2(self.vel)
         self._colisao_balizas(rink)
+        if (self.vel - v0).length() > 60:
+            self._evento("poste", (self.vel - v0).length())
 
         # Colisão com as Paredes exteriores do ringue
+        v0 = pygame.math.Vector2(self.vel)
         self._colisao_paredes(rink.rect)
+        if (self.vel - v0).length() > 60:
+            self._evento("tabela", (self.vel - v0).length())
 
         # Ressalto em jogadores (bola veloz)
         if todos_jogadores and self.vel.length() >= VEL_RESSALTO:

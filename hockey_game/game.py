@@ -16,7 +16,8 @@ from menu import MenuPrincipal, EcraControlos, TeamSelectMenu, MenuPausa, EcraFi
 from cores import definir_equipamentos, misturar, cor_texto_sobre
 from componentes import COR_DESTAQUE
 from graficos import sombra_suave
-from carreira import Campeonato, CAMINHO_BD, PASTA_SAVES
+from sons import som
+from carreira import Campeonato, CAMINHO_BD, PASTA_SAVES, FORCA_EQUIPAS
 from carreira_menu import EcraCarreiraEscolha, EcraCampeonato
 
 DURACAO_PARTE = 60 * 5   # 5 minutos por parte
@@ -28,8 +29,15 @@ CAMINHO_DEFINICOES = os.path.join(PASTA_SAVES, "definicoes.json")
 class Game:
     def __init__(self):
         pygame.init()
-        self.ecra_inteiro = bool(self._ler_definicoes().get("ecra_inteiro", False))
+        definicoes = self._ler_definicoes()
+        self.ecra_inteiro = bool(definicoes.get("ecra_inteiro", False))
         self.screen = self._criar_janela()
+
+        # Som (se não houver placa de som, o jogo continua sem som)
+        som.iniciar()
+        som.definir_volumes(self._ler_volume(definicoes, "vol_efeitos", 0.8),
+                            self._ler_volume(definicoes, "vol_publico", 0.5))
+        self._nivel_publico = None
         pygame.display.set_caption(TITLE)
         self.clock = pygame.time.Clock()
 
@@ -66,6 +74,8 @@ class Game:
                                             arena=self.rink._surf)
         self.menu           = TeamSelectMenu(self.screen, self.equipa_casa_id, self.equipa_fora_id)
         self.ecra_controlos = EcraControlos(self.screen)
+        self.ecra_controlos.vol_efeitos = som.vol_efeitos
+        self.ecra_controlos.vol_publico = som.vol_publico
         self.menu_pausa     = MenuPausa(self.screen)
         self.ecra_fim       = EcraFimJogo(self.screen)
         self._origem_controlos = "menu_principal"   # para onde volta o ecrã de controlos
@@ -218,10 +228,13 @@ class Game:
         self.gr_vermelho.kit = self.kit_fora
         self.grupo_gr = pygame.sprite.Group(self.gr_azul, self.gr_vermelho)
         # A IA precisa de saber onde está o GR adversário para rematar para o outro canto
+        # A força de cada clube (a mesma do modo carreira) também conta um pouco no jogo
         for a in self.agentes_azul:
             a.gr_adversario = self.gr_vermelho
+            a.definir_forca(FORCA_EQUIPAS.get(self.equipa_casa_id, 79))
         for a in self.agentes_vermelhos:
             a.gr_adversario = self.gr_azul
+            a.definir_forca(FORCA_EQUIPAS.get(self.equipa_fora_id, 79))
 
     def _pos_tatica_azul(self, papel: str, pos_inicial: tuple) -> tuple:
         cx = RINK_X + RINK_W // 2
@@ -285,11 +298,19 @@ class Game:
         except (OSError, ValueError):
             return {}
 
+    @staticmethod
+    def _ler_volume(definicoes: dict, chave: str, omissao: float) -> float:
+        try:
+            return max(0.0, min(1.0, float(definicoes.get(chave, omissao))))
+        except (TypeError, ValueError):
+            return omissao
+
     def _gravar_definicoes(self):
         try:
             os.makedirs(os.path.dirname(CAMINHO_DEFINICOES), exist_ok=True)
             with open(CAMINHO_DEFINICOES, "w", encoding="utf-8") as f:
-                json.dump({"ecra_inteiro": self.ecra_inteiro}, f)
+                json.dump({"ecra_inteiro": self.ecra_inteiro,
+                           "vol_efeitos": som.vol_efeitos, "vol_publico": som.vol_publico}, f)
         except OSError:
             pass          # não conseguir gravar não impede de jogar
 
@@ -300,6 +321,53 @@ class Game:
             self._gravar_definicoes()
         except pygame.error:
             pass
+
+    def _som_acao(self, acao):
+        """Som dos menus: 'confirmar' nas escolhas, 'voltar' ao sair de um ecrã."""
+        if not acao or acao in ("sair", "volume_efeitos", "volume_publico"):
+            return
+        if isinstance(acao, tuple):
+            acao = acao[0]
+        if acao == "mover":
+            som.ui("mover")
+        elif acao in ("voltar", "menu", "desistir"):
+            som.ui("voltar")
+        else:
+            som.ui("confirmar")
+
+    def _atualizar_publico(self):
+        """Barulho de fundo do pavilhão: forte no jogo, baixo na pausa e nos menus."""
+        if self.estado == "jogo" and not self.pausado and not self.fim_jogo:
+            nivel = 1.0
+        elif self.estado in ("jogo", "controlos") and (self.pausado or self.fim_jogo):
+            nivel = 0.45 if self.fim_jogo else 0.3
+        else:
+            nivel = 0.3
+        if nivel != self._nivel_publico:
+            self._nivel_publico = nivel
+            som.publico(nivel)
+
+    def _tocar_sons_bola(self):
+        """Transforma os acontecimentos da bola (tacada, tabela, poste, defesa) em sons."""
+        cam = self.rink.camera
+        for tipo, forca, x, y in self.bola.eventos:
+            sx = cam.projetar(x, y)[0]
+            if tipo == "tacada":
+                if forca >= 420:
+                    som.tocar("remate", 0.55 + 0.45 * min(1.0, forca / 650), sx)
+                elif forca >= 150:
+                    som.tocar("passe", 0.75, sx)
+            elif tipo == "tabela":
+                som.tocar("tabela", min(1.0, 0.25 + forca / 600), sx)
+            elif tipo == "poste":
+                som.tocar("poste", min(1.0, 0.3 + forca / 500), sx)
+                if forca > 300:
+                    som.tocar("publico_uh", 0.8)
+            elif tipo == "defesa":
+                som.tocar("defesa", min(1.0, 0.35 + forca / 600), sx)
+                if forca > 420:
+                    som.tocar("publico_uh", 0.7)
+        self.bola.eventos.clear()
 
     def _abrir_definicoes(self, origem: str):
         self._origem_controlos = origem
@@ -320,6 +388,7 @@ class Game:
         if self.estado == "menu_principal":
             for event in pygame.event.get():
                 acao = self.menu_principal.handle_event(event)
+                self._som_acao(acao)
                 if acao == "jogar":
                     self.abrir_selecao_equipas()
                 elif acao == "carreira":
@@ -333,8 +402,14 @@ class Game:
         if self.estado == "controlos":
             for event in pygame.event.get():
                 acao = self.ecra_controlos.handle_event(event)
+                self._som_acao(acao)
                 if acao == "ecra_inteiro":
                     self.alternar_ecra_inteiro()
+                elif acao in ("volume_efeitos", "volume_publico"):
+                    som.definir_volumes(self.ecra_controlos.vol_efeitos, self.ecra_controlos.vol_publico)
+                    if acao == "volume_efeitos":
+                        som.tocar("passe")              # para se ouvir o volume novo
+                    self._gravar_definicoes()
                 elif acao == "voltar":
                     # Se veio da pausa, volta ao jogo (que continua em pausa)
                     self.estado = "jogo" if self._origem_controlos == "pausa" else "menu_principal"
@@ -345,6 +420,7 @@ class Game:
         if self.estado == "carreira_escolha":
             for event in pygame.event.get():
                 acao = self.ecra_carreira.handle_event(event)
+                self._som_acao(acao)
                 if acao == "comecar":
                     self._abrir_carreira().novo(self.ecra_carreira.equipa, self.ecra_carreira.dificuldade)
                     self.abrir_campeonato()
@@ -357,8 +433,13 @@ class Game:
         if self.estado == "carreira":
             for event in pygame.event.get():
                 acao = self.ecra_campeonato.handle_event(event)
+                self._som_acao(acao)
                 if acao == "jogar":
                     self.iniciar_jogo_carreira()
+                elif acao == "simular":
+                    self.simular_jogo_carreira()
+                elif acao == "simular_epoca":
+                    self.simular_epoca_carreira()
                 elif acao == "nova_epoca":
                     c = self.carreira
                     c.novo(c.equipa_jogador, c.dificuldade)
@@ -374,6 +455,7 @@ class Game:
         if self.estado == "menu_selecao":
             for event in pygame.event.get():
                 res = self.menu.handle_event(event)
+                self._som_acao(res)
                 if res == "iniciar":
                     c_id, f_id = self.menu.get_equipas()
                     self.iniciar_partida(c_id, f_id, dificuldade=self.menu.get_dificuldade())
@@ -389,6 +471,7 @@ class Game:
         if self.pausado:
             for event in pygame.event.get():
                 acao = self.menu_pausa.handle_event(event)
+                self._som_acao(acao)
                 if acao == "continuar":
                     self.pausado = False
                 elif acao == "reiniciar":
@@ -407,6 +490,7 @@ class Game:
         if self.fim_jogo:
             for event in pygame.event.get():
                 acao = self.ecra_fim.handle_event(event)
+                self._som_acao(acao)
                 if acao == "continuar" and self.modo_carreira:
                     jornada = self.carreira.registar_jogo_do_jogador(self.golos_azul, self.golos_vermelho)
                     self.abrir_campeonato(destaque=jornada)
@@ -596,6 +680,7 @@ class Game:
                            self.rink.baliza_dir, self.rink.baliza_esq,
                            dificuldade=DIFICULDADE_EQUIPA_HUMANA,
                            gr_adversario=getattr(self, "gr_vermelho", None))
+        agente.definir_forca(FORCA_EQUIPAS.get(self.equipa_casa_id, 79))
         self.agentes_azul.append(agente)
 
         self.agentes_azul = [a for a in self.agentes_azul if a.jogador != novo]
@@ -608,6 +693,7 @@ class Game:
     # ================================================================== #
 
     def update(self, dt: float):
+        self._atualizar_publico()
         if self.estado == "menu_principal":
             self.menu_principal.update(dt)
             return
@@ -713,6 +799,8 @@ class Game:
         resultado = self.bola.update(dt, self.rink, todos_jogadores=todos,
                                      guarda_redes=(self.gr_azul, self.gr_vermelho))
 
+        self._tocar_sons_bola()
+
         # Golos
         if resultado == "golo_azul":
             self._golo("azul")
@@ -796,6 +884,8 @@ class Game:
         self.jogo_ativo     = True
         self.fim_jogo       = False
         self.estado         = "jogo"
+        self.bola.eventos.clear()
+        som.tocar("apito_curto")                # apito de início
 
         info_c = obter_info_equipa(casa_id)
         info_f = obter_info_equipa(fora_id)
@@ -826,6 +916,7 @@ class Game:
         self._falta_cooldown = 3.2
         self._falta_timer    = 2.2
         self._falta_ativa    = True
+        som.tocar("apito_curto")
 
         # Incrementar faltas da equipa infratora
         if infrator.equipa == "azul":
@@ -958,18 +1049,56 @@ class Game:
             return
         equipa = camp.equipa_jogador if camp.existe else self.equipa_casa_id
         dif = camp.dificuldade if camp.existe else self.dificuldade
-        self.ecra_carreira = EcraCarreiraEscolha(self.screen, equipa, dif)
+        self.ecra_carreira = EcraCarreiraEscolha(self.screen, equipa, dif, arena=self.rink._surf)
         self.estado = "carreira_escolha"
 
-    def abrir_campeonato(self, destaque: int | None = None):
+    def abrir_campeonato(self, destaque: int | None = None, aviso: tuple | None = None):
         """Ecrã do campeonato (classificação, próximo jogo, resultados)."""
         self._cancelar_mira()
         self.modo_carreira = False
         self.pausado = False
         self.jogo_ativo = False
         self.fim_jogo = False
-        self.ecra_campeonato = EcraCampeonato(self.screen, self.carreira, destaque)
+        self.ecra_campeonato = EcraCampeonato(self.screen, self.carreira, destaque,
+                                              arena=self.rink._surf, aviso=aviso)
         self.estado = "carreira"
+
+    def simular_jogo_carreira(self):
+        """Simula o próximo jogo do jogador (em vez de o jogar) e mostra o resultado num cartão."""
+        camp = self.carreira
+        jogo = camp.proximo_jogo()
+        if jogo is None:
+            return
+        jornada, g_eu, g_adv = camp.simular_jogo_do_jogador()
+        if g_eu > g_adv:
+            txt, cor = "VITÓRIA", (50, 170, 90)
+            som.tocar("golo", 0.7)
+        elif g_eu < g_adv:
+            txt, cor = "DERROTA", (200, 60, 60)
+            som.tocar("apito_final", 0.6)
+        else:
+            txt, cor = "EMPATE", (200, 150, 30)
+            som.tocar("apito_final", 0.6)
+        em_casa = jogo["casa_id"] == camp.equipa_jogador
+        aviso = {"tipo": "jogo", "jornada": jornada, "casa": jogo["casa_id"], "fora": jogo["fora_id"],
+                 "gc": g_eu if em_casa else g_adv, "gf": g_adv if em_casa else g_eu, "texto": txt, "cor": cor}
+        self.abrir_campeonato(destaque=jornada, aviso=aviso)
+
+    def simular_epoca_carreira(self):
+        """Simula todas as jornadas que faltam até ao fim do campeonato."""
+        camp = self.carreira
+        n = camp.simular_resto_da_epoca()
+        if n == 0:
+            return
+        pos = camp.posicao_do_jogador()
+        if pos == 1:
+            som.tocar("golo")
+            txt, cor = "CAMPEÃO!", (50, 170, 90)
+        else:
+            som.tocar("apito_final", 0.6)
+            txt, cor = f"{pos}.º LUGAR", (50, 110, 210)
+        aviso = {"tipo": "epoca", "jornadas": n, "posicao": pos, "texto": txt, "cor": cor}
+        self.abrir_campeonato(destaque=camp.ultima_jornada_jogada(), aviso=aviso)
 
     def iniciar_jogo_carreira(self):
         """Joga o próximo jogo do campeonato. A equipa do jogador é sempre a que ele controla."""
@@ -1022,6 +1151,8 @@ class Game:
         self.rink.definir_equipa_casa(equipa_id)
         for j in self.equipa_azul:
             j.equipa_id = equipa_id
+        for a in self.agentes_azul:
+            a.definir_forca(FORCA_EQUIPAS.get(equipa_id, 79))
         self._atualizar_equipamentos()
         info = obter_info_equipa(equipa_id)
         self._msg_texto = f"Equipa da Casa: {info['nome']}"
@@ -1033,6 +1164,8 @@ class Game:
         self.equipa_fora_id = equipa_id
         for j in self.equipa_vermelha:
             j.equipa_id = equipa_id
+        for a in self.agentes_vermelhos:
+            a.definir_forca(FORCA_EQUIPAS.get(equipa_id, 79))
         self._atualizar_equipamentos()
         info = obter_info_equipa(equipa_id)
         self._msg_texto = f"Equipa Visitante: {info['nome']}"
@@ -1067,6 +1200,7 @@ class Game:
             self._msg_texto = f"GOLO!  {info_fora['nome'].upper()}"
         self._msg_timer = 2.5
         self._msg_equipa = equipa
+        som.tocar("golo")
         # Recomeça com a bola a equipa que sofreu o golo
         self._repor_posicoes(saida="vermelho" if equipa == "azul" else "azul")
 
@@ -1128,11 +1262,13 @@ class Game:
             self.tempo_restante = float(DURACAO_PARTE)
             self._msg_texto = "Intervalo  —  2.ª Parte"
             self._msg_timer = 3.0
+            som.tocar("apito_longo")
             self._repor_posicoes(saida="vermelho")
         else:
             self._cancelar_mira()
             self.jogo_ativo = False
             self.fim_jogo   = True
+            som.tocar("apito_final")
             self.ecra_fim   = EcraFimJogo(self.screen, modo_carreira=self.modo_carreira,
                                           jornada=self._jornada_carreira)
 

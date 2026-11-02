@@ -4,7 +4,7 @@
 Como funciona:
   - O jogador escolhe a sua equipa e a dificuldade.
   - Cria-se o calendário: todas as equipas jogam contra todas uma vez (7 jornadas, 4 jogos cada).
-  - Em cada jornada o jogador joga o seu jogo; os outros 3 jogos são simulados.
+  - Em cada jornada o jogador joga o seu jogo (ou simula-o); os outros 3 jogos são simulados.
   - Vitória = 3 pontos, empate = 1, derrota = 0.
   - Desempate na classificação: diferença de golos, depois golos marcados.
 
@@ -63,7 +63,8 @@ CREATE TABLE IF NOT EXISTS partida (
     golos_casa  INTEGER CHECK (golos_casa >= 0),
     golos_fora  INTEGER CHECK (golos_fora >= 0),
     jogada      INTEGER NOT NULL DEFAULT 0,      -- 0 = por jogar, 1 = já jogada
-    do_jogador  INTEGER NOT NULL DEFAULT 0       -- 1 = jogo da equipa do jogador
+    do_jogador  INTEGER NOT NULL DEFAULT 0,      -- 1 = jogo da equipa do jogador
+    simulado    INTEGER NOT NULL DEFAULT 0       -- 1 = resultado simulado (não jogado pelo jogador)
 );
 CREATE TABLE IF NOT EXISTS classificacao (
     torneio_id      INTEGER NOT NULL REFERENCES torneio(id),
@@ -116,27 +117,47 @@ def gerar_calendario(equipas: list) -> list:
     return jornadas
 
 
-def _poisson(media: float, rnd: random.Random) -> int:
-    """Número aleatório com distribuição de Poisson (bom modelo para o número de golos)."""
-    limite = math.exp(-media)
-    k, p = 0, 1.0
-    while True:
-        p *= rnd.random()
-        if p <= limite:
-            return k
-        k += 1
+# Parâmetros do modelo de simulação (afinados com ferramentas/analise_simulacao.py)
+GOLOS_BASE = 3.1         # golos esperados de cada equipa num jogo equilibrado
+PESO_FORCA = 0.24        # quanto a diferença de força muda os golos esperados
+VANTAGEM_CASA = 0.3      # golos a mais, em média, para quem joga em casa
+FORMA_DO_DIA = 4.5       # variação da força de jogo para jogo (desvio padrão)
+PROB_CONVERSAO = 0.5     # probabilidade de uma oportunidade dar golo
+MAX_GOLOS = 11
+# Ajuste à força da equipa do jogador quando ele simula o seu jogo (a dificuldade conta)
+AJUSTE_DIFICULDADE = {"facil": 5, "normal": 0, "dificil": -5}
 
 
-def simular_jogo(casa: str, fora: str, rnd: random.Random = random) -> tuple[int, int]:
+def _golos(media: float, rnd: random.Random) -> int:
     """
-    Resultado de um jogo que o jogador não joga.
-    Cada equipa marca em média 3 golos, mais se for mais forte do que o adversário,
-    e quem joga em casa tem uma pequena vantagem.
+    Número de golos de uma equipa. Em vez de uma distribuição de Poisson (que dava resultados
+    estranhos como 14-3), cada equipa tem um certo número de oportunidades e cada uma dá golo
+    com probabilidade PROB_CONVERSAO (distribuição binomial). A média é a mesma, mas os
+    resultados variam menos e seguem mais a força das equipas.
     """
-    fc, ff = FORCA_EQUIPAS.get(casa, 75), FORCA_EQUIPAS.get(fora, 75)
-    media_casa = 3.0 * (fc / ff) ** 2 + 0.3
-    media_fora = 3.0 * (ff / fc) ** 2
-    return _poisson(media_casa, rnd), _poisson(media_fora, rnd)
+    oportunidades = max(1, round(media / PROB_CONVERSAO))
+    p = media / oportunidades
+    return min(MAX_GOLOS, sum(rnd.random() < p for _ in range(oportunidades)))
+
+
+def simular_jogo(casa: str, fora: str, rnd: random.Random = random,
+                 ajuste_casa: float = 0.0, ajuste_fora: float = 0.0) -> tuple[int, int]:
+    """
+    Resultado de um jogo simulado.
+      1. Cada equipa tem a sua força (0-100), mais um ajuste (forma recente, dificuldade)
+         e mais a "forma do dia" (um valor aleatório: às vezes a equipa joga melhor, às vezes pior).
+      2. Os golos esperados de cada equipa dependem da diferença de forças:
+            golos_esperados = GOLOS_BASE x e^(PESO_FORCA x diferença / 10)
+         (a equipa da casa tem ainda um pequeno bónus).
+      3. Os golos são sorteados à volta desse valor (ver _golos).
+    Assim o mais forte ganha quase sempre, mas há surpresas de vez em quando (cerca de 5 %).
+    """
+    fc = FORCA_EQUIPAS.get(casa, 75) + ajuste_casa + rnd.gauss(0, FORMA_DO_DIA)
+    ff = FORCA_EQUIPAS.get(fora, 75) + ajuste_fora + rnd.gauss(0, FORMA_DO_DIA)
+    d = (fc - ff) / 10
+    media_casa = GOLOS_BASE * math.exp(PESO_FORCA * d) + VANTAGEM_CASA
+    media_fora = GOLOS_BASE * math.exp(-PESO_FORCA * d)
+    return _golos(media_casa, rnd), _golos(media_fora, rnd)
 
 
 class Campeonato:
@@ -152,6 +173,10 @@ class Campeonato:
         self.con.execute("PRAGMA foreign_keys = ON")
         with self.con:
             self.con.executescript(_ESQUEMA)
+            # Bases de dados de versões antigas não têm a coluna "simulado": acrescentá-la
+            colunas = [c["name"] for c in self.con.execute("PRAGMA table_info(partida)")]
+            if "simulado" not in colunas:
+                self.con.execute("ALTER TABLE partida ADD COLUMN simulado INTEGER NOT NULL DEFAULT 0")
             # As equipas são sempre as mesmas: garantir que existem (INSERT OR IGNORE)
             self.con.executemany(
                 "INSERT OR IGNORE INTO equipa (id, nome, sigla, forca) VALUES (?, ?, ?, ?)",
@@ -268,6 +293,28 @@ class Campeonato:
             (self.torneio_id,)).fetchone()
         return linha[0] or 0
 
+    def forma(self, equipa_id: str, n: int = 5) -> list:
+        """Últimos n resultados da equipa, do mais antigo para o mais recente: 'V', 'E' ou 'D'."""
+        linhas = self.con.execute(
+            "SELECT casa_id, golos_casa, golos_fora FROM partida "
+            "WHERE torneio_id = ? AND jogada = 1 AND (casa_id = ? OR fora_id = ?) "
+            "ORDER BY jornada DESC LIMIT ?", (self.torneio_id, equipa_id, equipa_id, n)).fetchall()
+        res = []
+        for l in reversed(linhas):
+            meus, deles = ((l["golos_casa"], l["golos_fora"]) if l["casa_id"] == equipa_id
+                           else (l["golos_fora"], l["golos_casa"]))
+            res.append("V" if meus > deles else ("E" if meus == deles else "D"))
+        return res
+
+    def _ajuste_forma(self, equipa_id: str) -> float:
+        """Equipas em boa forma jogam um pouco melhor: +1,5 por vitória (e -1,5 por derrota) nos últimos 3 jogos."""
+        return sum({"V": 1.5, "E": 0.0, "D": -1.5}[r] for r in self.forma(equipa_id, 3))
+
+    def _simular(self, casa: str, fora: str, rnd: random.Random, ajuste_jogador: float = 0.0):
+        aj_c = self._ajuste_forma(casa) + (ajuste_jogador if casa == self.equipa_jogador else 0)
+        aj_f = self._ajuste_forma(fora) + (ajuste_jogador if fora == self.equipa_jogador else 0)
+        return simular_jogo(casa, fora, rnd, aj_c, aj_f)
+
     def classificacao(self) -> list:
         """Tabela classificativa ordenada: pontos, diferença de golos, golos marcados, nome."""
         return self.con.execute(
@@ -287,13 +334,13 @@ class Campeonato:
     # Registar resultados                                                  #
     # ------------------------------------------------------------------ #
 
-    def _registar(self, partida_id: int, casa: str, fora: str, gc: int, gf: int):
+    def _registar(self, partida_id: int, casa: str, fora: str, gc: int, gf: int, simulado: bool = False):
         """Grava o resultado de uma partida e atualiza a classificação das duas equipas."""
         if gc < 0 or gf < 0:
             raise ValueError("não pode haver golos negativos")
         self.con.execute(
-            "UPDATE partida SET golos_casa = ?, golos_fora = ?, jogada = 1 WHERE id = ? AND jogada = 0",
-            (gc, gf, partida_id))
+            "UPDATE partida SET golos_casa = ?, golos_fora = ?, jogada = 1, simulado = ? "
+            "WHERE id = ? AND jogada = 0", (gc, gf, int(simulado), partida_id))
         for eq, marcados, sofridos in ((casa, gc, gf), (fora, gf, gc)):
             v = int(marcados > sofridos)
             e = int(marcados == sofridos)
@@ -307,9 +354,9 @@ class Campeonato:
                 (v, e, d, marcados, sofridos, pts, self.torneio_id, eq))
 
     def registar_jogo_do_jogador(self, golos_jogador: int, golos_adversario: int,
-                                 semente: int | None = None) -> int:
+                                 semente: int | None = None, simulado: bool = False) -> int:
         """
-        Grava o resultado do jogo que o jogador acabou de jogar e simula os outros jogos
+        Grava o resultado do jogo do jogador (jogado ou simulado) e simula os outros jogos
         dessa jornada. Tudo numa transação. Devolve o número da jornada.
         """
         jogo = self.proximo_jogo()
@@ -321,14 +368,65 @@ class Campeonato:
             gc, gf = golos_adversario, golos_jogador
         rnd = random.Random(semente)
         with self.con:
-            self._registar(jogo["id"], jogo["casa_id"], jogo["fora_id"], gc, gf)
-            for p in self.jogos_da_jornada(jogo["jornada"]):
-                if not p["jogada"] and not p["do_jogador"]:
-                    a, b = simular_jogo(p["casa_id"], p["fora_id"], rnd)
-                    self._registar(p["id"], p["casa_id"], p["fora_id"], a, b)
+            # Os outros jogos são simulados ANTES de gravar o do jogador, para a "forma"
+            # de todas as equipas ser a do início da jornada (igual para todos)
+            outros = [(p, self._simular(p["casa_id"], p["fora_id"], rnd))
+                      for p in self.jogos_da_jornada(jogo["jornada"])
+                      if not p["jogada"] and not p["do_jogador"]]
+            self._registar(jogo["id"], jogo["casa_id"], jogo["fora_id"], gc, gf, simulado)
+            for p, (a, b) in outros:
+                self._registar(p["id"], p["casa_id"], p["fora_id"], a, b, True)
             por_jogar = self.con.execute(
                 "SELECT COUNT(*) FROM partida WHERE torneio_id = ? AND jogada = 0",
                 (self.torneio_id,)).fetchone()[0]
             if por_jogar == 0:
                 self.con.execute("UPDATE torneio SET estado = 'terminado' WHERE id = ?", (self.torneio_id,))
         return jogo["jornada"]
+
+    def simular_jogo_do_jogador(self, semente: int | None = None) -> tuple[int, int, int]:
+        """
+        Simula o próximo jogo do jogador (em vez de o jogar) e o resto da jornada.
+        A dificuldade escolhida conta: no «Difícil» a equipa do jogador fica um pouco mais fraca.
+        Devolve (jornada, golos do jogador, golos do adversário).
+        """
+        jogo = self.proximo_jogo()
+        if jogo is None:
+            raise RuntimeError("o campeonato já terminou")
+        rnd = random.Random(semente)
+        ajuste = AJUSTE_DIFICULDADE.get(self.dificuldade, 0)
+        gc, gf = self._simular(jogo["casa_id"], jogo["fora_id"], rnd, ajuste)
+        eu_em_casa = jogo["casa_id"] == self.equipa_jogador
+        g_eu, g_adv = (gc, gf) if eu_em_casa else (gf, gc)
+        jornada = self.registar_jogo_do_jogador(g_eu, g_adv, rnd.randrange(1 << 30), simulado=True)
+        return jornada, g_eu, g_adv
+
+    def simular_resto_da_epoca(self, semente: int | None = None) -> int:
+        """Simula todas as jornadas que faltam. Devolve quantas jornadas foram simuladas."""
+        rnd = random.Random(semente)
+        n = 0
+        while self.proximo_jogo() is not None:
+            self.simular_jogo_do_jogador(rnd.randrange(1 << 30))
+            n += 1
+        return n
+
+    def probabilidades_proximo_jogo(self, n: int = 600) -> tuple[float, float, float]:
+        """
+        Probabilidades de vitória, empate e derrota da equipa do jogador no próximo jogo,
+        calculadas simulando o jogo n vezes com o mesmo modelo (método de Monte Carlo).
+        """
+        jogo = self.proximo_jogo()
+        if jogo is None:
+            return 0.0, 0.0, 0.0
+        eu = self.equipa_jogador
+        ajuste = AJUSTE_DIFICULDADE.get(self.dificuldade, 0)
+        casa, fora = jogo["casa_id"], jogo["fora_id"]
+        aj_c = self._ajuste_forma(casa) + (ajuste if casa == eu else 0)
+        aj_f = self._ajuste_forma(fora) + (ajuste if fora == eu else 0)
+        rnd = random.Random(jogo["id"])
+        v = e = 0
+        for _ in range(n):
+            gc, gf = simular_jogo(casa, fora, rnd, aj_c, aj_f)
+            meus, deles = (gc, gf) if casa == eu else (gf, gc)
+            v += meus > deles
+            e += meus == deles
+        return v / n, e / n, (n - v - e) / n

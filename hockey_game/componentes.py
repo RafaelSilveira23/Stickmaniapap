@@ -10,6 +10,7 @@ import pygame
 
 from settings import WIDTH, HEIGHT
 from cores import misturar, clarear, escurecer, cor_texto_sobre, recolorir_frames
+from sons import som
 
 # Paleta base da interface
 COR_FUNDO_TOPO  = (8, 12, 26)
@@ -209,8 +210,10 @@ class ListaBotoes:
         if event.type == pygame.KEYDOWN:
             if event.key in (pygame.K_UP, pygame.K_w):
                 self.foco = (self.foco - 1) % len(self.botoes)
+                som.ui("mover")
             elif event.key in (pygame.K_DOWN, pygame.K_s):
                 self.foco = (self.foco + 1) % len(self.botoes)
+                som.ui("mover")
             elif event.key in (pygame.K_RETURN, pygame.K_KP_ENTER, pygame.K_SPACE):
                 return self.botoes[self.foco].acao
         elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
@@ -226,8 +229,9 @@ class ListaBotoes:
         if mpos != self._ultimo_mouse:
             self._ultimo_mouse = mpos
             for i, b in enumerate(self.botoes):
-                if b.por_cima(mpos):
+                if b.por_cima(mpos) and self.foco != i:
                     self.foco = i
+                    som.ui("mover")
         for i, b in enumerate(self.botoes):
             b.draw(surf, (-1, -1), focado=(i == self.foco))
 

@@ -153,6 +153,20 @@ def icone(nome: str, tamanho: int, cor=(255, 255, 255)) -> pygame.Surface:
             # Pé e base
             pygame.draw.rect(s, c, (T * 0.45, T * 0.54, T * 0.10, T * 0.20))
             pygame.draw.rect(s, c, (T * 0.28, T * 0.74, T * 0.44, T * 0.12), border_radius=int(T * 0.03))
+        elif nome == "avancar":
+            # Dois triângulos (avançar rápido = simular)
+            for x0 in (T * 0.12, T * 0.48):
+                pygame.draw.polygon(s, c, [(x0, T * 0.2), (x0, T * 0.8), (x0 + T * 0.4, T * 0.5)])
+        elif nome == "recomecar":
+            # Seta em círculo
+            w = int(T * 0.11)
+            ret = pygame.Rect(T * 0.16, T * 0.16, T * 0.68, T * 0.68)
+            pygame.draw.arc(s, c, ret, math.radians(70), math.radians(360), w)
+            pygame.draw.polygon(s, c, [(T * 0.50, T * 0.02), (T * 0.72, T * 0.18), (T * 0.48, T * 0.32)])
+        elif nome == "casa":
+            pygame.draw.polygon(s, c, [(T * 0.5, T * 0.1), (T * 0.92, T * 0.5), (T * 0.08, T * 0.5)])
+            pygame.draw.rect(s, c, (T * 0.2, T * 0.46, T * 0.6, T * 0.42))
+            pygame.draw.rect(s, (0, 0, 0, 0), (T * 0.42, T * 0.62, T * 0.16, T * 0.26))
         elif nome == "sair":
             # Símbolo de "desligar"
             w = int(T * 0.11)

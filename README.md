@@ -35,6 +35,13 @@ No Windows também se pode fazer duplo clique em `jogar.bat`.
   tábuas com veios e nós, reflexos das luzes no verniz, sombra junto às tabelas e sombras esbatidas
   nos jogadores e na bola; vsync para a imagem não "rasgar"
 - **Modo carreira**: escolhes um clube e jogas um campeonato contra as outras 7 equipas (7 jornadas, os outros jogos são simulados), com classificação, calendário e várias épocas. O progresso fica gravado numa base de dados SQLite (`hockey_game/saves/carreira.db`)
+  - Podes **simular** o teu jogo (botão SIMULAR ou tecla `S`) ou a **época toda**
+  - Resultados realistas: força dos clubes, forma recente e "forma do dia", golos por distribuição binomial
+    (validado em 600 épocas com `ferramentas/analise_simulacao.py`)
+  - Classificação com a forma (últimos 5 jogos) e probabilidades de vitória/empate/derrota no próximo jogo
+  - A força do clube também conta no jogo (os clubes fortes patinam um pouco mais depressa)
+- **Sons** criados por síntese no código (sem ficheiros de fora): apito, tacadas, tabelas, postes,
+  defesas, golo com buzina e público; volume dos efeitos e do público nas Definições
 - 8 equipas portuguesas com emblemas
 - **Equipamentos com as cores de cada clube**; se as cores das duas equipas forem parecidas, a equipa visitante joga com o equipamento alternativo
 - **Linhas do ringue na cor da equipa da casa**, ajustadas automaticamente para se verem bem no piso de madeira
@@ -61,6 +68,8 @@ No Windows também se pode fazer duplo clique em `jogar.bat`.
 | `hockey_game/carreira_menu.py` | Ecrãs do modo carreira (escolha da equipa e campeonato) |
 | `hockey_game/componentes.py` | Botões, painéis e fundos reutilizáveis da interface |
 | `hockey_game/graficos.py` | Efeitos gráficos: luzes, sombras suaves, ícones e título desenhados no código |
+| `hockey_game/sons.py` | Síntese e reprodução dos sons (os `.wav` ficam em `hockey_game/assets/sounds`) |
+| `ferramentas/analise_simulacao.py` | Verifica se os resultados simulados do modo carreira fazem sentido |
 | `hockey_game/cores.py` | Cores dos equipamentos, contraste e recoloração dos sprites |
 | `hockey_game/team.py` | Dados das equipas (nome, sigla, cores, emblema) |
 | `hockey_game/player.py`, `goalkeeper.py`, `ai.py` | Jogadores, guarda-redes e inteligência artificial |

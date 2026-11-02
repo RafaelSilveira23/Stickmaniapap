@@ -141,6 +141,7 @@ class AgentIA:
         self.gr_adversario = gr_adversario
 
         self.dificuldade = dificuldade
+        self.fator_forca = 1.0        # força do clube (ver definir_forca)
         self.cfg = DIFICULDADES.get(dificuldade, DIFICULDADES["normal"])
 
         # Para que lado ataca (+1 = para a direita, -1 = para a esquerda)
@@ -167,7 +168,27 @@ class AgentIA:
         """Atualiza a dificuldade e recalibra parâmetros táticos da IA."""
         if nivel in DIFICULDADES:
             self.dificuldade = nivel
-            self.cfg = DIFICULDADES[nivel]
+            self._aplicar_cfg()
+
+    def definir_forca(self, forca: int):
+        """
+        A força do clube (0-100, a mesma do modo carreira) muda um pouco o jogo da IA:
+        um clube forte patina até ~5 % mais depressa e remata com mais pontaria do que um fraco.
+        A dificuldade continua a ser o que mais conta.
+        """
+        self.fator_forca = 1.0 + (forca - 79) / 23 * 0.10
+        self._aplicar_cfg()
+
+    def _aplicar_cfg(self):
+        base = DIFICULDADES.get(self.dificuldade, DIFICULDADES["normal"])
+        if abs(self.fator_forca - 1.0) < 1e-6:
+            self.cfg = base
+            return
+        cfg = dict(base)
+        for chave in ("vel_normal", "vel_sprint", "vel_defesa"):
+            cfg[chave] = base[chave] * self.fator_forca
+        cfg["erro_mira"] = base["erro_mira"] / self.fator_forca
+        self.cfg = cfg
 
     # ------------------------------------------------------------------ #
     # Update principal — chamado cada frame                                #
