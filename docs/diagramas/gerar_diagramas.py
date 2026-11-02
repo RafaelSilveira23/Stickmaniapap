@@ -19,7 +19,7 @@ def casos_de_uso():
     d.caixa("jog", 60, 290, 50, 90, "Jogador", "ator", "azul")
     d.caixa("ia", 905, 290, 50, 90, "Computador (IA)", "ator", "vermelho")
 
-    esq = [("uc1", "Escolher equipas"), ("uc2", "Escolher dificuldade"), ("uc3", "Ver controlos"),
+    esq = [("uc1", "Escolher equipas"), ("uc2", "Escolher dificuldade"), ("uc3", "Ver definições\n(controlos, ecrã inteiro)"),
            ("uc4", "Jogar partida"), ("uc5", "Pausar / continuar"), ("uc6", "Ver resultado final"),
            ("uc7", "Jogar o modo carreira\n(campeonato)"), ("uc8", "Consultar classificação\ne calendário")]
     for i, (id, txt) in enumerate(esq):
@@ -61,7 +61,7 @@ def arquitetura():
 
     d.caixa("gS", 850, 50, 240, 310, "SAÍDA", "grupo", "cinza", tam=14)
     d.caixa("ecr", 870, 100, 200, 66, "Ecrã 1280×720\ncamera.py · rink.py · baliza.py", "arredondado", "laranja")
-    d.caixa("hud", 870, 190, 200, 66, "Interface (HUD)\nui.py · componentes.py", "arredondado", "laranja")
+    d.caixa("hud", 870, 190, 200, 66, "Interface e efeitos\nui.py · componentes.py\ngraficos.py", "arredondado", "laranja")
     d.caixa("som", 870, 280, 200, 56, "Som\n(a implementar)", "arredondado", "amarelo", tracejado=True)
 
     d.caixa("gD", 270, 420, 520, 130, "DADOS", "grupo", "cinza", tam=14)
@@ -89,7 +89,7 @@ def estados_jogo():
     d.caixa("sel", 380, 55, 200, 60, "Seleção de equipas\ne dificuldade", "arredondado", "azul")
     d.caixa("jogo", 700, 55, 200, 60, "Partida a decorrer", "arredondado", "verde", negrito=True)
     d.caixa("pausa", 980, 55, 190, 60, "Pausa", "arredondado", "amarelo")
-    d.caixa("ctrl", 80, 300, 180, 60, "Controlos", "arredondado", "azul")
+    d.caixa("ctrl", 80, 300, 180, 60, "Definições\n(controlos, ecrã inteiro)", "arredondado", "azul")
     d.caixa("golo", 700, 300, 200, 60, "Golo / intervalo\n(repor posições)", "arredondado", "verde")
     d.caixa("fim", 980, 300, 190, 60, "Fim de jogo\n(resultado final)", "arredondado", "vermelho")
     d.caixa("f", 330, 195, 30, 30, "", "fim")
@@ -104,12 +104,12 @@ def estados_jogo():
     d.seta("golo", "jogo", "recomeça", desvio=(45, 0))
     d.seta("jogo", "fim", "fim da 2.ª parte", desvio=(14, -12), pos_texto=0.3)
     d.seta("fim", "jogo", "Jogar de novo", desvio=(-14, 12), pos_texto=0.68)
-    d.seta("menu", "ctrl", "Controlos", desvio=(-35, 0))
+    d.seta("menu", "ctrl", "Engrenagem", desvio=(-35, 0))
     d.seta("ctrl", "menu", "Voltar", desvio=(35, 0))
     d.seta("menu", "f", "Sair")
     d.seta("pausa", "menu", "Menu principal", exato=True,
            pontos=[(1075, 55), (1075, 22), (170, 22), (170, 55)])
-    d.seta("pausa", "ctrl", "Controlos / voltar à pausa", exato=True, ambos=True,
+    d.seta("pausa", "ctrl", "Definições / voltar à pausa", exato=True, ambos=True,
            pontos=[(1170, 85), (1195, 85), (1195, 440), (170, 440), (170, 360)], pos_texto=0.55)
     d.seta("fim", "sel", "Mudar equipas", exato=True,
            pontos=[(1010, 360), (1010, 405), (480, 405), (480, 115)], pos_texto=0.4)

@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 """game.py - game loop com IA real, posicionamento tático, mini-mapa e cartão de jogador."""
+import json
 import math
+import os
 import pygame
 from settings import *
 from rink import Rink
@@ -13,18 +15,21 @@ from team import EQUIPAS_LISTA, obter_info_equipa
 from menu import MenuPrincipal, EcraControlos, TeamSelectMenu, MenuPausa, EcraFimJogo
 from cores import definir_equipamentos, misturar, cor_texto_sobre
 from componentes import COR_DESTAQUE
-from carreira import Campeonato, CAMINHO_BD
+from graficos import sombra_suave
+from carreira import Campeonato, CAMINHO_BD, PASTA_SAVES
 from carreira_menu import EcraCarreiraEscolha, EcraCampeonato
 
 DURACAO_PARTE = 60 * 5   # 5 minutos por parte
 DIFICULDADE_EQUIPA_HUMANA = "normal"   # nível dos colegas e do GR do jogador humano
 RAIO_GR_CORPO = 30                       # distância mínima entre um jogador e um guarda-redes
+CAMINHO_DEFINICOES = os.path.join(PASTA_SAVES, "definicoes.json")
 
 
 class Game:
     def __init__(self):
         pygame.init()
-        self.screen = pygame.display.set_mode((WIDTH, HEIGHT))
+        self.ecra_inteiro = bool(self._ler_definicoes().get("ecra_inteiro", False))
+        self.screen = self._criar_janela()
         pygame.display.set_caption(TITLE)
         self.clock = pygame.time.Clock()
 
@@ -57,7 +62,8 @@ class Game:
         # Estados: "menu_principal", "controlos", "menu_selecao", "carreira_escolha",
         #          "carreira" (ecrã do campeonato) ou "jogo"
         self.estado         = "menu_principal"
-        self.menu_principal = MenuPrincipal(self.screen, self.equipa_casa_id, self.equipa_fora_id)
+        self.menu_principal = MenuPrincipal(self.screen, self.equipa_casa_id, self.equipa_fora_id,
+                                            arena=self.rink._surf)
         self.menu           = TeamSelectMenu(self.screen, self.equipa_casa_id, self.equipa_fora_id)
         self.ecra_controlos = EcraControlos(self.screen)
         self.menu_pausa     = MenuPausa(self.screen)
@@ -251,7 +257,65 @@ class Game:
     # Eventos                                                              #
     # ================================================================== #
 
+    # ------------------------------------------------------------------ #
+    # Janela e definições                                                  #
+    # ------------------------------------------------------------------ #
+
+    def _criar_janela(self) -> pygame.Surface:
+        """
+        Janela de 1280x720. Com SCALED o jogo pode ir para ecrã inteiro (a imagem é
+        ampliada mantendo a proporção) e com vsync o desenho fica sincronizado com o
+        monitor (sem "rasgos" na imagem). Se o computador não suportar, usa a janela simples.
+        """
+        flags = pygame.SCALED | (pygame.FULLSCREEN if self.ecra_inteiro else 0)
+        for tentativa in ({"vsync": 1}, {}):
+            try:
+                return pygame.display.set_mode((WIDTH, HEIGHT), flags, **tentativa)
+            except pygame.error:
+                pass
+        self.ecra_inteiro = False
+        return pygame.display.set_mode((WIDTH, HEIGHT))
+
+    @staticmethod
+    def _ler_definicoes() -> dict:
+        try:
+            with open(CAMINHO_DEFINICOES, encoding="utf-8") as f:
+                dados = json.load(f)
+            return dados if isinstance(dados, dict) else {}
+        except (OSError, ValueError):
+            return {}
+
+    def _gravar_definicoes(self):
+        try:
+            os.makedirs(os.path.dirname(CAMINHO_DEFINICOES), exist_ok=True)
+            with open(CAMINHO_DEFINICOES, "w", encoding="utf-8") as f:
+                json.dump({"ecra_inteiro": self.ecra_inteiro}, f)
+        except OSError:
+            pass          # não conseguir gravar não impede de jogar
+
+    def alternar_ecra_inteiro(self):
+        try:
+            pygame.display.toggle_fullscreen()
+            self.ecra_inteiro = not self.ecra_inteiro
+            self._gravar_definicoes()
+        except pygame.error:
+            pass
+
+    def _abrir_definicoes(self, origem: str):
+        self._origem_controlos = origem
+        self.ecra_controlos.arena = self.rink._surf
+        self.estado = "controlos"
+
     def handle_events(self):
+        # F11 funciona em qualquer ecrã (os outros eventos voltam para a fila, pela mesma ordem)
+        teclas = pygame.event.get(pygame.KEYDOWN)
+        if any(e.key == pygame.K_F11 for e in teclas):
+            self.alternar_ecra_inteiro()
+        for e in teclas:
+            if e.key != pygame.K_F11:
+                pygame.event.post(e)
+        self.ecra_controlos.ecra_inteiro = self.ecra_inteiro
+
         # ── Menus (cada ecrã devolve uma "ação") ──────────────────────────
         if self.estado == "menu_principal":
             for event in pygame.event.get():
@@ -260,9 +324,8 @@ class Game:
                     self.abrir_selecao_equipas()
                 elif acao == "carreira":
                     self.abrir_escolha_carreira()
-                elif acao == "controlos":
-                    self._origem_controlos = "menu_principal"
-                    self.estado = "controlos"
+                elif acao == "definicoes":
+                    self._abrir_definicoes("menu_principal")
                 elif acao == "sair":
                     self.running = False
             return
@@ -270,7 +333,9 @@ class Game:
         if self.estado == "controlos":
             for event in pygame.event.get():
                 acao = self.ecra_controlos.handle_event(event)
-                if acao == "voltar":
+                if acao == "ecra_inteiro":
+                    self.alternar_ecra_inteiro()
+                elif acao == "voltar":
                     # Se veio da pausa, volta ao jogo (que continua em pausa)
                     self.estado = "jogo" if self._origem_controlos == "pausa" else "menu_principal"
                 elif acao == "sair":
@@ -329,8 +394,7 @@ class Game:
                 elif acao == "reiniciar":
                     self.iniciar_partida(self.equipa_casa_id, self.equipa_fora_id, self.dificuldade)
                 elif acao == "controlos":
-                    self._origem_controlos = "pausa"
-                    self.estado = "controlos"
+                    self._abrir_definicoes("pausa")
                 elif acao == "desistir":
                     self.abrir_campeonato()          # o jogo não conta
                 elif acao == "menu":
@@ -938,7 +1002,8 @@ class Game:
         if fora_id:
             self.equipa_fora_id = fora_id
         self.estado = "menu_principal"
-        self.menu_principal = MenuPrincipal(self.screen, self.equipa_casa_id, self.equipa_fora_id)
+        self.menu_principal = MenuPrincipal(self.screen, self.equipa_casa_id, self.equipa_fora_id,
+                                            arena=self.rink._surf)
 
     def _atualizar_equipamentos(self):
         """Recalcula os equipamentos das duas equipas e aplica-os aos jogadores."""
@@ -1202,6 +1267,9 @@ class Game:
             img = pygame.transform.smoothscale(
                 img, (max(1, round(img.get_width() * k)), max(1, round(img.get_height() * k))))
         sx, sy = cam.projetar(b.pos_x, b.pos_y)
+        # Sombra suave no chão, um pouco abaixo e à direita (a luz vem de cima, à esquerda)
+        sombra = sombra_suave(max(4, round(20 * k)), max(2, round(8 * k)), 120)
+        self.screen.blit(sombra, sombra.get_rect(center=(round(sx + 2 * k), round(sy + 5 * k))))
         self.screen.blit(img, img.get_rect(center=(round(sx), round(sy))))
 
     def _draw_mensagem(self, texto: str):

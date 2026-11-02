@@ -4,6 +4,7 @@ import os
 import random
 import math
 import pygame
+from graficos import sombra_suave
 from settings import *
 from animation import AnimationController, load_animation_from_names
 from cores import recolorir_frames, escurecer_stick
@@ -92,11 +93,14 @@ _sombra_cache = {}
 
 
 def sombra_oval(largura: int, altura: int, alpha: int = 70) -> pygame.Surface:
+    """Sombra com a borda esbatida: escura junto aos patins e a desaparecer para fora."""
     chave = (largura, altura, alpha)
     if chave not in _sombra_cache:
-        s = pygame.Surface((largura * 2, altura * 2), pygame.SRCALPHA)
-        pygame.draw.ellipse(s, (20, 12, 4, alpha), s.get_rect())
-        _sombra_cache[chave] = pygame.transform.smoothscale(s, (largura, altura))
+        # Elipse um pouco mais larga, para a parte esbatida não ficar mais pequena do que antes
+        suave = sombra_suave(largura + 8, altura + 4, min(255, int(alpha * 1.9)))
+        s = pygame.Surface((largura + 8, altura + 4), pygame.SRCALPHA)
+        s.blit(suave, (0, 0))
+        _sombra_cache[chave] = s
     return _sombra_cache[chave]
 
 
@@ -772,7 +776,7 @@ class Player(pygame.sprite.Sprite):
         # Sombra: encolhe um pouco quando o corpo sobe
         larg_sombra = 30 + bob * 2 if self._anim.estado != "colisao" else 44
         sombra = sombra_oval(larg_sombra, 9)
-        tela.blit(sombra, (cx - sombra.get_width() // 2, pes_y - 5))
+        tela.blit(sombra, (cx - sombra.get_width() // 2, pes_y - 7))
 
         sx, sy = self._shake_offset
         # Rodamos à volta dos pés, para os patins ficarem sempre no chão:

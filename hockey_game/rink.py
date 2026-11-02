@@ -7,6 +7,11 @@ from team import carregar_logo_equipa, obter_info_equipa
 from cores import cor_linhas_campo, misturar, cor_texto_sobre
 from baliza import criar_baliza, criar_baliza_camera
 from camera import Camera
+from graficos import luz
+
+# Super-amostragem do piso: o campo plano é desenhado com o dobro da resolução
+# e só no fim é reduzido (as linhas ficam suaves, sem "escadinhas").
+Q_PISO = 2
 
 # ---------- Câmara em perspetiva ----------
 CAM_TOPO       = 142    # y no ecrã da linha do fundo do ringue
@@ -41,7 +46,7 @@ class Rink:
         self._pub_h = publico_raw.get_height()
 
         # ── Gerar Piso de Madeira Real (Tábua Corrida / Parquet de Hóquei) ──
-        self._campo = self._gerar_piso_madeira(RINK_W, RINK_H)
+        self._campo = self._gerar_piso_madeira(RINK_W, RINK_H, Q_PISO)
 
         # ── Balizas (desenhadas no código, ver baliza.py) ─────────────────
         BSH = 88
@@ -90,32 +95,57 @@ class Rink:
 
         self._surf = self._construir()
 
-    def _gerar_piso_madeira(self, w: int, h: int) -> pygame.Surface:
-        """Gera o piso de madeira natural envernizada do ringue de hóquei."""
-        surf = pygame.Surface((w, h))
+    def _gerar_piso_madeira(self, w: int, h: int, Q: int = 1) -> pygame.Surface:
+        """
+        Piso de madeira envernizada (tábua corrida), com Q vezes a resolução.
+        Cada tábua tem um tom ligeiramente diferente e veios da madeira, como no real.
+        Usa sempre a mesma "semente", por isso o piso é sempre igual.
+        """
+        import random
+        rnd = random.Random(11)
+        W, H = w * Q, h * Q
+        surf = pygame.Surface((W, H))
         surf.fill((224, 178, 122))
+        tabua_h = 16 * Q
+        comp = 115 * Q
 
-        # Tonalidades quentes de tábuas de madeira
-        cores_tabua = [
-            (226, 180, 124),
-            (221, 175, 118),
-            (230, 184, 128),
-            (218, 171, 114),
-            (225, 178, 120),
-        ]
-        tabua_h = 16
+        def tom(c):
+            return max(0, min(255, int(c)))
 
-        for y in range(0, h, tabua_h):
-            cor = cores_tabua[(y // tabua_h) % len(cores_tabua)]
-            pygame.draw.rect(surf, cor, (0, y, w, tabua_h))
-            # Linha horizontal sutil entre tábuas
-            pygame.draw.line(surf, (196, 150, 96), (0, y), (w, y), 1)
+        for i, y in enumerate(range(0, H, tabua_h)):
+            x = ((i * 43) % 95) * Q - comp
+            while x < W:
+                v = rnd.uniform(-8, 8)
+                q = rnd.uniform(-4, 4)                 # umas tábuas mais quentes, outras mais claras
+                cor = (tom(225 + v + q), tom(178 + v), tom(121 + v - q))
+                pygame.draw.rect(surf, cor, (x, y, comp, tabua_h))
+                # Veios: riscos finos um pouco mais escuros ao longo da tábua
+                for _ in range(rnd.randint(3, 6)):
+                    gy = y + rnd.uniform(2, tabua_h - 2)
+                    gx0 = x + rnd.uniform(0, comp * 0.5)
+                    gx1 = min(x + comp - 2, gx0 + rnd.uniform(comp * 0.25, comp * 0.8))
+                    d = rnd.uniform(6, 15)
+                    pygame.draw.line(surf, (tom(cor[0] - d), tom(cor[1] - d), tom(cor[2] - d * 0.8)),
+                                     (gx0, gy), (gx1, gy + rnd.uniform(-1, 1) * Q), 1)
+                # Nó da madeira de vez em quando
+                if rnd.random() < 0.06:
+                    nx, ny = x + rnd.uniform(10, comp - 10), y + tabua_h / 2
+                    pygame.draw.ellipse(surf, (tom(cor[0] - 18), tom(cor[1] - 20), tom(cor[2] - 16)),
+                                        (nx - 4 * Q, ny - 2 * Q, 8 * Q, 4 * Q))
+                # Junta entre tábuas (topo)
+                pygame.draw.line(surf, (190, 145, 92), (x, y), (x, y + tabua_h), Q)
+                x += comp
+            # Junta entre filas de tábuas
+            pygame.draw.line(surf, (196, 150, 96), (0, y), (W, y), Q)
 
-            # Juntas verticais das tábuas intercaladas
-            offset_x = (y * 43) % 95
-            for x in range(offset_x, w, 115):
-                pygame.draw.line(surf, (190, 145, 92), (x, y), (x, y + tabua_h), 1)
-
+        # Sombra junto às tabelas: o piso fica um pouco mais escuro perto da borda
+        sombra = pygame.Surface((W, H), pygame.SRCALPHA)
+        n = 22 * Q
+        for k in range(n):
+            a = int(85 * (1 - k / n) ** 2.2)
+            pygame.draw.rect(sombra, (60, 30, 6, a), (k, k, W - 2 * k, H - 2 * k), 2,
+                             border_radius=max(0, CANTO * Q - k))
+        surf.blit(sombra, (0, 0))
         return surf
 
     # ================================================================== #
@@ -123,36 +153,42 @@ class Rink:
     # ================================================================== #
 
     def _construir_plano(self) -> pygame.Surface:
-        """Piso visto de cima (plano), com todas as linhas. Depois é posto em perspetiva."""
-        surf = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+        """
+        Piso visto de cima (plano), com todas as linhas, com Q_PISO vezes a resolução.
+        Depois é posto em perspetiva.
+        """
+        Q = Q_PISO
         r = self.rect
-        surf.blit(self._mascara_cantos(self._campo), r.topleft)
+        surf = self._mascara_cantos(self._campo)
+
+        def P(x, y):                      # mundo -> imagem do plano
+            return ((x - r.left) * Q, (y - r.top) * Q)
+
+        def ret(x, y, w, h):
+            return pygame.Rect(round((x - r.left) * Q), round((y - r.top) * Q), round(w * Q), round(h * Q))
 
         cx, cy = r.center
         cor_linha = self.cor_linhas
+        lw = (LINHA + 1) * Q
         # Linha do meio, círculo central e emblema
-        pygame.draw.line(surf, cor_linha, (cx, r.top), (cx, r.bottom), LINHA + 1)
-        pygame.draw.circle(surf, cor_linha, (cx, cy), RAIO_CENTRO, LINHA + 1)
-        pygame.draw.circle(surf, cor_linha, (cx, cy), 5)
-        self._desenhar_centro_emblema(surf, cx, cy)
+        pygame.draw.line(surf, cor_linha, P(cx, r.top), P(cx, r.bottom), lw)
+        pygame.draw.circle(surf, cor_linha, P(cx, cy), RAIO_CENTRO * Q, lw)
+        pygame.draw.circle(surf, cor_linha, P(cx, cy), 5 * Q)
+        self._desenhar_centro_emblema(surf, *P(cx, cy), escala=Q)
         # Grandes áreas
-        area_esq = pygame.Rect(self.linha_golo_esq_x, cy - AREA_H // 2, AREA_W, AREA_H)
-        area_dir = pygame.Rect(self.linha_golo_dir_x - AREA_W, cy - AREA_H // 2, AREA_W, AREA_H)
-        pygame.draw.rect(surf, cor_linha, area_esq, LINHA + 1)
-        pygame.draw.rect(surf, cor_linha, area_dir, LINHA + 1)
+        pygame.draw.rect(surf, cor_linha, ret(self.linha_golo_esq_x, cy - AREA_H // 2, AREA_W, AREA_H), lw)
+        pygame.draw.rect(surf, cor_linha, ret(self.linha_golo_dir_x - AREA_W, cy - AREA_H // 2, AREA_W, AREA_H), lw)
         # Linhas de golo vermelhas
         for gx in (self.linha_golo_esq_x, self.linha_golo_dir_x):
-            pygame.draw.line(surf, (220, 40, 40), (gx, self.baliza_topo_y), (gx, self.baliza_base_y), 3)
+            pygame.draw.line(surf, (220, 40, 40), P(gx, self.baliza_topo_y), P(gx, self.baliza_base_y), 3 * Q)
         # Marcas de penálti e de livre direto
         for gx, sinal in ((self.linha_golo_esq_x, 1), (self.linha_golo_dir_x, -1)):
-            pygame.draw.circle(surf, cor_linha, (gx + 85 * sinal, cy), 4)
-            pygame.draw.circle(surf, cor_linha, (gx + 130 * sinal, cy), 3)
+            pygame.draw.circle(surf, cor_linha, P(gx + 85 * sinal, cy), 4 * Q)
+            pygame.draw.circle(surf, cor_linha, P(gx + 130 * sinal, cy), 3 * Q)
         # Linha de proteção atrás das balizas
-        pygame.draw.arc(surf, cor_linha, pygame.Rect(self.linha_golo_esq_x - 65, cy - 45, 65, 90),
-                        1.57, 4.71, 2)
-        pygame.draw.arc(surf, cor_linha, pygame.Rect(self.linha_golo_dir_x, cy - 45, 65, 90),
-                        -1.57, 1.57, 2)
-        return surf.subsurface(r).copy()
+        pygame.draw.arc(surf, cor_linha, ret(self.linha_golo_esq_x - 65, cy - 45, 65, 90), 1.57, 4.71, 2 * Q)
+        pygame.draw.arc(surf, cor_linha, ret(self.linha_golo_dir_x, cy - 45, 65, 90), -1.57, 1.57, 2 * Q)
+        return surf
 
     def _por_em_perspetiva(self, plano: pygame.Surface, destino: pygame.Surface):
         """
@@ -163,8 +199,8 @@ class Rink:
         com o dobro da resolução e no fim reduzimos com smoothscale.
         """
         cam = self.camera
-        Q = 2                                            # super-amostragem
-        plano2 = pygame.transform.smoothscale(plano, (RINK_W * Q, RINK_H * Q))
+        Q = Q_PISO                                       # o plano já vem com esta resolução
+        plano2 = plano
         y0, y1 = int(cam.topo), int(cam.base) + 1
         temp = pygame.Surface((WIDTH * Q, (y1 - y0) * Q), pygame.SRCALPHA)
         for linha_ecra in range((y1 - y0) * Q):
@@ -175,7 +211,44 @@ class Rink:
             fatia = plano2.subsurface((0, linha, RINK_W * Q, 1))
             esticada = pygame.transform.smoothscale(fatia, (max(1, round(largura)), 1))
             temp.blit(esticada, (round(cam.cx * Q - largura / 2), linha_ecra))
-        destino.blit(pygame.transform.smoothscale(temp, (WIDTH, y1 - y0)), (0, y0))
+        piso = pygame.transform.smoothscale(temp, (WIDTH, y1 - y0))
+        self._iluminar_piso(piso)
+        destino.blit(piso, (0, y0))
+
+    def _iluminar_piso(self, piso: pygame.Surface):
+        """
+        Luz do pavilhão no piso envernizado:
+          - os cantos e o fundo do ringue ficam um pouco mais escuros (vinheta);
+          - os projetores do teto refletem-se no verniz (manchas de brilho suaves).
+        Só mexe nas cores (RGB): as partes transparentes à volta do ringue continuam transparentes.
+        """
+        import math
+        w, h = piso.get_size()
+        # Vinheta: imagem pequena calculada ponto a ponto e ampliada (fica suave)
+        pw, ph = 64, 24
+        peq = pygame.Surface((pw, ph))
+        for y in range(ph):
+            ty = y / (ph - 1)
+            for x in range(pw):
+                dx = (x + 0.5) / pw * 2 - 1
+                k = 1.0 - 0.20 * dx ** 4 - 0.10 * (1 - ty) ** 2
+                c = max(0, min(255, int(255 * k)))
+                peq.set_at((x, y), (c, c, c))
+        piso.blit(pygame.transform.smoothscale(peq, (w, h)), (0, 0), special_flags=pygame.BLEND_RGB_MULT)
+
+        # Reflexos dos projetores (mais largos do que altos por causa da perspetiva)
+        brilho = pygame.Surface((w, h))
+        cor = (255, 246, 225)
+        geral = luz(int(w * 0.8), int(h * 0.9), cor, 26, 1.2)
+        brilho.blit(geral, geral.get_rect(center=(w // 2, int(h * 0.5))), special_flags=pygame.BLEND_RGB_ADD)
+        for fx in (0.18, 0.39, 0.61, 0.82):
+            for fy, tam, inten in ((0.30, 0.85, 34), (0.72, 1.15, 26)):
+                mancha = luz(int(230 * tam), int(70 * tam), cor, inten, 1.5)
+                # Os reflexos de baixo afastam-se do centro (perspetiva)
+                x = w / 2 + (fx - 0.5) * w * (0.86 + 0.12 * fy)
+                brilho.blit(mancha, mancha.get_rect(center=(round(x), round(h * fy))),
+                            special_flags=pygame.BLEND_RGB_ADD)
+        piso.blit(brilho, (0, 0), special_flags=pygame.BLEND_RGB_ADD)
 
     def _contorno_ringue(self, passos_canto: int = 14) -> list:
         """Pontos (do mundo) à volta do ringue com cantos arredondados, no sentido do relógio."""
@@ -384,9 +457,10 @@ class Rink:
             self.cor_linhas  = self._calcular_cor_linhas()
             self._surf = self._construir()
 
-    def _desenhar_centro_emblema(self, surf, cx, cy):
+    def _desenhar_centro_emblema(self, surf, cx, cy, escala: int = 1):
         """Emblema oficial da equipa da casa no centro do campo como no mockup."""
-        logo_centro = carregar_logo_equipa(self.equipa_casa, (96, 96))
+        cx, cy = round(cx), round(cy)
+        logo_centro = carregar_logo_equipa(self.equipa_casa, (96 * escala, 96 * escala))
         if logo_centro is not None:
             lw, lh = logo_centro.get_size()
             surf.blit(logo_centro, (cx - lw // 2, cy - lh // 2))
@@ -394,9 +468,9 @@ class Rink:
             info = obter_info_equipa(self.equipa_casa)
             cor = info.get("cor_primaria", (20, 60, 160))
             sigla = info.get("sigla", "FCP")
-            pygame.draw.circle(surf, cor, (cx, cy), 28)
-            pygame.draw.circle(surf, (230, 200, 60), (cx, cy), 28, 2)
-            f = pygame.font.SysFont("Arial", 11, bold=True)
+            pygame.draw.circle(surf, cor, (cx, cy), 28 * escala)
+            pygame.draw.circle(surf, (230, 200, 60), (cx, cy), 28 * escala, 2 * escala)
+            f = pygame.font.SysFont("Arial", 11 * escala, bold=True)
             t = f.render(sigla, True, (255, 255, 255))
             surf.blit(t, (cx - t.get_width() // 2, cy - t.get_height() // 2))
 
@@ -436,9 +510,10 @@ class Rink:
 
     def _mascara_cantos(self, img):
         result = img.copy().convert_alpha()
-        mask = pygame.Surface((RINK_W, RINK_H), pygame.SRCALPHA)
+        w, h = img.get_size()
+        mask = pygame.Surface((w, h), pygame.SRCALPHA)
         mask.fill((0, 0, 0, 0))
-        pygame.draw.rect(mask, (255, 255, 255, 255), (0, 0, RINK_W, RINK_H), border_radius=CANTO)
+        pygame.draw.rect(mask, (255, 255, 255, 255), (0, 0, w, h), border_radius=round(CANTO * w / RINK_W))
         result.blit(mask, (0, 0), special_flags=pygame.BLEND_RGBA_MIN)
         return result
 

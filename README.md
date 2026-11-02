@@ -24,11 +24,16 @@ No Windows também se pode fazer duplo clique em `jogar.bat`.
 | X | Abrir a mira de remate; X ou clique para rematar |
 | ESC / P | Pausa (ESC também cancela a mira) |
 | F4 | Mudar a dificuldade da IA |
+| F11 | Ecrã inteiro |
 | F3 | Modo de depuração |
 
 ## Funcionalidades
 
-- Menu principal, ecrã de controlos, menu de pausa e ecrã de fim de jogo
+- Menu principal com o pavilhão desfocado ao fundo e uma **engrenagem no canto** que abre as
+  **Definições** (lista de controlos e ecrã inteiro, que fica gravado); menu de pausa e ecrã de fim de jogo
+- **Gráficos melhorados**: piso desenhado com o dobro da resolução (linhas e emblema suaves),
+  tábuas com veios e nós, reflexos das luzes no verniz, sombra junto às tabelas e sombras esbatidas
+  nos jogadores e na bola; vsync para a imagem não "rasgar"
 - **Modo carreira**: escolhes um clube e jogas um campeonato contra as outras 7 equipas (7 jornadas, os outros jogos são simulados), com classificação, calendário e várias épocas. O progresso fica gravado numa base de dados SQLite (`hockey_game/saves/carreira.db`)
 - 8 equipas portuguesas com emblemas
 - **Equipamentos com as cores de cada clube**; se as cores das duas equipas forem parecidas, a equipa visitante joga com o equipamento alternativo
@@ -55,6 +60,7 @@ No Windows também se pode fazer duplo clique em `jogar.bat`.
 | `hockey_game/carreira.py` | Modo carreira: calendário, jogos simulados, classificação e base de dados SQLite |
 | `hockey_game/carreira_menu.py` | Ecrãs do modo carreira (escolha da equipa e campeonato) |
 | `hockey_game/componentes.py` | Botões, painéis e fundos reutilizáveis da interface |
+| `hockey_game/graficos.py` | Efeitos gráficos: luzes, sombras suaves, ícones e título desenhados no código |
 | `hockey_game/cores.py` | Cores dos equipamentos, contraste e recoloração dos sprites |
 | `hockey_game/team.py` | Dados das equipas (nome, sigla, cores, emblema) |
 | `hockey_game/player.py`, `goalkeeper.py`, `ai.py` | Jogadores, guarda-redes e inteligência artificial |

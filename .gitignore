@@ -22,3 +22,4 @@ Desktop.ini
 
 # Gravações do modo carreira (progresso pessoal de cada jogador)
 hockey_game/saves/*.db
+hockey_game/saves/definicoes.json

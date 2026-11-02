@@ -220,7 +220,7 @@ class Goalkeeper(pygame.sprite.Sprite):
         cx = _TELA_GR[0] // 2
         pes_y = _TELA_GR[1] // 2 + GR_SIZE[1] // 2 - 2
         sombra = sombra_oval(40, 11)
-        tela.blit(sombra, (cx - sombra.get_width() // 2, pes_y - 6))
+        tela.blit(sombra, (cx - sombra.get_width() // 2, pes_y - 8))
         tela.blit(img, img.get_rect(center=(cx, _TELA_GR[1] // 2 + bob)))
         self.image = tela
         self.rect = self.image.get_rect(center=(round(self.pos_x), round(self.pos_y)))
