@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """menu.py - Ecrãs de menu do StickMania PAP.
 
-  • MenuPrincipal   - ecrã inicial (Jogar, Controlos, Sair)
+  • MenuPrincipal   - ecrã inicial (Jogo rápido, Modo carreira, Controlos, Sair)
   • EcraControlos   - lista de teclas
   • TeamSelectMenu  - seleção das equipas, do equipamento e da dificuldade
   • MenuPausa       - pausa durante a partida
@@ -33,11 +33,12 @@ class MenuPrincipal:
         self.casa_id = casa_id
         self.fora_id = fora_id
         self.t = 0.0
-        bw, bh, x = 340, 58, WIDTH // 2 - 170
+        bw, bh, x = 340, 52, WIDTH // 2 - 170
         self.lista = ListaBotoes([
-            Botao((x, 340, bw, bh), "JOGAR", "jogar", cor=(40, 190, 100), tamanho_texto=24, icone="►"),
-            Botao((x, 414, bw, bh), "CONTROLOS", "controlos", cor=(50, 140, 255), tamanho_texto=22),
-            Botao((x, 488, bw, bh), "SAIR", "sair", cor=(230, 70, 70), tamanho_texto=22),
+            Botao((x, 300, bw, bh), "JOGO RÁPIDO", "jogar", cor=(40, 190, 100), tamanho_texto=23, icone="►"),
+            Botao((x, 364, bw, bh), "MODO CARREIRA", "carreira", cor=(255, 180, 40), tamanho_texto=23),
+            Botao((x, 428, bw, bh), "CONTROLOS", "controlos", cor=(50, 140, 255), tamanho_texto=21),
+            Botao((x, 492, bw, bh), "SAIR", "sair", cor=(230, 70, 70), tamanho_texto=21),
         ])
 
     def handle_event(self, event) -> str | None:
@@ -459,18 +460,29 @@ class TeamSelectMenu:
 # ====================================================================== #
 
 class MenuPausa:
-    def __init__(self, screen: pygame.Surface):
+    def __init__(self, screen: pygame.Surface, modo_carreira: bool = False):
         self.screen = screen
         self.t = 0.0
+        self.modo_carreira = modo_carreira
         bw, bh, x = 300, 50, WIDTH // 2 - 150
         y0 = 248
-        self.lista = ListaBotoes([
-            Botao((x, y0, bw, bh), "CONTINUAR", "continuar", cor=(40, 190, 100), icone="►"),
-            Botao((x, y0 + 62, bw, bh), "REINICIAR PARTIDA", "reiniciar", cor=(255, 180, 40)),
-            Botao((x, y0 + 124, bw, bh), "CONTROLOS", "controlos", cor=(50, 140, 255)),
-            Botao((x, y0 + 186, bw, bh), "MENU PRINCIPAL", "menu", cor=(150, 110, 255)),
-            Botao((x, y0 + 248, bw, bh), "SAIR DO JOGO", "sair", cor=(230, 70, 70)),
-        ])
+        if modo_carreira:
+            # No modo carreira não há "reiniciar": desistir volta ao campeonato e o jogo não conta
+            self.lista = ListaBotoes([
+                Botao((x, y0, bw, bh), "CONTINUAR", "continuar", cor=(40, 190, 100), icone="►"),
+                Botao((x, y0 + 62, bw, bh), "CONTROLOS", "controlos", cor=(50, 140, 255)),
+                Botao((x, y0 + 124, bw, bh), "DESISTIR DO JOGO", "desistir", cor=(255, 180, 40)),
+                Botao((x, y0 + 186, bw, bh), "MENU PRINCIPAL", "menu", cor=(150, 110, 255)),
+                Botao((x, y0 + 248, bw, bh), "SAIR DO JOGO", "sair", cor=(230, 70, 70)),
+            ])
+        else:
+            self.lista = ListaBotoes([
+                Botao((x, y0, bw, bh), "CONTINUAR", "continuar", cor=(40, 190, 100), icone="►"),
+                Botao((x, y0 + 62, bw, bh), "REINICIAR PARTIDA", "reiniciar", cor=(255, 180, 40)),
+                Botao((x, y0 + 124, bw, bh), "CONTROLOS", "controlos", cor=(50, 140, 255)),
+                Botao((x, y0 + 186, bw, bh), "MENU PRINCIPAL", "menu", cor=(150, 110, 255)),
+                Botao((x, y0 + 248, bw, bh), "SAIR DO JOGO", "sair", cor=(230, 70, 70)),
+            ])
 
     def handle_event(self, event) -> str | None:
         if event.type == pygame.QUIT:
@@ -499,6 +511,12 @@ class MenuPausa:
               (WIDTH // 2, caixa.top + 112), negrito=False)
 
         self.lista.draw(s)
+        if self.modo_carreira:
+            aviso = pygame.Rect(0, 0, 420, 28)
+            aviso.midtop = (WIDTH // 2, caixa.bottom + 10)
+            painel(s, aviso, raio=8, alpha=240, largura_borda=1)
+            texto(s, "Se desistires, o jogo não conta e podes jogá-lo outra vez.", 12, COR_TEXTO_SUAVE,
+                  aviso.center, negrito=False)
 
 
 # ====================================================================== #
@@ -506,11 +524,19 @@ class MenuPausa:
 # ====================================================================== #
 
 class EcraFimJogo:
-    def __init__(self, screen: pygame.Surface):
+    def __init__(self, screen: pygame.Surface, modo_carreira: bool = False, jornada: int | None = None):
         self.screen = screen
         self.t = 0.0
+        self.modo_carreira = modo_carreira
+        self.jornada = jornada
         y, bw, bh = 506, 230, 52
         cx = WIDTH // 2
+        if modo_carreira:
+            # O resultado conta para o campeonato: só se pode continuar
+            self.lista = ListaBotoes([
+                Botao((cx - 170, y, 340, bh), "CONTINUAR CAMPEONATO", "continuar", cor=(40, 190, 100), icone="►"),
+            ])
+            return
         self.lista = ListaBotoes([
             Botao((cx - bw - bw // 2 - 16, y, bw, bh), "JOGAR DE NOVO", "reiniciar", cor=(40, 190, 100), icone="►"),
             Botao((cx - bw // 2, y, bw, bh), "MUDAR EQUIPAS", "equipas", cor=(50, 140, 255)),
@@ -520,6 +546,10 @@ class EcraFimJogo:
     def handle_event(self, event) -> str | None:
         if event.type == pygame.QUIT:
             return "sair"
+        if event.type == pygame.KEYDOWN and self.modo_carreira:
+            if event.key in (pygame.K_RETURN, pygame.K_KP_ENTER, pygame.K_SPACE, pygame.K_ESCAPE):
+                return "continuar"
+            return None
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_r:
                 return "reiniciar"
@@ -573,6 +603,11 @@ class EcraFimJogo:
         texto(s, faltas, 14, COR_TEXTO_SUAVE, (WIDTH // 2, caixa.top + 392), negrito=False)
 
         self.lista.draw(s)
-        texto(s, "[R] jogar de novo   [ESC] menu principal", 12, (110, 140, 190),
-              (WIDTH // 2, caixa.bottom - 18), negrito=False)
+        if self.modo_carreira:
+            texto(s, f"MODO CARREIRA  •  o resultado conta para a jornada {self.jornada}", 13,
+                  COR_DESTAQUE, (WIDTH // 2, caixa.top + 92))
+            texto(s, "[ENTER] continuar", 12, (110, 140, 190), (WIDTH // 2, caixa.bottom - 18), negrito=False)
+        else:
+            texto(s, "[R] jogar de novo   [ESC] menu principal", 12, (110, 140, 190),
+                  (WIDTH // 2, caixa.bottom - 18), negrito=False)
 

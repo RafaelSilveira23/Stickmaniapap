@@ -29,6 +29,7 @@ No Windows também se pode fazer duplo clique em `jogar.bat`.
 ## Funcionalidades
 
 - Menu principal, ecrã de controlos, menu de pausa e ecrã de fim de jogo
+- **Modo carreira**: escolhes um clube e jogas um campeonato contra as outras 7 equipas (7 jornadas, os outros jogos são simulados), com classificação, calendário e várias épocas. O progresso fica gravado numa base de dados SQLite (`hockey_game/saves/carreira.db`)
 - 8 equipas portuguesas com emblemas
 - **Equipamentos com as cores de cada clube**; se as cores das duas equipas forem parecidas, a equipa visitante joga com o equipamento alternativo
 - **Linhas do ringue na cor da equipa da casa**, ajustadas automaticamente para se verem bem no piso de madeira
@@ -51,6 +52,8 @@ No Windows também se pode fazer duplo clique em `jogar.bat`.
 |---|---|
 | `hockey_game/game.py` | Ciclo principal e estados do jogo (menus, partida, pausa, fim) |
 | `hockey_game/menu.py` | Ecrãs de menu |
+| `hockey_game/carreira.py` | Modo carreira: calendário, jogos simulados, classificação e base de dados SQLite |
+| `hockey_game/carreira_menu.py` | Ecrãs do modo carreira (escolha da equipa e campeonato) |
 | `hockey_game/componentes.py` | Botões, painéis e fundos reutilizáveis da interface |
 | `hockey_game/cores.py` | Cores dos equipamentos, contraste e recoloração dos sprites |
 | `hockey_game/team.py` | Dados das equipas (nome, sigla, cores, emblema) |

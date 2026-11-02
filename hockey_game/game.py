@@ -13,6 +13,8 @@ from team import EQUIPAS_LISTA, obter_info_equipa
 from menu import MenuPrincipal, EcraControlos, TeamSelectMenu, MenuPausa, EcraFimJogo
 from cores import definir_equipamentos, misturar, cor_texto_sobre
 from componentes import COR_DESTAQUE
+from carreira import Campeonato, CAMINHO_BD
+from carreira_menu import EcraCarreiraEscolha, EcraCampeonato
 
 DURACAO_PARTE = 60 * 5   # 5 minutos por parte
 DIFICULDADE_EQUIPA_HUMANA = "normal"   # nível dos colegas e do GR do jogador humano
@@ -52,7 +54,8 @@ class Game:
         self.bola.seguir_jogador(self.jogador_humano)
 
         # ── Estado do jogo e Menu de Seleção ─────────────────────────────
-        # Estados: "menu_principal", "controlos", "menu_selecao" ou "jogo"
+        # Estados: "menu_principal", "controlos", "menu_selecao", "carreira_escolha",
+        #          "carreira" (ecrã do campeonato) ou "jogo"
         self.estado         = "menu_principal"
         self.menu_principal = MenuPrincipal(self.screen, self.equipa_casa_id, self.equipa_fora_id)
         self.menu           = TeamSelectMenu(self.screen, self.equipa_casa_id, self.equipa_fora_id)
@@ -61,6 +64,14 @@ class Game:
         self.ecra_fim       = EcraFimJogo(self.screen)
         self._origem_controlos = "menu_principal"   # para onde volta o ecrã de controlos
         self.pausado        = False
+
+        # ── Modo carreira ────────────────────────────────────────────────
+        self.caminho_carreira = CAMINHO_BD
+        self.carreira        = None    # Campeonato (aberto só quando se entra no modo carreira)
+        self.modo_carreira   = False   # True durante um jogo do campeonato
+        self.ecra_carreira   = None
+        self.ecra_campeonato = None
+        self._jornada_carreira = None
 
         self.golos_azul     = 0
         self.golos_vermelho = 0
@@ -247,6 +258,8 @@ class Game:
                 acao = self.menu_principal.handle_event(event)
                 if acao == "jogar":
                     self.abrir_selecao_equipas()
+                elif acao == "carreira":
+                    self.abrir_escolha_carreira()
                 elif acao == "controlos":
                     self._origem_controlos = "menu_principal"
                     self.estado = "controlos"
@@ -260,6 +273,35 @@ class Game:
                 if acao == "voltar":
                     # Se veio da pausa, volta ao jogo (que continua em pausa)
                     self.estado = "jogo" if self._origem_controlos == "pausa" else "menu_principal"
+                elif acao == "sair":
+                    self.running = False
+            return
+
+        if self.estado == "carreira_escolha":
+            for event in pygame.event.get():
+                acao = self.ecra_carreira.handle_event(event)
+                if acao == "comecar":
+                    self._abrir_carreira().novo(self.ecra_carreira.equipa, self.ecra_carreira.dificuldade)
+                    self.abrir_campeonato()
+                elif acao == "voltar":
+                    self.ir_para_menu_principal()
+                elif acao == "sair":
+                    self.running = False
+            return
+
+        if self.estado == "carreira":
+            for event in pygame.event.get():
+                acao = self.ecra_campeonato.handle_event(event)
+                if acao == "jogar":
+                    self.iniciar_jogo_carreira()
+                elif acao == "nova_epoca":
+                    c = self.carreira
+                    c.novo(c.equipa_jogador, c.dificuldade)
+                    self.abrir_campeonato()
+                elif acao == "nova_carreira":
+                    self.abrir_escolha_carreira(nova=True)
+                elif acao == "menu":
+                    self.ir_para_menu_principal()
                 elif acao == "sair":
                     self.running = False
             return
@@ -289,6 +331,8 @@ class Game:
                 elif acao == "controlos":
                     self._origem_controlos = "pausa"
                     self.estado = "controlos"
+                elif acao == "desistir":
+                    self.abrir_campeonato()          # o jogo não conta
                 elif acao == "menu":
                     self.ir_para_menu_principal()
                 elif acao == "sair":
@@ -299,7 +343,10 @@ class Game:
         if self.fim_jogo:
             for event in pygame.event.get():
                 acao = self.ecra_fim.handle_event(event)
-                if acao == "reiniciar":
+                if acao == "continuar" and self.modo_carreira:
+                    jornada = self.carreira.registar_jogo_do_jogador(self.golos_azul, self.golos_vermelho)
+                    self.abrir_campeonato(destaque=jornada)
+                elif acao == "reiniciar":
                     self.iniciar_partida(self.equipa_casa_id, self.equipa_fora_id, self.dificuldade)
                 elif acao == "equipas":
                     self.abrir_selecao_equipas()
@@ -322,6 +369,10 @@ class Game:
                         self.abrir_pausa()
                 elif event.key == pygame.K_F3:
                     self.show_debug = not self.show_debug
+                elif self.modo_carreira and event.key in (pygame.K_F4, pygame.K_t, pygame.K_y, pygame.K_1,
+                                                          pygame.K_2, pygame.K_3, pygame.K_4, pygame.K_5,
+                                                          pygame.K_6, pygame.K_7, pygame.K_8):
+                    pass   # no campeonato não se pode trocar de equipa nem de dificuldade a meio
                 elif event.key == pygame.K_F4:
                     # Alternar dificuldade em jogo
                     ordem_dif = ["facil", "normal", "dificil"]
@@ -501,6 +552,12 @@ class Game:
             return
         if self.estado == "menu_selecao":
             self.menu.update(dt)
+            return
+        if self.estado == "carreira_escolha":
+            self.ecra_carreira.update(dt)
+            return
+        if self.estado == "carreira":
+            self.ecra_campeonato.update(dt)
             return
         if self.pausado:
             self.menu_pausa.update(dt)
@@ -803,11 +860,12 @@ class Game:
         if self.jogo_ativo and not self.fim_jogo:
             self._cancelar_mira()
             self.pausado = True
-            self.menu_pausa = MenuPausa(self.screen)
+            self.menu_pausa = MenuPausa(self.screen, modo_carreira=self.modo_carreira)
 
     def abrir_selecao_equipas(self):
         """Vai para o ecrã de seleção de equipas, mantendo as últimas escolhas e a dificuldade."""
         self._cancelar_mira()
+        self.modo_carreira = False
         self.pausado = False
         self.jogo_ativo = False
         self.fim_jogo = False
@@ -818,8 +876,60 @@ class Game:
     # Mantido por compatibilidade com o código antigo
     voltar_ao_menu = abrir_selecao_equipas
 
+    # ------------------------------------------------------------------ #
+    # Modo carreira                                                       #
+    # ------------------------------------------------------------------ #
+
+    def _abrir_carreira(self) -> Campeonato:
+        """Abre a base de dados do campeonato (só na primeira vez que é preciso)."""
+        if self.carreira is None:
+            self.carreira = Campeonato(self.caminho_carreira)
+        return self.carreira
+
+    def abrir_escolha_carreira(self, nova: bool = False):
+        """Menu principal -> Modo carreira: continua o campeonato guardado ou escolhe uma equipa."""
+        camp = self._abrir_carreira()
+        if camp.existe and not nova:
+            self.abrir_campeonato()
+            return
+        equipa = camp.equipa_jogador if camp.existe else self.equipa_casa_id
+        dif = camp.dificuldade if camp.existe else self.dificuldade
+        self.ecra_carreira = EcraCarreiraEscolha(self.screen, equipa, dif)
+        self.estado = "carreira_escolha"
+
+    def abrir_campeonato(self, destaque: int | None = None):
+        """Ecrã do campeonato (classificação, próximo jogo, resultados)."""
+        self._cancelar_mira()
+        self.modo_carreira = False
+        self.pausado = False
+        self.jogo_ativo = False
+        self.fim_jogo = False
+        self.ecra_campeonato = EcraCampeonato(self.screen, self.carreira, destaque)
+        self.estado = "carreira"
+
+    def iniciar_jogo_carreira(self):
+        """Joga o próximo jogo do campeonato. A equipa do jogador é sempre a que ele controla."""
+        camp = self.carreira
+        jogo = camp.proximo_jogo()
+        if jogo is None:
+            return
+        eu = camp.equipa_jogador
+        em_casa = jogo["casa_id"] == eu
+        adversario = jogo["fora_id"] if em_casa else jogo["casa_id"]
+        self._jornada_carreira = jogo["jornada"]
+        self.iniciar_partida(eu, adversario, dificuldade=camp.dificuldade)
+        self.modo_carreira = True
+        if not em_casa:
+            # Jogo fora: joga-se no pavilhão do adversário (emblema e cores do ringue dele)
+            self.rink.definir_equipa_casa(adversario)
+        local = "EM CASA" if em_casa else "FORA"
+        self._msg_texto = f"JORNADA {jogo['jornada']}  •  {local}"
+        self._msg_timer = 2.5
+        self._msg_equipa = "azul"
+
     def ir_para_menu_principal(self, casa_id: str = None, fora_id: str = None):
         self._cancelar_mira()
+        self.modo_carreira = False
         self.pausado = False
         self.jogo_ativo = False
         self.fim_jogo = False
@@ -958,7 +1068,8 @@ class Game:
             self._cancelar_mira()
             self.jogo_ativo = False
             self.fim_jogo   = True
-            self.ecra_fim   = EcraFimJogo(self.screen)
+            self.ecra_fim   = EcraFimJogo(self.screen, modo_carreira=self.modo_carreira,
+                                          jornada=self._jornada_carreira)
 
     # ================================================================== #
     # Desenho Principal                                                    #
@@ -969,6 +1080,10 @@ class Game:
             self.menu_principal.draw()
         elif self.estado == "menu_selecao":
             self.menu.draw()
+        elif self.estado == "carreira_escolha":
+            self.ecra_carreira.draw()
+        elif self.estado == "carreira":
+            self.ecra_campeonato.draw()
         elif self.estado == "controlos":
             if self._origem_controlos == "pausa":
                 self._draw_cena()

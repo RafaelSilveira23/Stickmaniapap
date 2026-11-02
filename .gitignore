@@ -19,3 +19,6 @@ env/
 Thumbs.db
 Desktop.ini
 .DS_Store
+
+# Gravações do modo carreira (progresso pessoal de cada jogador)
+hockey_game/saves/*.db

@@ -21,7 +21,7 @@ def casos_de_uso():
 
     esq = [("uc1", "Escolher equipas"), ("uc2", "Escolher dificuldade"), ("uc3", "Ver controlos"),
            ("uc4", "Jogar partida"), ("uc5", "Pausar / continuar"), ("uc6", "Ver resultado final"),
-           ("uc7", "Jogar torneio\n(a implementar)"), ("uc8", "Consultar classificação\n(a implementar)")]
+           ("uc7", "Jogar o modo carreira\n(campeonato)"), ("uc8", "Consultar classificação\ne calendário")]
     for i, (id, txt) in enumerate(esq):
         planeado = "implementar" in txt
         d.caixa(id, 215, 55 + i * 78, 225, 54, txt, "elipse", "amarelo" if planeado else "azul",
@@ -52,7 +52,7 @@ def arquitetura():
     d.caixa("rato", 30, 220, 160, 70, "Rato\npontaria do remate", "arredondado", "azul")
 
     d.caixa("gC", 270, 50, 520, 310, "CONTROLO — ciclo principal (game.py, 60 FPS)", "grupo", "cinza", tam=14)
-    d.caixa("men", 290, 100, 230, 66, "Menus e estados do jogo\nmenu.py", "arredondado", "verde")
+    d.caixa("men", 290, 100, 230, 66, "Menus e modo carreira\nmenu.py · carreira_menu.py", "arredondado", "verde")
     d.caixa("reg", 540, 100, 230, 66, "Regras: tempo, golos, faltas\ngame.py", "arredondado", "verde")
     d.caixa("fis", 290, 190, 230, 66, "Física da bola e dos jogadores\nball.py · player.py", "arredondado", "verde")
     d.caixa("ia", 540, 190, 230, 66, "Inteligência artificial\nai.py · goalkeeper.py", "arredondado", "verde")
@@ -68,13 +68,13 @@ def arquitetura():
     d.caixa("cfg", 290, 465, 150, 66, "Configuração\nsettings.py", "arredondado", "roxo")
     d.caixa("eq", 455, 465, 160, 66, "Equipas e símbolos\nteam.py · simbolos/", "arredondado", "roxo")
     d.caixa("spr", 630, 465, 140, 66, "Sprites\nsprites_v2/", "arredondado", "roxo")
-    d.caixa("bd", 850, 440, 240, 90, "Base de dados SQLite\ntorneio e classificação\n(a implementar)",
-            "arredondado", "amarelo", tracejado=True)
+    d.caixa("bd", 850, 440, 240, 90, "Base de dados SQLite\ncampeonato do modo carreira\ncarreira.py · saves/carreira.db",
+            "arredondado", "roxo")
 
     d.seta("gE", "gC", "eventos")
     d.seta("gC", "gS", "desenho")
     d.seta("gD", "gC", "carrega")
-    d.seta("gC", "bd", "grava\nresultados", tracejado=True, exato=True,
+    d.seta("gC", "bd", "grava e lê\no campeonato", exato=True, ambos=True,
            pontos=[(790, 330), (820, 330), (820, 485), (850, 485)])
     return d
 
@@ -240,9 +240,14 @@ def classes():
     C("hud", 840, 10, 320, 110, "HUDController",
       ["- fontes, cores"],
       ["+ draw_top_bar(screen, game)", "+ draw_bottom_panel(screen, game)", "+ draw_foul_banner(...)"])
-    C("menus", 840, 180, 320, 120, "«menus» menu.py",
-      ["MenuPrincipal · EcraControlos", "TeamSelectMenu · MenuPausa", "EcraFimJogo"],
+    C("menus", 840, 180, 320, 120, "«ecrãs» menu.py · carreira_menu.py",
+      ["MenuPrincipal · EcraControlos · MenuPausa", "TeamSelectMenu · EcraFimJogo",
+       "EcraCarreiraEscolha · EcraCampeonato"],
       ["+ handle_event(event) → ação", "+ update(dt)", "+ draw()"], "cinza")
+    C("camp", 20, 395, 290, 135, "Campeonato (carreira.py)",
+      ["- torneio_id: int", "- con: sqlite3.Connection"],
+      ["+ novo(equipa, dificuldade)", "+ proximo_jogo()", "+ registar_jogo_do_jogador(g1, g2)",
+       "+ classificacao()"], "roxo")
     C("ball", 380, 330, 260, 150, "Ball",
       ["- pos_x, pos_y: float", "- vel: Vector2", "- dono: Player"],
       ["+ update(dt, rink) → golo?", "+ definir_dono(jogador)", "+ libertar(velocidade)", "+ repor(pos)"])
@@ -264,7 +269,9 @@ def classes():
     d.seta("game", "rink", "1")
     d.seta("rink", "cam", "1")
     d.seta("game", "hud", "1")
-    d.seta("game", "menus", "1..5", pontos=[(780, 230)])
+    d.seta("game", "menus", "1..7", pontos=[(780, 230)])
+    d.seta("game", "camp", "0..1", exato=True, pontos=[(420, 225), (362, 225), (362, 460), (310, 460)],
+           pos_texto=0.55)
     d.seta("game", "ball", "1")
     d.seta("game", "player", "10", pontos=[(700, 330)])
     d.seta("game", "gr", "2", exato=True, pontos=[(440, 240), (440, 295), (345, 295), (345, 590), (380, 590)], pos_texto=0.55)
@@ -278,39 +285,84 @@ def classes():
 
 
 # ═══════════════════════════════════════════════════════════════════════
-# 7. Modelo de dados (base de dados SQLite do torneio — proposta)
+# 7. Modelo de dados (base de dados SQLite do modo carreira)
 # ═══════════════════════════════════════════════════════════════════════
 def modelo_dados():
-    d = Diagrama("07_modelo_dados", 1120, 440, "Modelo de dados (SQLite)")
-    T = lambda id, x, y, w, h, t, campos, cor="roxo": d.caixa(id, x, y, w, h, tipo="classe", cor=cor, tam=12,
-                                                              linhas=(t, [campos]))
-    T("equipa", 20, 20, 240, 110, "Equipa",
-      ["PK id", "nome", "cor_primaria", "cor_secundaria", "simbolo"])
-    T("jogador", 20, 250, 240, 155, "Jogador",
-      ["PK id", "FK equipa_id", "nome", "numero", "posicao", "velocidade", "remate", "passe"])
-    T("torneio", 440, 20, 240, 95, "Torneio",
-      ["PK id", "nome", "data_inicio", "estado"])
-    T("partida", 440, 230, 240, 155, "Partida",
-      ["PK id", "FK torneio_id", "FK casa_id", "FK fora_id", "golos_casa", "golos_fora", "dificuldade", "data"])
-    T("estat", 860, 250, 240, 140, "Estatistica",
-      ["PK id", "FK partida_id", "FK jogador_id", "golos", "remates", "passes", "faltas"])
+    d = Diagrama("07_modelo_dados", 1120, 450, "Modelo de dados (SQLite)")
+    T = lambda id, x, y, w, h, t, campos, cor="roxo", tr=False: d.caixa(
+        id, x, y, w, h, tipo="classe", cor=cor, tam=12, linhas=(t, [campos]), tracejado=tr)
+    T("equipa", 20, 20, 240, 100, "Equipa",
+      ["PK id", "nome", "sigla", "forca"])
+    T("torneio", 440, 20, 240, 145, "Torneio",
+      ["PK id", "nome", "FK equipa_jogador", "dificuldade", "epoca", "data_inicio", "estado"])
     T("class", 860, 20, 240, 170, "Classificacao",
       ["PK, FK torneio_id", "PK, FK equipa_id", "jogos", "vitorias", "empates", "derrotas",
        "golos_marcados", "golos_sofridos", "pontos"])
+    T("partida", 440, 230, 240, 170, "Partida",
+      ["PK id", "FK torneio_id", "jornada", "FK casa_id", "FK fora_id", "golos_casa", "golos_fora",
+       "jogada", "do_jogador"])
+    T("jogador", 20, 260, 240, 140, "Jogador (futuro)",
+      ["PK id", "FK equipa_id", "nome", "numero", "posicao", "velocidade", "remate"], "amarelo", True)
+    T("estat", 860, 260, 240, 140, "Estatistica (futuro)",
+      ["PK id", "FK partida_id", "FK jogador_id", "golos", "remates", "passes", "faltas"], "amarelo", True)
 
-    d.seta("equipa", "jogador", "1 : N", ponta=False)
+    d.seta("equipa", "torneio", "1 : N\n(equipa do jogador)", ponta=False, exato=True,
+           pontos=[(260, 70), (440, 70)])
     d.seta("torneio", "partida", "1 : N", ponta=False)
-    d.seta("equipa", "partida", "1 : N\n(casa / fora)", ponta=False)
-    d.seta("partida", "estat", "1 : N", ponta=False)
-    d.seta("jogador", "estat", "1 : N", ponta=False, exato=True,
-           pontos=[(140, 405), (140, 430), (980, 430), (980, 390)], pos_texto=0.5)
-    d.seta("torneio", "class", "1 : N", ponta=False)
+    d.seta("equipa", "partida", "1 : N\n(casa / fora)", ponta=False, exato=True,
+           pontos=[(200, 120), (200, 190), (380, 190), (380, 300), (440, 300)], pos_texto=0.45)
+    d.seta("torneio", "class", "1 : N", ponta=False, exato=True, pontos=[(680, 100), (860, 100)])
     d.seta("equipa", "class", "1 : N", ponta=False, exato=True,
            pontos=[(140, 20), (140, 5), (980, 5), (980, 20)], pos_texto=0.5)
+    d.seta("equipa", "jogador", "1 : N", ponta=False, tracejado=True, exato=True,
+           pontos=[(80, 120), (80, 260)])
+    d.seta("partida", "estat", "1 : N", ponta=False, tracejado=True, exato=True,
+           pontos=[(680, 330), (860, 330)])
+    d.seta("jogador", "estat", "1 : N", ponta=False, tracejado=True, exato=True,
+           pontos=[(140, 400), (140, 435), (980, 435), (980, 400)], pos_texto=0.5)
+    return d
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# 8. Fluxograma do modo carreira
+# ═══════════════════════════════════════════════════════════════════════
+def fluxograma_carreira():
+    d = Diagrama("08_fluxograma_carreira", 700, 960, "Fluxograma do modo carreira")
+    d.caixa("ini", 190, 10, 280, 50, "Menu principal → MODO CARREIRA", "terminal", "cinza", negrito=True)
+    d.caixa("d1", 220, 90, 220, 96, "Há um campeonato\nguardado?", "losango", "amarelo")
+    d.caixa("esc", 195, 222, 270, 56, "Escolher a equipa\ne a dificuldade", "retangulo", "azul")
+    d.caixa("cri", 180, 312, 300, 76, "Criar o campeonato: calendário\n(método do círculo) e classificação\na zeros, gravados em SQLite",
+            "retangulo", "roxo")
+    d.caixa("hub", 180, 420, 300, 72, "Ecrã do campeonato: classificação,\npróximo jogo, resultados\ne calendário",
+            "arredondado", "laranja", negrito=False)
+    d.caixa("d2", 220, 525, 220, 96, "Campeonato\nterminado?", "losango", "amarelo")
+    d.caixa("fim", 15, 545, 170, 56, "Mostrar o campeão\ne a posição final", "retangulo", "laranja")
+    d.caixa("jog", 180, 655, 300, 56, "Jogar o jogo da jornada\n(em casa ou fora)", "retangulo", "verde")
+    d.caixa("d3", 220, 745, 220, 90, "Desistiu\nna pausa?", "losango", "amarelo")
+    d.caixa("reg", 150, 870, 360, 76, "Gravar o resultado, simular os outros 3\njogos (Poisson) e atualizar a classificação\n— tudo numa só transação",
+            "retangulo", "roxo")
+
+    d.seta("ini", "d1")
+    d.seta("d1", "esc", "Não")
+    d.seta("esc", "cri")
+    d.seta("cri", "hub")
+    d.seta("d1", "hub", "Sim (continuar)", exato=True,
+           pontos=[(440, 138), (540, 138), (540, 432), (480, 432)], pos_texto=0.3)
+    d.seta("hub", "d2")
+    d.seta("d2", "jog", "Não")
+    d.seta("d2", "fim", "Sim", exato=True, pontos=[(220, 573), (185, 573)])
+    d.seta("fim", "cri", "Nova época", exato=True, pontos=[(100, 545), (100, 350), (180, 350)], pos_texto=0.4)
+    d.seta("jog", "d3")
+    d.seta("d3", "reg", "Não")
+    d.seta("d3", "hub", "Sim (não conta)", exato=True,
+           pontos=[(440, 790), (600, 790), (600, 470), (480, 470)], pos_texto=0.25)
+    d.seta("reg", "hub", "jornada seguinte", exato=True,
+           pontos=[(510, 908), (660, 908), (660, 450), (480, 450)], pos_texto=0.3)
     return d
 
 
 if __name__ == "__main__":
-    for f in (casos_de_uso, arquitetura, estados_jogo, fluxograma_ia, fluxograma_ciclo, classes, modelo_dados):
+    for f in (casos_de_uso, arquitetura, estados_jogo, fluxograma_ia, fluxograma_ciclo, classes, modelo_dados,
+              fluxograma_carreira):
         dg = f()
         print(*dg.guardar(PASTA))
