@@ -12,6 +12,8 @@ jogos só controlas esse jogador: os colegas são da IA (e passam-te a bola quan
     passes certos, bolas recuperadas, remates, bolas perdidas e o resultado.
   • A nota faz o jogador evoluir: o «geral» sobe (ou desce) e os atributos acompanham-no.
   • No fim da época, se a nota média for boa, há propostas de clubes mais fortes.
+  • O jogador tem também uma VIDA (vida.py): forma, moral, confiança do treinador, fama, estudos e
+    dinheiro, com eventos e escolhas em cada jornada que mexem no hóquei (atributos, lesões, banco).
 
 Tabelas novas (além das do campeonato):
   atleta   - o jogador criado (um por carreira)
@@ -114,6 +116,9 @@ class CarreiraJogador:
         self.con = self.camp.con
         with self.con:
             self.con.executescript(_ESQUEMA_JOGADOR)
+        from vida import Vida
+        self.vida = Vida(self)
+        self.vida.garantir()
         self._aplicar_no_plantel()
 
     def fechar(self):
@@ -179,6 +184,10 @@ class CarreiraJogador:
                 "VALUES (?, ?, ?, ?, ?, 1, ?)",
                 (nome, numero, posicao, equipa_id, GERAL_INICIAL, datetime.now().isoformat(timespec="seconds")))
         self._nova_epoca(equipa_id, epoca=1, semente=semente)
+        self.vida.garantir()
+        with self.con:
+            self.vida.registar(f"Assinaste o primeiro contrato, com o {EQUIPAS_INFO[equipa_id]['nome']}. "
+                               f"Tens {self.vida.estado['idade']} anos.", {}, "inicio")
 
     def _nova_epoca(self, equipa_id: str, epoca: int, semente: int | None = None):
         self.camp.novo(equipa_id, "normal", semente)
@@ -229,6 +238,7 @@ class CarreiraJogador:
                                                      marcadores_adv=marcadores_adv)
         with self.con:
             res = self._gravar_atuacao(jogo["id"], est, g_eu, g_adv, simulado=False)
+            res["vida"] = self.vida.depois_do_jogo(True, res["nota"], g_eu, g_adv, res["golos"])
         res.update(jornada=jornada, casa=jogo["casa_id"], fora=jogo["fora_id"])
         return res
 
@@ -240,14 +250,17 @@ class CarreiraJogador:
         jogo = self.camp.proximo_jogo()
         if jogo is None:
             raise RuntimeError("a época já terminou")
+        if not self.vida.pode_jogar()[0]:
+            return self.simular_sem_jogador(semente)
         rnd = random.Random(semente)
         a = self.atleta
         eu = a["equipa_id"]
-        ajuste = (a["geral"] - 72) * 0.12
+        mod = self.vida.modificador()                         # forma e moral (−8 a +5)
+        ajuste = (a["geral"] + mod - 72) * 0.12
         gc, gf = self.camp._simular(jogo["casa_id"], jogo["fora_id"], rnd, ajuste)
         em_casa = jogo["casa_id"] == eu
         g_eu, g_adv = (gc, gf) if em_casa else (gf, gc)
-        k = 0.6 + a["geral"] / 100 * 0.8                       # geral 64 -> 1,1x ; geral 90 -> 1,3x
+        k = 0.6 + (a["geral"] + mod) / 100 * 0.8               # geral 64 -> 1,1x ; geral 90 -> 1,3x
         p_golo = min(0.75, PROB_GOLO_SIMULADO[a["posicao"]] * k)
         meus = sum(rnd.random() < p_golo for _ in range(g_eu))
         assist = sum(rnd.random() < PROB_ASSIST_SIMULADO[a["posicao"]] * k for _ in range(g_eu - meus))
@@ -260,18 +273,43 @@ class CarreiraJogador:
         meus = self._golos_na_partida(jogo["id"])           # (o sorteio dos outros golos pode dar-lhe mais)
         est = {"golos": meus, "assistencias": assist}
         nota = 6.0 + 1.0 * meus + 0.6 * assist + (0.4 if g_eu > g_adv else -0.4 if g_eu < g_adv else 0.0)
-        nota += (a["geral"] - 70) * 0.02 + rnd.gauss(0, 0.45)
+        nota += (a["geral"] + mod - 70) * 0.02 + rnd.gauss(0, 0.45)
         nota = round(max(3.0, min(10.0, nota)), 1)
         with self.con:
             res = self._gravar_atuacao(jogo["id"], est, g_eu, g_adv, simulado=True, nota=nota)
+            res["vida"] = self.vida.depois_do_jogo(True, nota, g_eu, g_adv, res["golos"])
         res.update(jornada=jornada, casa=jogo["casa_id"], fora=jogo["fora_id"])
         return res
+
+    def simular_sem_jogador(self, semente: int | None = None) -> dict:
+        """Jornada em que o jogador não joga (lesionado ou no banco): a equipa joga sem ele."""
+        jogo = self.camp.proximo_jogo()
+        if jogo is None:
+            raise RuntimeError("a época já terminou")
+        motivo = self.vida.pode_jogar()[1]
+        rnd = random.Random(semente)
+        a = self.atleta
+        eu = a["equipa_id"]
+        gc, gf = self.camp._simular(jogo["casa_id"], jogo["fora_id"], rnd, -2.0)   # um jogador a menos
+        g_eu, g_adv = (gc, gf) if jogo["casa_id"] == eu else (gf, gc)
+        colegas = [(n, p) for n, p, _num in self.camp.campo(eu) if n != a["nome"]]
+        pesos = [PESO_GOLO_POSICAO.get(p, 0.2) for _n, p in colegas]
+        marcadores = [rnd.choices([n for n, _p in colegas], weights=pesos)[0] for _ in range(g_eu)]
+        jornada = self.camp.registar_jogo_do_jogador(g_eu, g_adv, rnd.randrange(1 << 30), simulado=True,
+                                                     marcadores_eu=marcadores)
+        with self.con:
+            frases = self.vida.depois_do_jogo(False, None, g_eu, g_adv)
+        return {"jornada": jornada, "casa": jogo["casa_id"], "fora": jogo["fora_id"], "g_eu": g_eu,
+                "g_adv": g_adv, "simulado": True, "ausente": motivo, "vida": frases}
 
     def simular_resto_da_epoca(self, semente: int | None = None) -> int:
         rnd = random.Random(semente)
         n = 0
         while self.camp.proximo_jogo() is not None:
             self.simular_jogo(rnd.randrange(1 << 30))
+            ev = self.vida.evento_atual()
+            if ev:                                   # a simular a época, as escolhas são ao acaso
+                self.vida.escolher(rnd.choice([i for i, ok in enumerate(ev["possivel"]) if ok]))
             n += 1
         return n
 
@@ -321,9 +359,12 @@ class CarreiraJogador:
         media = est["nota"] or 0.0
         atual = self.atleta["equipa_id"]
         f_atual = FORCA_EQUIPAS.get(atual, 75)
-        if media < 6.8:
+        fama = self.vida.estado["fama"]
+        # A fama ajuda: com fama 100 basta nota média 6,4, e os clubes podem ser mais fortes
+        limiar = 6.8 - fama / 250
+        if media < limiar:
             return []
-        salto = 6 + (media - 6.8) * 12
+        salto = 6 + (media - limiar) * 12 + fama / 20
         clubes = [e for e in EQUIPAS_LISTA if e != atual and f_atual < FORCA_EQUIPAS.get(e, 75) <= f_atual + salto]
         clubes.sort(key=lambda e: -FORCA_EQUIPAS.get(e, 75))
         return clubes[:2]
@@ -335,4 +376,11 @@ class CarreiraJogador:
         destino = equipa_id or self.atleta["equipa_id"]
         if destino != self.atleta["equipa_id"] and destino not in self.propostas():
             raise ValueError("esse clube não fez proposta")
+        mudou_clube = destino != self.atleta["equipa_id"]
         self._nova_epoca(destino, self.atleta["epoca"] + 1, semente)
+        frases = self.vida.nova_epoca()
+        if mudou_clube:
+            with self.con:
+                self.vida.registar(f"Assinaste pelo {EQUIPAS_INFO[destino]['nome']}!", {}, "transferencia")
+                self.vida.aplicar({"fama": 8, "treinador": 50 - self.vida.estado["treinador"]})
+        return frases

@@ -277,8 +277,15 @@ class EcraCriarJogador:
 
 class EcraCarreiraJogador:
     """
-    cj    : CarreiraJogador
+    cj    : CarreiraJogador (com cj.vida)
     aviso : resumo do último jogo (de CarreiraJogador.registar_jogo / simular_jogo), mostrado num cartão
+
+    Além do painel, este ecrã tem janelas por cima ("modais"):
+      evento     - um acontecimento da vida com escolhas (aparece sozinho depois de uma jornada)
+      atividades - o que fazer nesta semana (uma atividade por jornada)
+      resultado  - o que aconteceu depois de uma escolha (com os efeitos)
+      diario     - as últimas entradas do diário
+    As escolhas são aplicadas logo na classe Vida (vida.py); o resto (jogar, simular) é decidido pela Game.
     """
 
     def __init__(self, screen, cj, arena=None, aviso: dict | None = None):
@@ -289,17 +296,24 @@ class EcraCarreiraJogador:
         self.aviso = aviso
         self._aviso_fechado = False
         self._confirmar = None
+        self.modal = None              # None ou {"tipo": "evento" | "atividades" | "resultado" | "diario", ...}
+        self._opcoes = []              # retângulos das opções do modal (para o rato)
+        self._hover = -1
         self._ler_dados()
         self._criar_botoes()
 
     def _ler_dados(self):
         cj, camp = self.cj, self.cj.camp
         self.atleta = dict(cj.atleta)
-        self.attrs = cj.atributos()
+        self.vida = cj.vida.estado
+        self.mod = cj.vida.modificador()
+        self.pode_jogar, self.motivo = cj.vida.pode_jogar()
+        mod_r = round(self.mod)
+        self.attrs = {k: max(40, min(99, v + mod_r)) for k, v in cj.atributos().items()}
         self.est = cj.estatisticas_epoca()
         self.notas = cj.ultimas_notas(5)
         self.tabela = list(camp.classificacao())
-        self.marcadores = list(camp.melhores_marcadores(5))
+        self.marcadores = list(camp.melhores_marcadores(3))
         self.terminado = camp.terminado
         self.proximo = None if self.terminado else camp.proximo_jogo()
         self.propostas = cj.propostas() if self.terminado else []
@@ -308,20 +322,25 @@ class EcraCarreiraJogador:
         self.jornada = camp.jornada_atual
         self.total_jornadas = camp.total_jornadas
         self.jogadas = camp.ultima_jornada_jogada()
+        self.ultimo_diario = cj.vida.diario(1)
 
     def _criar_botoes(self):
         self.botoes_principais = []
         if self.terminado:
-            y = 372
+            y = 312
             for eq in self.propostas:
                 nome = obter_info_equipa(eq)["nome"]
                 self.botoes_principais.append(BotaoMenu((450, y, 380, 58), f"ASSINAR: {nome.upper()}",
                                                         "Proposta para a próxima época", f"assinar:{eq}",
                                                         (40, 190, 100), "jogar"))
-                y += 66
+                y += 64
             atual = obter_info_equipa(self.atleta["equipa_id"])["nome"]
             self.botoes_principais.append(BotaoMenu((450, y, 380, 58), "FICAR NO CLUBE", f"Nova época no {atual}",
                                                     "ficar", (50, 140, 255), "casa"))
+        elif not self.pode_jogar:
+            self.botoes_principais = [
+                BotaoMenu((450, 312, 380, 64), "SIMULAR JORNADA", self.motivo.capitalize(), "simular",
+                          (230, 90, 70), "avancar")]
         else:
             self.botoes_principais = [
                 BotaoMenu((450, 312, 214, 64), "JOGAR", "Só com o teu jogador", "jogar", (40, 190, 100), "jogar"),
@@ -332,13 +351,16 @@ class EcraCarreiraJogador:
             (330, 646, 270, 50), "SIMULAR ÉPOCA", "", "simular_epoca", (255, 175, 40), "avancar", seta=False, tamanho=18)
         self.btn_nova = BotaoMenu((40, 646, 270, 50), "NOVA CARREIRA", "", "nova_carreira", (255, 120, 60),
                                   "recomecar", seta=False, tamanho=18)
+        self.btn_ativ = BotaoMenu((620, 646, 330, 50), "ATIVIDADES DA SEMANA", "", "atividades", (255, 110, 160),
+                                  "jogador", seta=False, tamanho=18)
         self.btn_menu = BotaoMenu((WIDTH - 310, 646, 270, 50), "MENU PRINCIPAL", "", "menu", (150, 110, 255),
                                   "casa", seta=False, tamanho=18)
+        self.r_diario = pygame.Rect(740, 400, 80, 22)
         self.foco = 0
 
     @property
     def _todos_botoes(self):
-        return self.botoes_principais + [b for b in (self.btn_epoca, self.btn_nova, self.btn_menu) if b]
+        return self.botoes_principais + [b for b in (self.btn_epoca, self.btn_nova, self.btn_ativ, self.btn_menu) if b]
 
     def _pedir_confirmacao(self, botao, texto_original) -> bool:
         if self._confirmar is botao:
@@ -353,20 +375,91 @@ class EcraCarreiraJogador:
 
     @property
     def _aviso_visivel(self) -> bool:
-        return bool(self.aviso) and not self._aviso_fechado and self.t < 5.0
+        return bool(self.aviso) and not self._aviso_fechado and self.t < 6.0
 
+    # ------------------------------------------------------------------ #
+    # Modais                                                              #
+    # ------------------------------------------------------------------ #
+    def _abrir_evento_se_houver(self) -> bool:
+        ev = self.cj.vida.evento_atual()
+        if ev and self.modal is None:
+            self.modal = {"tipo": "evento", "evento": ev}
+            som.ui("mover")
+            return True
+        return False
+
+    def _escolher(self, i):
+        m = self.modal
+        if m["tipo"] == "evento":
+            if not m["evento"]["possivel"][i]:
+                return
+            res = self.cj.vida.escolher(i)
+        elif m["tipo"] == "atividades":
+            at = m["lista"][i]
+            if not at["possivel"]:
+                return
+            res = self.cj.vida.fazer_atividade(at["id"])
+        else:
+            return
+        som.ui("confirmar")
+        self.modal = {"tipo": "resultado", "res": res}
+        self._ler_dados()
+        self._criar_botoes()
+
+    def _evento_modal(self, event):
+        m = self.modal
+        n = len(self._opcoes)
+        if event.type == pygame.KEYDOWN:
+            if m["tipo"] in ("resultado", "diario"):
+                if event.key in (pygame.K_RETURN, pygame.K_KP_ENTER, pygame.K_SPACE, pygame.K_ESCAPE):
+                    self.modal = None
+                    self._abrir_evento_se_houver()
+                return None
+            if event.key == pygame.K_ESCAPE and m["tipo"] == "atividades":
+                self.modal = None
+            elif pygame.K_1 <= event.key <= pygame.K_9 and event.key - pygame.K_1 < n:
+                self._escolher(event.key - pygame.K_1)
+            elif event.key in (pygame.K_UP, pygame.K_w) and n:
+                self._hover = (self._hover - 1) % n
+            elif event.key in (pygame.K_DOWN, pygame.K_s) and n:
+                self._hover = (self._hover + 1) % n
+            elif event.key in (pygame.K_RETURN, pygame.K_KP_ENTER) and 0 <= self._hover < n:
+                self._escolher(self._hover)
+        elif event.type == pygame.MOUSEMOTION:
+            self._hover = next((i for i, r in enumerate(self._opcoes) if r.collidepoint(event.pos)), self._hover)
+        elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            if m["tipo"] in ("resultado", "diario"):
+                self.modal = None
+                self._abrir_evento_se_houver()
+                return None
+            for i, r in enumerate(self._opcoes):
+                if r.collidepoint(event.pos):
+                    self._escolher(i)
+                    return None
+            if m["tipo"] == "atividades":
+                self.modal = None
+        return None
+
+    # ------------------------------------------------------------------ #
     def handle_event(self, event):
         if event.type == pygame.QUIT:
             return "sair"
         if self._aviso_visivel and (event.type == pygame.KEYDOWN or
                                     (event.type == pygame.MOUSEBUTTONDOWN and event.button == 1)):
             self._aviso_fechado = True
+            self._abrir_evento_se_houver()
             return None
+        if self.modal is not None:
+            return self._evento_modal(event)
         if event.type == pygame.KEYDOWN:
             if event.key in (pygame.K_RETURN, pygame.K_KP_ENTER, pygame.K_SPACE):
-                return self.botoes_principais[self.foco].acao
+                return self._acao_principal(self.botoes_principais[self.foco].acao)
             if event.key == pygame.K_ESCAPE:
                 return "menu"
+            if event.key == pygame.K_v:
+                self._abrir_atividades()
+            if event.key == pygame.K_l:
+                self.modal = {"tipo": "diario"}
             if event.key in (pygame.K_LEFT, pygame.K_UP, pygame.K_a, pygame.K_w):
                 self.foco = (self.foco - 1) % len(self.botoes_principais)
                 som.ui("mover")
@@ -377,9 +470,15 @@ class EcraCarreiraJogador:
             p = event.pos
             for b in self.botoes_principais:
                 if b.por_cima(p):
-                    return b.acao
+                    return self._acao_principal(b.acao)
             if self.btn_menu.por_cima(p):
                 return "menu"
+            if self.btn_ativ.por_cima(p):
+                self._abrir_atividades()
+                return None
+            if self.r_diario.collidepoint(p):
+                self.modal = {"tipo": "diario"}
+                return None
             if self.btn_nova.por_cima(p):
                 return "nova_carreira" if self._pedir_confirmacao(self.btn_nova, "NOVA CARREIRA") else None
             if self.btn_epoca is not None and self.btn_epoca.por_cima(p):
@@ -390,14 +489,30 @@ class EcraCarreiraJogador:
                     self.foco = i
         return None
 
+    def _acao_principal(self, acao):
+        # Antes de jogar é preciso responder ao evento da semana
+        if acao in ("jogar", "simular") and self._abrir_evento_se_houver():
+            return None
+        return acao
+
+    def _abrir_atividades(self):
+        if self.terminado:
+            return
+        self.modal = {"tipo": "atividades", "lista": self.cj.vida.atividades()}
+        self._hover = -1
+        som.ui("mover")
+
     def update(self, dt):
         self.t += dt
         mpos = pygame.mouse.get_pos()
         for i, b in enumerate(self.botoes_principais):
-            b.animar(dt, i == self.foco)
-        for b in (self.btn_epoca, self.btn_nova, self.btn_menu):
+            b.animar(dt, i == self.foco and self.modal is None)
+        for b in (self.btn_epoca, self.btn_nova, self.btn_ativ, self.btn_menu):
             if b:
-                b.animar(dt, b.por_cima(mpos) or b is self._confirmar)
+                b.animar(dt, (b.por_cima(mpos) or b is self._confirmar) and self.modal is None)
+        # Sem cartão do jogo à vista, o evento da semana abre sozinho
+        if not self._aviso_visivel and self.modal is None and self.t > 0.3:
+            self._abrir_evento_se_houver()
 
     # ------------------------------------------------------------------ #
     def draw(self):
@@ -412,21 +527,26 @@ class EcraCarreiraJogador:
 
         self._cabecalho(info)
         self._ficha(pygame.Rect(40, 100, 390, 530), kit)
-        self._centro(pygame.Rect(450, 100, 380, 530))
+        self._centro(pygame.Rect(450, 100, 380, 196))
+        self._painel_vida(pygame.Rect(450, 390, 380, 240))
         self._classificacao(pygame.Rect(850, 100, 390, 530))
 
         for b in self._todos_botoes:
             b.draw(s)
         dica = "ENTER  escolher     ← →  mudar" if self.terminado else "ENTER  jogar     ← →  jogar / simular"
-        texto(s, dica + "     ESC  menu principal", 12, (120, 145, 195), (WIDTH // 2, 710), negrito=False)
+        texto(s, dica + "     V  atividades     L  diário     ESC  menu principal", 12, (120, 145, 195),
+              (WIDTH // 2, 710), negrito=False)
         if self._aviso_visivel:
             self._mostrar_aviso()
+        elif self.modal is not None:
+            self._desenhar_modal()
 
     def _cabecalho(self, info):
         s = self.screen
         a = self.atleta
         texto(s, a["nome"].upper(), 30, COR_TEXTO, (40, 40), ancora="midleft", sombra=True)
-        texto(s, f"N.º {a['numero']}   •   {NOME_POSICAO[a['posicao']]}   •   {info['nome']}   •   Época {self.epoca}",
+        texto(s, f"N.º {a['numero']}   •   {NOME_POSICAO[a['posicao']]}   •   {info['nome']}   •   "
+                 f"{self.vida['idade']} anos   •   Época {self.epoca}",
               14, COR_TEXTO_SUAVE, (40, 74), ancora="midleft", negrito=False)
         r = pygame.Rect(WIDTH - 330, 22, 290, 58)
         _vidro(s, r, 12, 220, COR_DESTAQUE)
@@ -447,7 +567,10 @@ class EcraCarreiraJogador:
         _jogador_em_palco(s, kit, a["nome"], a["numero"], (caixa.left + 120, caixa.top + 270), 200, self.t)
         _circulo_geral(s, (caixa.right - 90, caixa.top + 100), a["geral"])
         _barras_atributos(s, caixa.right - 175, caixa.top + 175, 150, self.attrs, passo=28)
-        # Últimas notas (a mais recente à direita)
+        if abs(self.mod) >= 0.5:
+            cor = (90, 215, 120) if self.mod > 0 else (230, 90, 80)
+            texto(s, f"Forma e moral: {round(self.mod):+d} nos atributos", 11, cor,
+                  (caixa.right - 88, caixa.top + 290))
         y = caixa.top + 372
         texto(s, "ÚLTIMAS NOTAS", 13, COR_DESTAQUE, (caixa.left + 20, y), ancora="midleft")
         for i in range(5):
@@ -458,7 +581,6 @@ class EcraCarreiraJogador:
                 texto(s, f"{n:.1f}".replace(".", ","), 18, (15, 20, 35), r.center)
             else:
                 pygame.draw.rect(s, (45, 60, 95), r, 2, border_radius=8)
-        # Estatísticas da época
         y = caixa.top + 460
         est = self.est
         nota = "–" if est["nota"] is None else f"{est['nota']:.2f}".replace(".", ",")
@@ -470,7 +592,7 @@ class EcraCarreiraJogador:
 
     def _centro(self, caixa):
         s = self.screen
-        _vidro(s, pygame.Rect(caixa.left, caixa.top, caixa.width, 196), 16, 220)
+        _vidro(s, caixa, 16, 220)
         if self.terminado:
             pos = self.posicao_equipa
             _titulo_painel(s, caixa, "FIM DA ÉPOCA")
@@ -481,7 +603,7 @@ class EcraCarreiraJogador:
                   f"   •   {self.est['golos']} golos   •   {self.est['assistencias']} assist.", 14, COR_TEXTO,
                   (caixa.centerx, caixa.top + 122), negrito=False)
             msg = (f"{len(self.propostas)} clube(s) querem-te!" if self.propostas
-                   else "Sem propostas: precisas de nota média 6,8 ou mais")
+                   else "Sem propostas: precisas de mais nota ou de mais fama")
             texto(s, msg, 15, (120, 230, 150) if self.propostas else COR_TEXTO_SUAVE,
                   (caixa.centerx, caixa.top + 160))
             return
@@ -497,22 +619,44 @@ class EcraCarreiraJogador:
         texto(s, "VS", 30, COR_DESTAQUE, (caixa.centerx, caixa.top + 92))
         texto(s, "EM CASA" if p["casa_id"] == eu else "FORA", 13, COR_TEXTO_SUAVE,
               (caixa.centerx, caixa.top + 124))
-        # Melhores marcadores
-        r = pygame.Rect(caixa.left, caixa.top + 290, caixa.width, 240)
-        _vidro(s, r, 16, 220)
-        _titulo_painel(s, r, "MELHORES MARCADORES")
-        if not self.marcadores:
-            texto(s, "Ainda não há golos nesta época", 14, COR_TEXTO_SUAVE, r.center, negrito=False)
-        for i, m in enumerate(self.marcadores):
-            y = r.top + 56 + i * 34
-            meu = m["nome"] == self.atleta["nome"] and m["equipa_id"] == eu
-            if meu:
-                pygame.draw.rect(s, (40, 80, 150), (r.left + 10, y - 15, r.width - 20, 30), border_radius=8)
-            texto(s, f"{i + 1}.", 14, COR_TEXTO_SUAVE, (r.left + 24, y), ancora="midleft")
-            texto(s, m["nome"], 14, (255, 255, 255) if meu else COR_TEXTO, (r.left + 52, y), ancora="midleft",
-                  negrito=meu)
-            texto(s, obter_info_equipa(m["equipa_id"])["sigla"], 12, COR_TEXTO_SUAVE, (r.right - 70, y))
-            texto(s, str(m["golos"]), 16, COR_DESTAQUE, (r.right - 26, y))
+        if not self.pode_jogar:
+            texto(s, self.motivo, 12, (255, 120, 100), (caixa.centerx, caixa.bottom - 18))
+
+    def _painel_vida(self, r):
+        """A MINHA VIDA: dinheiro, os cinco valores em barras e a última linha do diário."""
+        s = self.screen
+        v = self.vida
+        _vidro(s, r, 16, 220, (190, 90, 140))
+        texto(s, "A MINHA VIDA", 15, (255, 140, 190), (r.left + 20, r.top + 22), ancora="midleft")
+        dinheiro = f"{v['dinheiro']:,} €".replace(",", " ")
+        texto(s, dinheiro, 15, (130, 230, 150), (r.left + 210, r.top + 22), ancora="midleft")
+        pygame.draw.rect(s, (60, 40, 70), self.r_diario, border_radius=11)
+        texto(s, "DIÁRIO", 11, (255, 190, 220), self.r_diario.center)
+        for i, k in enumerate(("forma", "moral", "treinador", "fama", "estudos")):
+            y = r.top + 52 + i * 26
+            texto(s, {"treinador": "Treinador"}.get(k, k.capitalize()), 13, COR_TEXTO_SUAVE,
+                  (r.left + 20, y), ancora="midleft")
+            barra = pygame.Rect(r.left + 110, y - 5, 210, 10)
+            pygame.draw.rect(s, (25, 35, 65), barra, border_radius=5)
+            t = v[k] / 100
+            cor = misturar((230, 80, 70), (90, 215, 120), t) if k != "fama" else misturar((90, 120, 200), (255, 205, 60), t)
+            pygame.draw.rect(s, cor, (barra.x, barra.y, max(6, round(barra.w * t)), 10), border_radius=5)
+            texto(s, str(v[k]), 13, COR_TEXTO, (r.right - 20, y), ancora="midright")
+        y = r.top + 190
+        if not self.pode_jogar:
+            texto(s, self.motivo, 13, (255, 120, 100), (r.left + 20, y), ancora="midleft")
+        elif v["atividade_feita"]:
+            texto(s, "Já fizeste a atividade desta semana", 12, COR_TEXTO_SUAVE, (r.left + 20, y), ancora="midleft",
+                  negrito=False)
+        else:
+            texto(s, "Ainda podes fazer uma atividade esta semana", 12, (255, 170, 210), (r.left + 20, y),
+                  ancora="midleft", negrito=False)
+        if self.ultimo_diario:
+            linha = self.ultimo_diario[0]["texto"]
+            f = fonte(11, False)
+            while f.size(linha)[0] > r.width - 40 and len(linha) > 10:
+                linha = linha[:-4] + "…"
+            texto(s, linha, 11, (150, 165, 200), (r.left + 20, y + 24), ancora="midleft", negrito=False)
 
     def _classificacao(self, caixa):
         s = self.screen
@@ -523,29 +667,157 @@ class EcraCarreiraJogador:
         texto(s, "DG", 12, COR_TEXTO_SUAVE, (caixa.right - 78, caixa.top + 22))
         texto(s, "PTS", 12, COR_TEXTO_SUAVE, (caixa.right - 32, caixa.top + 22))
         for i, l in enumerate(self.tabela):
-            y = caixa.top + 64 + i * 56
+            y = caixa.top + 60 + i * 44
             meu = l["equipa_id"] == eu
             if meu:
-                pygame.draw.rect(s, (40, 80, 150), (caixa.left + 10, y - 22, caixa.width - 20, 44), border_radius=10)
-            texto(s, f"{i + 1}", 16, COR_DESTAQUE if i == 0 else COR_TEXTO_SUAVE, (caixa.left + 30, y))
-            logo = carregar_logo_equipa(l["equipa_id"], (34, 34))
+                pygame.draw.rect(s, (40, 80, 150), (caixa.left + 10, y - 19, caixa.width - 20, 38), border_radius=10)
+            texto(s, f"{i + 1}", 15, COR_DESTAQUE if i == 0 else COR_TEXTO_SUAVE, (caixa.left + 30, y))
+            logo = carregar_logo_equipa(l["equipa_id"], (30, 30))
             if logo:
-                s.blit(logo, logo.get_rect(center=(caixa.left + 70, y)))
-            texto(s, l["nome"], 15, (255, 255, 255) if meu else COR_TEXTO, (caixa.left + 96, y), ancora="midleft",
+                s.blit(logo, logo.get_rect(center=(caixa.left + 68, y)))
+            texto(s, l["nome"], 14, (255, 255, 255) if meu else COR_TEXTO, (caixa.left + 92, y), ancora="midleft",
                   negrito=meu)
-            texto(s, str(l["jogos"]), 14, COR_TEXTO_SUAVE, (caixa.right - 120, y))
-            texto(s, f"{l['diferenca']:+d}", 14, COR_TEXTO_SUAVE, (caixa.right - 78, y))
-            texto(s, str(l["pontos"]), 17, (255, 255, 255), (caixa.right - 32, y))
+            texto(s, str(l["jogos"]), 13, COR_TEXTO_SUAVE, (caixa.right - 120, y))
+            texto(s, f"{l['diferenca']:+d}", 13, COR_TEXTO_SUAVE, (caixa.right - 78, y))
+            texto(s, str(l["pontos"]), 16, (255, 255, 255), (caixa.right - 32, y))
+        y0 = caixa.top + 420
+        texto(s, "MELHORES MARCADORES", 13, COR_DESTAQUE, (caixa.left + 20, y0), ancora="midleft")
+        if not self.marcadores:
+            texto(s, "Ainda não há golos nesta época", 12, COR_TEXTO_SUAVE, (caixa.centerx, y0 + 40), negrito=False)
+        for i, m in enumerate(self.marcadores):
+            y = y0 + 26 + i * 26
+            meu = m["nome"] == self.atleta["nome"] and m["equipa_id"] == eu
+            if meu:
+                pygame.draw.rect(s, (40, 80, 150), (caixa.left + 10, y - 12, caixa.width - 20, 24), border_radius=8)
+            texto(s, f"{i + 1}. {m['nome']}", 13, (255, 255, 255) if meu else COR_TEXTO, (caixa.left + 20, y),
+                  ancora="midleft", negrito=meu)
+            texto(s, obter_info_equipa(m["equipa_id"])["sigla"], 12, COR_TEXTO_SUAVE, (caixa.right - 70, y))
+            texto(s, str(m["golos"]), 15, COR_DESTAQUE, (caixa.right - 26, y))
+
+    # ------------------------------------------------------------------ #
+    def _fundo_modal(self, w, h):
+        s = self.screen
+        escuro = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+        escuro.fill((5, 8, 20, 185))
+        s.blit(escuro, (0, 0))
+        caixa = pygame.Rect(0, 0, w, h)
+        caixa.center = (WIDTH // 2, HEIGHT // 2)
+        _vidro(s, caixa, 18, 248, (255, 140, 190))
+        return caixa
+
+    def _texto_quebrado(self, txt, tamanho, cor, x, y, largura, negrito=False, passo=None):
+        f = fonte(tamanho, negrito)
+        palavras, linha = txt.split(), ""
+        for p in palavras:
+            prox = (linha + " " + p).strip()
+            if f.size(prox)[0] > largura and linha:
+                texto(self.screen, linha, tamanho, cor, (x, y), ancora="midleft", negrito=negrito)
+                y += passo or tamanho + 8
+                linha = p
+            else:
+                linha = prox
+        if linha:
+            texto(self.screen, linha, tamanho, cor, (x, y), ancora="midleft", negrito=negrito)
+            y += passo or tamanho + 8
+        return y
+
+    def _chips(self, efeitos, x, y):
+        """Efeitos como etiquetas coloridas: verde = bom, vermelho = mau."""
+        from vida import NOME_VALOR
+        for k, d in efeitos.items():
+            if not d:
+                continue
+            if k == "dinheiro":
+                txt = f"{d:+,} €".replace(",", " ")
+            elif k == "lesao":
+                txt = f"Lesão {d:+d} jorn."
+            elif k == "geral":
+                txt = f"Geral {d:+.1f}".replace(".", ",")
+            else:
+                txt = f"{NOME_VALOR.get(k, k)} {d:+d}"
+            bom = d < 0 if k == "lesao" else d > 0
+            f = fonte(13)
+            w = f.size(txt)[0] + 18
+            r = pygame.Rect(x, y, w, 26)
+            pygame.draw.rect(self.screen, (40, 120, 70) if bom else (140, 45, 50), r, border_radius=13)
+            texto(self.screen, txt, 13, (255, 255, 255), r.center)
+            x += w + 8
+
+    def _desenhar_modal(self):
+        m = self.modal
+        s = self.screen
+        self._opcoes = []
+        if m["tipo"] == "evento":
+            ev = m["evento"]
+            n = len(ev["opcoes"])
+            caixa = self._fundo_modal(640, 170 + n * 62)
+            texto(s, "ACONTECEU UMA COISA...", 12, (255, 170, 210), (caixa.left + 30, caixa.top + 28), ancora="midleft")
+            texto(s, ev["titulo"], 26, (255, 255, 255), (caixa.left + 30, caixa.top + 62), ancora="midleft")
+            y = self._texto_quebrado(ev["texto"], 15, COR_TEXTO, caixa.left + 30, caixa.top + 102, caixa.width - 60)
+            y += 6
+            for i, op in enumerate(ev["opcoes"]):
+                r = pygame.Rect(caixa.left + 30, y + i * 62, caixa.width - 60, 52)
+                self._opcoes.append(r)
+                ok = ev["possivel"][i]
+                hover = i == self._hover
+                pygame.draw.rect(s, (70, 40, 80) if hover else (30, 34, 60), r, border_radius=12)
+                pygame.draw.rect(s, (255, 140, 190) if hover else (80, 90, 130), r, 2, border_radius=12)
+                texto(s, f"{i + 1}", 18, (255, 170, 210), (r.left + 24, r.centery))
+                texto(s, op["texto"] + ("" if ok else "   (não tens dinheiro)"), 17,
+                      (255, 255, 255) if ok else (120, 120, 140), (r.left + 50, r.centery), ancora="midleft")
+        elif m["tipo"] == "atividades":
+            lista = m["lista"]
+            caixa = self._fundo_modal(700, 130 + len(lista) * 56)
+            texto(s, "ATIVIDADES DA SEMANA", 24, (255, 255, 255), (caixa.left + 30, caixa.top + 36), ancora="midleft")
+            texto(s, "Só podes fazer uma por jornada.  ESC fecha.", 13, COR_TEXTO_SUAVE,
+                  (caixa.left + 30, caixa.top + 64), ancora="midleft", negrito=False)
+            for i, at in enumerate(lista):
+                r = pygame.Rect(caixa.left + 30, caixa.top + 90 + i * 56, caixa.width - 60, 48)
+                self._opcoes.append(r)
+                hover = i == self._hover and at["possivel"]
+                pygame.draw.rect(s, (70, 40, 80) if hover else (30, 34, 60), r, border_radius=10)
+                pygame.draw.rect(s, (255, 140, 190) if hover else (80, 90, 130), r, 2, border_radius=10)
+                cor = (255, 255, 255) if at["possivel"] else (110, 115, 140)
+                texto(s, f"{i + 1}", 16, (255, 170, 210), (r.left + 20, r.centery))
+                texto(s, at["nome"], 16, cor, (r.left + 42, r.top + 16), ancora="midleft")
+                texto(s, at["descricao"], 11, COR_TEXTO_SUAVE, (r.left + 42, r.top + 34), ancora="midleft",
+                      negrito=False)
+                if at["possivel"]:
+                    self._chips(at["efeitos"], r.left + 330, r.top + 11)
+        elif m["tipo"] == "resultado":
+            res = m["res"]
+            caixa = self._fundo_modal(640, 300)
+            texto(s, res["titulo"].upper(), 13, (255, 170, 210), (caixa.left + 30, caixa.top + 30), ancora="midleft")
+            texto(s, res["escolha"], 22, (255, 255, 255), (caixa.left + 30, caixa.top + 66), ancora="midleft")
+            y = self._texto_quebrado(res["texto"], 15, COR_TEXTO, caixa.left + 30, caixa.top + 110, caixa.width - 60)
+            self._chips(res["efeitos"], caixa.left + 30, max(y + 10, caixa.top + 190))
+            texto(s, "Carrega numa tecla para continuar", 12, (120, 145, 195), (caixa.centerx, caixa.bottom - 22),
+                  negrito=False)
+        elif m["tipo"] == "diario":
+            linhas = self.cj.vida.diario(10)
+            caixa = self._fundo_modal(760, 560)
+            texto(s, "DIÁRIO", 24, (255, 255, 255), (caixa.left + 30, caixa.top + 36), ancora="midleft")
+            y = caixa.top + 76
+            for l in linhas:
+                quando = f"J{l['jornada']}" if l["jornada"] else "Início"
+                texto(s, f"Época {l['epoca']} • {quando}", 11, (255, 170, 210), (caixa.left + 30, y),
+                      ancora="midleft")
+                y = self._texto_quebrado(l["texto"], 13, COR_TEXTO, caixa.left + 150, y, caixa.width - 180,
+                                         passo=18) + 4
+                if y > caixa.bottom - 50:
+                    break
+            texto(s, "Carrega numa tecla para fechar", 12, (120, 145, 195), (caixa.centerx, caixa.bottom - 22),
+                  negrito=False)
 
     def _mostrar_aviso(self):
-        """Cartão do último jogo: resultado, nota e quanto o jogador evoluiu."""
+        """Cartão do último jogo: resultado, nota, evolução e o que mudou na vida."""
         s = self.screen
         av = self.aviso
         k = min(1.0, self.t / 0.25)
         escuro = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
         escuro.fill((5, 8, 20, int(170 * k)))
         s.blit(escuro, (0, 0))
-        caixa = pygame.Rect(0, 0, 560, 330)
+        caixa = pygame.Rect(0, 0, 580, 380)
         caixa.center = (WIDTH // 2, HEIGHT // 2 + round(30 * (1 - k)))
         _vidro(s, caixa, 18, 245, COR_DESTAQUE)
         g_eu, g_adv = av["g_eu"], av["g_adv"]
@@ -558,22 +830,29 @@ class EcraCarreiraJogador:
         gc, gf = (g_eu, g_adv) if eu_casa else (g_adv, g_eu)
         texto(s, f"{casa['sigla']}  {gc} - {gf}  {fora['sigla']}", 30, (255, 255, 255), (caixa.centerx, caixa.top + 66))
         texto(s, res, 18, cor, (caixa.centerx, caixa.top + 100))
-        # Nota grande
-        nota = av["nota"]
-        circ = (caixa.left + 130, caixa.top + 196)
-        pygame.draw.circle(s, cor_nota(nota), circ, 58)
-        pygame.draw.circle(s, (255, 255, 255), circ, 58, 3)
-        texto(s, f"{nota:.1f}".replace(".", ","), 40, (15, 20, 35), (circ[0], circ[1] - 6))
-        texto(s, "NOTA", 12, (15, 20, 35), (circ[0], circ[1] + 26))
-        x = caixa.left + 230
-        texto(s, f"Golos: {av['golos']}     Assistências: {av['assistencias']}", 17, COR_TEXTO,
-              (x, caixa.top + 160), ancora="midleft")
-        d = av["geral_depois"] - av["geral_antes"]
-        cor_d = (90, 215, 120) if d >= 0 else (230, 80, 80)
-        texto(s, f"Geral: {av['geral_antes']:.1f} → {av['geral_depois']:.1f}".replace(".", ","), 17, COR_TEXTO,
-              (x, caixa.top + 196), ancora="midleft")
-        texto(s, f"{d:+.2f}".replace(".", ","), 17, cor_d, (caixa.right - 30, caixa.top + 196), ancora="midright")
-        if int(av["geral_depois"]) > int(av["geral_antes"]):
-            texto(s, "SUBISTE DE NÍVEL!", 16, COR_DESTAQUE, (x, caixa.top + 232), ancora="midleft")
-        texto(s, "Carrega numa tecla para continuar", 12, (120, 145, 195), (caixa.centerx, caixa.bottom - 22),
+        if av.get("ausente"):
+            texto(s, "Não jogaste: " + av["ausente"].lower(), 17, (255, 130, 110), (caixa.centerx, caixa.top + 170))
+        else:
+            nota = av["nota"]
+            circ = (caixa.left + 120, caixa.top + 186)
+            pygame.draw.circle(s, cor_nota(nota), circ, 54)
+            pygame.draw.circle(s, (255, 255, 255), circ, 54, 3)
+            texto(s, f"{nota:.1f}".replace(".", ","), 38, (15, 20, 35), (circ[0], circ[1] - 6))
+            texto(s, "NOTA", 12, (15, 20, 35), (circ[0], circ[1] + 24))
+            x = caixa.left + 210
+            texto(s, f"Golos: {av['golos']}     Assistências: {av['assistencias']}", 16, COR_TEXTO,
+                  (x, caixa.top + 158), ancora="midleft")
+            d = av["geral_depois"] - av["geral_antes"]
+            texto(s, f"Geral: {av['geral_antes']:.1f} → {av['geral_depois']:.1f}".replace(".", ","), 16, COR_TEXTO,
+                  (x, caixa.top + 190), ancora="midleft")
+            texto(s, f"{d:+.2f}".replace(".", ","), 16, (90, 215, 120) if d >= 0 else (230, 80, 80),
+                  (caixa.right - 30, caixa.top + 190), ancora="midright")
+            if int(av["geral_depois"]) > int(av["geral_antes"]):
+                texto(s, "SUBISTE DE NÍVEL!", 15, COR_DESTAQUE, (x, caixa.top + 222), ancora="midleft")
+        y = caixa.top + 262
+        for frase in av.get("vida", [])[:3]:
+            cor_f = (255, 130, 110) if ("Lesion" in frase or "banco" in frase) else (130, 230, 150)
+            texto(s, frase, 14, cor_f, (caixa.centerx, y))
+            y += 24
+        texto(s, "Carrega numa tecla para continuar", 12, (120, 145, 195), (caixa.centerx, caixa.bottom - 20),
               negrito=False)

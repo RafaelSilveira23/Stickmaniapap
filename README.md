@@ -48,6 +48,12 @@ No Windows também se pode fazer duplo clique em `jogar.bat`.
   - O geral e os atributos evoluem com as notas; no fim da época, com nota média 6,8 ou mais, há propostas de
     clubes mais fortes
   - Gravado à parte em `hockey_game/saves/carreira_jogador.db` (tabelas `atleta` e `atuacao`)
+  - **Vida do jogador** (ao estilo dos jogos de simulação de vida): idade, dinheiro, forma, moral, confiança do
+    treinador, fama e estudos. Depois de cada jornada há um **evento com escolhas** (festa na véspera do jogo,
+    teste na escola, patrocínio, polémica nas redes, convocatória da seleção, ...) e em cada semana uma
+    **atividade** (`V`): treino extra, ginásio, descansar, sair com os amigos, estudar, ... Tudo fica no **diário** (`L`)
+  - As escolhas mexem no hóquei: forma e moral somam-se aos atributos, pouca forma dá **lesões**, sem a
+    confiança do treinador vais para o **banco**, e a fama ajuda a ter propostas (`hockey_game/vida.py`)
 - **Estilo arcade** (liga/desliga nas Definições): "GOLO!" gigante com o nome do marcador, câmara lenta e
   confetes; nos impactos o jogo congela por um instante, o ecrã treme e saltam faíscas; textos de banda
   desenhada ("DEFESA!", "POSTE!", "ROUBO!"), rasto da bola e contorno nos jogadores (`hockey_game/efeitos.py`)
@@ -90,6 +96,7 @@ No Windows também se pode fazer duplo clique em `jogar.bat`.
 | `hockey_game/carreira_menu.py` | Ecrãs do modo carreira (escolha da equipa e campeonato) |
 | `hockey_game/carreira_jogador.py` | Carreira de jogador: jogador criado, nota, evolução, propostas e base de dados |
 | `hockey_game/carreira_jogador_menu.py` | Ecrãs da carreira de jogador (criar o jogador e painel da carreira) |
+| `hockey_game/vida.py` | Vida do jogador: valores, eventos com escolhas, atividades, lesões, banco e diário |
 | `hockey_game/componentes.py` | Botões, painéis e fundos reutilizáveis da interface |
 | `hockey_game/graficos.py` | Efeitos gráficos: luzes, sombras suaves, ícones e título desenhados no código |
 | `hockey_game/remate_pov.py` | Remate na primeira pessoa (perspetiva, mira, força e modelo do guarda-redes) |

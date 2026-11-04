@@ -1453,7 +1453,7 @@ class Game:
         """Joga o próximo jogo da carreira: o clube do jogador é a equipa azul e só se controla ele."""
         cj = self.carreira_jog
         jogo = cj.camp.proximo_jogo()
-        if jogo is None:
+        if jogo is None or not cj.vida.pode_jogar()[0]:
             return
         a = cj.atleta
         eu = a["equipa_id"]
@@ -1491,7 +1491,8 @@ class Game:
             self.bola.seguir_jogador(alvo)
         alvo.nome = a["nome"]
         alvo.numero = a["numero"]
-        at = atributos_jogador(a["geral"], a["posicao"])
+        # A vida conta: forma e moral somam (ou tiram) aos atributos (vida.py)
+        at = atributos_jogador(a["geral"] + self.carreira_jog.vida.modificador(), a["posicao"])
         alvo.stat_velocidade = at["velocidade"]
         alvo.stat_remate = at["remate"]
         alvo.stat_passe = at["passe"]

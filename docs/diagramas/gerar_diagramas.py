@@ -290,7 +290,7 @@ def classes():
 # 7. Modelo de dados (base de dados SQLite do modo carreira)
 # ═══════════════════════════════════════════════════════════════════════
 def modelo_dados():
-    d = Diagrama("07_modelo_dados", 1120, 740, "Modelo de dados (SQLite)")
+    d = Diagrama("07_modelo_dados", 1120, 950, "Modelo de dados (SQLite)")
     T = lambda id, x, y, w, h, t, campos, cor="roxo", tr=False: d.caixa(
         id, x, y, w, h, tipo="classe", cor=cor, tam=12, linhas=(t, [campos]), tracejado=tr)
     T("equipa", 20, 20, 240, 100, "Equipa",
@@ -318,6 +318,16 @@ def modelo_dados():
     d.seta("partida", "atuacao", "1 : N", ponta=False, exato=True, pontos=[(560, 405), (560, 495)], pos_texto=0.78)
     d.seta("equipa", "atleta", "1 : N", ponta=False, exato=True,
            pontos=[(20, 70), (6, 70), (6, 590), (20, 590)], pos_texto=0.5)
+    # Vida do jogador (vida.py): os valores da vida e o diário
+    T("vida", 860, 455, 240, 260, "Vida",
+      ["PK, FK atleta_id", "idade", "forma", "moral", "treinador", "fama", "estudos", "dinheiro", "lesao",
+       "banco", "evento_pendente", "atividade_feita"], cor="laranja")
+    T("diario", 440, 790, 240, 140, "Diario",
+      ["PK id", "FK atleta_id", "epoca", "jornada", "evento", "texto", "efeitos"], cor="laranja")
+    d.seta("atleta", "vida", "1 : 1", ponta=False, exato=True,
+           pontos=[(200, 700), (200, 755), (980, 755), (980, 715)], pos_texto=0.7)
+    d.seta("atleta", "diario", "1 : N", ponta=False, exato=True,
+           pontos=[(80, 700), (80, 860), (440, 860)], pos_texto=0.75)
 
     d.seta("equipa", "torneio", "1 : N\n(equipa do jogador)", ponta=False, exato=True,
            pontos=[(260, 70), (440, 70)])
