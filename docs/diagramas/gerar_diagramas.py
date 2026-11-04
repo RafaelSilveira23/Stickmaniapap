@@ -14,20 +14,21 @@ PASTA = os.path.dirname(os.path.abspath(__file__))
 # 1. Casos de uso
 # ═══════════════════════════════════════════════════════════════════════
 def casos_de_uso():
-    d = Diagrama("01_casos_de_uso", 1010, 770, "Casos de uso")
-    d.caixa("sis", 190, 10, 630, 750, "Sistema: StickMania", "grupo", "cinza", tam=15)
+    d = Diagrama("01_casos_de_uso", 1010, 800, "Casos de uso")
+    d.caixa("sis", 190, 10, 630, 780, "Sistema: StickMania", "grupo", "cinza", tam=15)
     d.caixa("jog", 60, 290, 50, 90, "Jogador", "ator", "azul")
     d.caixa("ia", 905, 290, 50, 90, "Computador (IA)", "ator", "vermelho")
 
     esq = [("uc1", "Escolher equipas"), ("uc2", "Escolher dificuldade"), ("uc3", "Ver definições\n(controlos, ecrã inteiro)"),
            ("uc4", "Jogar partida"), ("uc5", "Pausar / continuar"), ("uc6", "Ver resultado final"),
            ("uc7", "Jogar o modo carreira\n(campeonato)"), ("uc8", "Consultar classificação,\ncalendário e marcadores"),
-           ("uc15", "Treinar remates\n(modo teste)")]
+           ("uc15", "Treinar remates\n(modo teste)"),
+           ("uc16", "Jogar a carreira de jogador\n(só o meu jogador)")]
     for i, (id, txt) in enumerate(esq):
         planeado = "implementar" in txt
-        d.caixa(id, 215, 55 + i * 78, 225, 54, txt, "elipse", "amarelo" if planeado else "azul",
+        d.caixa(id, 215, 50 + i * 74, 225, 54, txt, "elipse", "amarelo" if planeado else "azul",
                 tracejado=planeado, negrito=(id == "uc4"))
-        d.seta("jog", id, ponta=False, exato=True, pontos=[(110, 330), (215, 55 + i * 78 + 27)])
+        d.seta("jog", id, ponta=False, exato=True, pontos=[(110, 330), (215, 50 + i * 74 + 27)])
 
     dir_ = [("uc9", "Mover o jogador", 160), ("uc10", "Passar a bola", 230), ("uc11", "Rematar na 1.ª pessoa", 300),
             ("uc12", "Trocar de jogador", 370)]
@@ -289,7 +290,7 @@ def classes():
 # 7. Modelo de dados (base de dados SQLite do modo carreira)
 # ═══════════════════════════════════════════════════════════════════════
 def modelo_dados():
-    d = Diagrama("07_modelo_dados", 1120, 450, "Modelo de dados (SQLite)")
+    d = Diagrama("07_modelo_dados", 1120, 740, "Modelo de dados (SQLite)")
     T = lambda id, x, y, w, h, t, campos, cor="roxo", tr=False: d.caixa(
         id, x, y, w, h, tipo="classe", cor=cor, tam=12, linhas=(t, [campos]), tracejado=tr)
     T("equipa", 20, 20, 240, 100, "Equipa",
@@ -306,6 +307,17 @@ def modelo_dados():
       ["PK id", "FK equipa_id", "nome", "numero", "posicao"])
     T("estat", 860, 260, 240, 100, "Estatistica",
       ["PK id", "FK partida_id", "FK jogador_id", "golos"])
+    # Carreira de jogador (saves/carreira_jogador.db: as mesmas tabelas e mais estas duas)
+    T("atleta", 20, 510, 240, 190, "Atleta (carreira de jogador)",
+      ["PK id", "nome", "numero", "posicao", "FK equipa_id", "geral", "epoca", "FK torneio_id", "estado"],
+      cor="verde")
+    T("atuacao", 440, 495, 240, 235, "Atuacao",
+      ["PK id", "FK atleta_id", "FK partida_id", "FK torneio_id", "golos", "assistencias", "remates",
+       "passes", "recuperacoes", "perdas", "nota", "geral_depois"], cor="verde")
+    d.seta("atleta", "atuacao", "1 : N", ponta=False, exato=True, pontos=[(260, 605), (440, 605)])
+    d.seta("partida", "atuacao", "1 : N", ponta=False, exato=True, pontos=[(560, 405), (560, 495)], pos_texto=0.78)
+    d.seta("equipa", "atleta", "1 : N", ponta=False, exato=True,
+           pontos=[(20, 70), (6, 70), (6, 590), (20, 590)], pos_texto=0.5)
 
     d.seta("equipa", "torneio", "1 : N\n(equipa do jogador)", ponta=False, exato=True,
            pontos=[(260, 70), (440, 70)])

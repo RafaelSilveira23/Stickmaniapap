@@ -211,7 +211,18 @@ class Campeonato:
                     "ON CONFLICT (equipa_id, nome) DO UPDATE SET numero = excluded.numero, "
                     "posicao = excluded.posicao", linhas)
         self.torneio_id = None
+        # Trocas no plantel (carreira de jogador): {equipa_id: (nome que sai, (nome, posição, número))}
+        self.substituicoes = {}
         self._carregar_ativo()
+
+    def campo(self, equipa_id: str) -> list:
+        """Jogadores de campo da equipa [(nome, posição, número)], já com as trocas do plantel."""
+        jogadores = list(obter_plantel(equipa_id)["jogadores"])
+        troca = self.substituicoes.get(equipa_id)
+        if troca:
+            sai, entra = troca
+            jogadores = [entra if nome == sai else (nome, pos, num) for nome, pos, num in jogadores]
+        return jogadores
 
     def fechar(self):
         self.con.close()
@@ -379,7 +390,7 @@ class Campeonato:
         são sorteados entre os jogadores de campo, com mais hipóteses para o avançado.
         """
         nomes = [n for n in (nomes or []) if n][:golos]
-        campo = obter_plantel(equipa_id)["jogadores"]
+        campo = self.campo(equipa_id)
         pesos = [PESO_GOLO_POSICAO.get(pos, 0.2) for _n, pos, _num in campo]
         while len(nomes) < golos:
             nomes.append(rnd.choices([n for n, _p, _num in campo], weights=pesos)[0])

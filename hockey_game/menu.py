@@ -201,13 +201,15 @@ class MenuPrincipal:
         bw, x = 460, WIDTH // 2 - 230
         self.engrenagem = BotaoEngrenagem((WIDTH - 50, 48))
         self.lista = ListaBotoes([
-            BotaoMenu((x, 290, bw, 70), "JOGO RÁPIDO", "Escolhe dois clubes e joga uma partida",
+            BotaoMenu((x, 280, bw, 62), "JOGO RÁPIDO", "Escolhe dois clubes e joga uma partida",
                       "jogar", (40, 190, 100), "jogar"),
-            BotaoMenu((x, 370, bw, 70), "MODO CARREIRA", "Leva o teu clube ao título do campeonato",
+            BotaoMenu((x, 348, bw, 62), "MODO CARREIRA", "Leva o teu clube ao título do campeonato",
                       "carreira", (255, 175, 40), "trofeu"),
-            BotaoMenu((x, 450, bw, 70), "MODO TESTE", "Treina remates contra o guarda-redes",
+            BotaoMenu((x, 416, bw, 62), "CARREIRA DE JOGADOR", "Cria o teu jogador e joga só com ele",
+                      "carreira_jogador", (255, 110, 160), "jogador"),
+            BotaoMenu((x, 484, bw, 62), "MODO TESTE", "Treina remates contra o guarda-redes",
                       "teste", (80, 170, 255), "alvo"),
-            BotaoMenu((x + 80, 532, bw - 160, 50), "SAIR", "", "sair", (230, 70, 70), "sair"),
+            BotaoMenu((x + 80, 552, bw - 160, 46), "SAIR", "", "sair", (230, 70, 70), "sair"),
             self.engrenagem,
         ])
         self._cone = cone_luz(360, 470)
@@ -962,11 +964,13 @@ class MenuPausa:
 # ====================================================================== #
 
 class EcraFimJogo:
-    def __init__(self, screen: pygame.Surface, modo_carreira: bool = False, jornada: int | None = None):
+    def __init__(self, screen: pygame.Surface, modo_carreira: bool = False, jornada: int | None = None,
+                 jogador: dict | None = None):
         self.screen = screen
         self.t = 0.0
         self.modo_carreira = modo_carreira
         self.jornada = jornada
+        self.jogador = jogador          # carreira de jogador: {"nome", "nota", "golos", "assistencias", ...}
         y, bw, bh = 506, 230, 52
         cx = WIDTH // 2
         if modo_carreira:
@@ -1061,7 +1065,15 @@ class EcraFimJogo:
         texto(s, faltas, 14, COR_TEXTO_SUAVE, (WIDTH // 2, caixa.top + 392), negrito=False)
 
         self.lista.draw(s)
-        if self.modo_carreira:
+        if self.jogador:
+            j = self.jogador
+            from carreira_jogador_menu import cor_nota
+            nota = f"{j['nota']:.1f}".replace(".", ",")
+            linha = (f"{j['nome']}  •  NOTA {nota}  •  {j['golos']} golo(s)  •  "
+                     f"{j['assistencias']} assist.  •  {j['passes']} passes certos")
+            texto(s, linha, 15, cor_nota(j["nota"]), (WIDTH // 2, caixa.top + 92))
+            texto(s, "[ENTER] continuar", 12, (110, 140, 190), (WIDTH // 2, caixa.bottom - 18), negrito=False)
+        elif self.modo_carreira:
             texto(s, f"MODO CARREIRA  •  o resultado conta para a jornada {self.jornada}", 13,
                   COR_DESTAQUE, (WIDTH // 2, caixa.top + 92))
             texto(s, "[ENTER] continuar", 12, (110, 140, 190), (WIDTH // 2, caixa.bottom - 18), negrito=False)

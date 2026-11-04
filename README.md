@@ -19,7 +19,7 @@ No Windows também se pode fazer duplo clique em `jogar.bat`.
 |---|---|
 | W A S D / Setas | Mover o jogador |
 | SHIFT | Sprint |
-| C / TAB / ESPAÇO | Trocar para o jogador mais perto da bola |
+| C / TAB / ESPAÇO | Trocar para o jogador mais perto da bola (na carreira de jogador: pedir a bola) |
 | Z | Passe |
 | X | Remate na primeira pessoa: rato/setas apontam à baliza, manter X (ou o botão do rato) dá a força, largar remata |
 | R | No MODO TESTE: novo remate noutro sítio |
@@ -41,6 +41,13 @@ No Windows também se pode fazer duplo clique em `jogar.bat`.
     (validado em 600 épocas com `ferramentas/analise_simulacao.py`)
   - Classificação com a forma (últimos 5 jogos) e probabilidades de vitória/empate/derrota no próximo jogo
   - A força do clube também conta no jogo (os clubes fortes patinam um pouco mais depressa)
+- **Carreira de jogador**: crias o teu jogador (nome, número, posição e clube) e nos jogos **só controlas esse jogador**;
+  os colegas são da IA e passam-te a bola quando a pedes (`C`, `TAB`, `ESPAÇO` ou `Z` sem bola)
+  - Nota de 0 a 10 em cada jogo (golos, assistências, passes certos, bolas recuperadas e perdidas, resultado),
+    com um cartão que a mostra ao vivo durante o jogo
+  - O geral e os atributos evoluem com as notas; no fim da época, com nota média 6,8 ou mais, há propostas de
+    clubes mais fortes
+  - Gravado à parte em `hockey_game/saves/carreira_jogador.db` (tabelas `atleta` e `atuacao`)
 - **Estilo arcade** (liga/desliga nas Definições): "GOLO!" gigante com o nome do marcador, câmara lenta e
   confetes; nos impactos o jogo congela por um instante, o ecrã treme e saltam faíscas; textos de banda
   desenhada ("DEFESA!", "POSTE!", "ROUBO!"), rasto da bola e contorno nos jogadores (`hockey_game/efeitos.py`)
@@ -81,6 +88,8 @@ No Windows também se pode fazer duplo clique em `jogar.bat`.
 | `hockey_game/menu.py` | Ecrãs de menu |
 | `hockey_game/carreira.py` | Modo carreira: calendário, jogos simulados, classificação e base de dados SQLite |
 | `hockey_game/carreira_menu.py` | Ecrãs do modo carreira (escolha da equipa e campeonato) |
+| `hockey_game/carreira_jogador.py` | Carreira de jogador: jogador criado, nota, evolução, propostas e base de dados |
+| `hockey_game/carreira_jogador_menu.py` | Ecrãs da carreira de jogador (criar o jogador e painel da carreira) |
 | `hockey_game/componentes.py` | Botões, painéis e fundos reutilizáveis da interface |
 | `hockey_game/graficos.py` | Efeitos gráficos: luzes, sombras suaves, ícones e título desenhados no código |
 | `hockey_game/remate_pov.py` | Remate na primeira pessoa (perspetiva, mira, força e modelo do guarda-redes) |

@@ -22,6 +22,8 @@ from remate_pov import RematePOV, MEIA_BOCA
 import random
 from carreira import Campeonato, CAMINHO_BD, PASTA_SAVES, FORCA_EQUIPAS
 from carreira_menu import EcraCarreiraEscolha, EcraCampeonato
+from carreira_jogador import CarreiraJogador, CAMINHO_BD_JOGADOR, atributos as atributos_jogador, calcular_nota
+from carreira_jogador_menu import EcraCriarJogador, EcraCarreiraJogador
 
 DURACAO_PARTE = 60 * 5   # 5 minutos por parte
 DIFICULDADE_EQUIPA_HUMANA = "normal"   # nível dos colegas e do GR do jogador humano
@@ -102,6 +104,19 @@ class Game:
         self.ecra_carreira   = None
         self.ecra_campeonato = None
         self._jornada_carreira = None
+
+        # ── Carreira de jogador: nos jogos só se controla o próprio jogador ──
+        self.caminho_carreira_jogador = CAMINHO_BD_JOGADOR
+        self.carreira_jog    = None      # CarreiraJogador (aberta só quando é precisa)
+        self.modo_jogador    = False     # True durante um jogo da carreira de jogador
+        self.ecra_cj         = None
+        self.ecra_cj_criar   = None
+        self._cj_jogador     = None      # o Player que é o jogador da carreira
+        self.stats_jogador   = {}
+        self._cj_dono_ant    = None
+        self._cj_assist      = None      # (colega que recebeu o meu passe, instante)
+        self._cj_t           = 0.0
+        self._cj_pedido_cd   = 0.0
 
         self.golos_azul     = 0
         self.golos_vermelho = 0
@@ -438,6 +453,8 @@ class Game:
                     self.abrir_selecao_equipas()
                 elif acao == "carreira":
                     self.abrir_escolha_carreira()
+                elif acao == "carreira_jogador":
+                    self.abrir_carreira_jogador()
                 elif acao == "teste":
                     self.iniciar_teste()
                 elif acao == "definicoes":
@@ -503,6 +520,45 @@ class Game:
                     self.running = False
             return
 
+        if self.estado == "cj_criar":
+            for event in pygame.event.get():
+                acao = self.ecra_cj_criar.handle_event(event)
+                self._som_acao(acao)
+                if acao == "comecar":
+                    e = self.ecra_cj_criar
+                    self._abrir_cj().novo(e.nome, e.numero, e.posicao, e.equipa)
+                    self.abrir_carreira_jogador()
+                elif acao == "voltar":
+                    self.ir_para_menu_principal()
+                elif acao == "sair":
+                    self.running = False
+            return
+
+        if self.estado == "cj":
+            for event in pygame.event.get():
+                acao = self.ecra_cj.handle_event(event)
+                self._som_acao(acao)
+                if acao == "jogar":
+                    self.iniciar_jogo_cj()
+                elif acao == "simular":
+                    self.abrir_carreira_jogador(aviso=self.carreira_jog.simular_jogo())
+                elif acao == "simular_epoca":
+                    self.carreira_jog.simular_resto_da_epoca()
+                    self.abrir_carreira_jogador()
+                elif acao == "ficar":
+                    self.carreira_jog.continuar()
+                    self.abrir_carreira_jogador()
+                elif acao and acao.startswith("assinar:"):
+                    self.carreira_jog.continuar(acao.split(":", 1)[1])
+                    self.abrir_carreira_jogador()
+                elif acao == "nova_carreira":
+                    self.abrir_criar_jogador()
+                elif acao == "menu":
+                    self.ir_para_menu_principal()
+                elif acao == "sair":
+                    self.running = False
+            return
+
         if self.estado == "menu_selecao":
             for event in pygame.event.get():
                 res = self.menu.handle_event(event)
@@ -530,7 +586,10 @@ class Game:
                 elif acao == "controlos":
                     self._abrir_definicoes("pausa")
                 elif acao == "desistir":
-                    self.abrir_campeonato()          # o jogo não conta
+                    if self.modo_jogador:
+                        self.abrir_carreira_jogador()    # o jogo não conta
+                    else:
+                        self.abrir_campeonato()          # o jogo não conta
                 elif acao == "menu":
                     self.ir_para_menu_principal()
                 elif acao == "sair":
@@ -542,7 +601,9 @@ class Game:
             for event in pygame.event.get():
                 acao = self.ecra_fim.handle_event(event)
                 self._som_acao(acao)
-                if acao == "continuar" and self.modo_carreira:
+                if acao == "continuar" and self.modo_jogador:
+                    self._registar_jogo_cj()
+                elif acao == "continuar" and self.modo_carreira:
                     jornada = self.carreira.registar_jogo_do_jogador(
                         self.golos_azul, self.golos_vermelho,
                         marcadores_eu=[m["nome"] for m in self.marcadores if m["equipa"] == "azul"],
@@ -593,11 +654,17 @@ class Game:
                     prox_dif = ordem_dif[(idx_dif + 1) % len(ordem_dif)]
                     self.definir_dificuldade(prox_dif)
                 elif event.key == pygame.K_z:
-                    self._acao_passe()
+                    if self.modo_jogador and not self.jogador_humano.tem_bola:
+                        self._pedir_bola()
+                    else:
+                        self._acao_passe()
                 elif event.key == pygame.K_x:
                     self._acao_remate()
                 elif event.key in (pygame.K_TAB, pygame.K_c, pygame.K_SPACE):
-                    self._selecionar_jogador_proximo()
+                    if self.modo_jogador:
+                        self._pedir_bola()           # só controlas o teu jogador: pede a bola
+                    else:
+                        self._selecionar_jogador_proximo()
                 elif event.key == pygame.K_t:
                     self.alternar_equipa_casa()
                 elif event.key == pygame.K_y:
@@ -683,6 +750,7 @@ class Game:
         j = self.jogador_humano
         if not j.tem_bola:
             return
+        self._cj_contar("remates")
         gx, cy = self.rink.linha_golo_esq_x, self.rink.rect.centery
         if j.pos_x - gx < 30:
             # Atrás da linha de golo não se vê a baliza: remate rápido para o meio dela
@@ -851,6 +919,8 @@ class Game:
     def _trocar_humano(self, novo: Player):
         if novo == self.jogador_humano:
             return
+        if self.modo_jogador and self._cj_jogador is not None and novo is not self._cj_jogador:
+            return            # carreira de jogador: o controlo nunca passa para outro jogador
 
         antigo = self.jogador_humano
         antigo.humano      = False
@@ -891,6 +961,12 @@ class Game:
             return
         if self.estado == "carreira":
             self.ecra_campeonato.update(dt)
+            return
+        if self.estado == "cj_criar":
+            self.ecra_cj_criar.update(dt)
+            return
+        if self.estado == "cj":
+            self.ecra_cj.update(dt)
             return
         if self.pausado:
             self.menu_pausa.update(dt)
@@ -1009,6 +1085,8 @@ class Game:
         self._tocar_sons_bola()
 
         self._efeitos_posse()
+        if self.modo_jogador:
+            self._seguir_jogador_cj(dt)
 
         # Golos (durante a festa de um golo, a bola ainda na rede não conta outra vez)
         if self._reposicao_pendente is not None:
@@ -1061,6 +1139,8 @@ class Game:
         self.equipa_fora_id = fora_id
         if dificuldade:
             self.dificuldade = dificuldade
+        self.modo_jogador = False          # a carreira de jogador liga-o depois (iniciar_jogo_cj)
+        self._cj_jogador = None
 
         # Repor estados da partida anterior (mira aberta, pausa, ...)
         self._cancelar_mira()
@@ -1337,11 +1417,198 @@ class Game:
         self._msg_timer = 2.5
         self._msg_equipa = "azul"
 
+    # ------------------------------------------------------------------ #
+    # Carreira de jogador (só se controla o próprio jogador)              #
+    # ------------------------------------------------------------------ #
+
+    def _abrir_cj(self) -> CarreiraJogador:
+        """Abre a base de dados da carreira de jogador (só na primeira vez que é preciso)."""
+        if self.carreira_jog is None:
+            self.carreira_jog = CarreiraJogador(self.caminho_carreira_jogador)
+        return self.carreira_jog
+
+    def abrir_criar_jogador(self):
+        self._cancelar_mira()
+        self._abrir_cj()
+        self.ecra_cj_criar = EcraCriarJogador(self.screen, arena=self.rink._surf)
+        self.estado = "cj_criar"
+
+    def abrir_carreira_jogador(self, aviso: dict | None = None):
+        """Painel da carreira de jogador (ou o ecrã para criar o jogador, se ainda não há nenhum)."""
+        cj = self._abrir_cj()
+        self._cancelar_mira()
+        self.modo_jogador = False
+        self.modo_carreira = False
+        self.pausado = False
+        self.jogo_ativo = False
+        self.fim_jogo = False
+        self.remate_pov = None
+        if not cj.existe:
+            self.abrir_criar_jogador()
+            return
+        self.ecra_cj = EcraCarreiraJogador(self.screen, cj, arena=self.rink._surf, aviso=aviso)
+        self.estado = "cj"
+
+    def iniciar_jogo_cj(self):
+        """Joga o próximo jogo da carreira: o clube do jogador é a equipa azul e só se controla ele."""
+        cj = self.carreira_jog
+        jogo = cj.camp.proximo_jogo()
+        if jogo is None:
+            return
+        a = cj.atleta
+        eu = a["equipa_id"]
+        em_casa = jogo["casa_id"] == eu
+        adversario = jogo["fora_id"] if em_casa else jogo["casa_id"]
+        self._jornada_carreira = jogo["jornada"]
+        self.iniciar_partida(eu, adversario, dificuldade="normal")
+        self.modo_carreira = True          # o resultado conta: sem "reiniciar" nem trocar de equipa
+        if not em_casa:
+            self.rink.definir_equipa_casa(adversario)
+        self._preparar_jogador_cj(a)
+        local = "EM CASA" if em_casa else "FORA"
+        self._msg_texto = f"JORNADA {jogo['jornada']}  •  {local}  •  {a['nome']}"
+        self._msg_timer = 2.5
+        self._msg_equipa = "azul"
+
+    def _preparar_jogador_cj(self, a):
+        """
+        Põe o jogador da carreira em campo, no lugar de quem joga na mesma posição, e prende o
+        controlo nele. Fica com o nome, o número e os atributos do jogador criado.
+        """
+        alvo = next((j for j in self.equipa_azul if getattr(j, "papel", "") == a["posicao"]),
+                    self.jogador_humano)
+        antigo = self.jogador_humano
+        if alvo is not antigo:
+            # Troca de lugar com quem ia dar a saída de bola, e fica ele com a bola
+            alvo.pos_x, antigo.pos_x = antigo.pos_x, alvo.pos_x
+            alvo.pos_y, antigo.pos_y = antigo.pos_y, alvo.pos_y
+            for j in (alvo, antigo):
+                j.rect.center = (round(j.pos_x), round(j.pos_y))
+            self._trocar_humano(alvo)
+            antigo.tem_bola = False
+            self.bola.definir_dono(alvo)
+            alvo.tem_bola = True
+            self.bola.seguir_jogador(alvo)
+        alvo.nome = a["nome"]
+        alvo.numero = a["numero"]
+        at = atributos_jogador(a["geral"], a["posicao"])
+        alvo.stat_velocidade = at["velocidade"]
+        alvo.stat_remate = at["remate"]
+        alvo.stat_passe = at["passe"]
+        alvo.stat_defesa = at["defesa"]
+        self._cj_jogador = alvo
+        self.modo_jogador = True
+        self.stats_jogador = {k: 0 for k in ("golos", "assistencias", "remates", "passes", "recuperacoes", "perdas")}
+        self._cj_dono_ant = self.bola.dono
+        self._cj_assist = None
+        self._cj_t = 0.0
+        self._cj_pedido_cd = 0.0
+        self._cj_pedido_msg = 0.0
+
+    def _cj_contar(self, chave: str, n: int = 1):
+        if self.modo_jogador and chave in self.stats_jogador:
+            self.stats_jogador[chave] += n
+
+    def _seguir_jogador_cj(self, dt: float):
+        """
+        Estatísticas do jogador, vendo quem tem a bola em cada frame:
+          eu -> colega      = passe certo (e o colega pode dar-me uma assistência)
+          eu -> adversário  = bola perdida
+          adversário -> eu  = bola recuperada (desarme ou interceção)
+        """
+        self._cj_t += dt
+        self._cj_pedido_cd = max(0.0, self._cj_pedido_cd - dt)
+        self._cj_pedido_msg = max(0.0, getattr(self, "_cj_pedido_msg", 0.0) - dt)
+        dono = self.bola.dono
+        if not isinstance(dono, Player) or dono is self._cj_dono_ant:
+            return
+        eu, ant = self._cj_jogador, self._cj_dono_ant
+        self._cj_dono_ant = dono
+        if ant is eu:
+            if dono.equipa == eu.equipa:
+                self._cj_contar("passes")
+                self._cj_assist = (dono, self._cj_t)
+            else:
+                self._cj_contar("perdas")
+        elif dono is eu and ant is not None and ant.equipa != eu.equipa:
+            self._cj_contar("recuperacoes")
+
+    def _cj_golo(self, equipa: str, marcador):
+        """Golo: conta o golo do jogador, ou a assistência se o último passe dele foi para quem marcou."""
+        eu = self._cj_jogador
+        if equipa == "azul" and eu is not None:
+            if marcador is eu:
+                self._cj_contar("golos")
+            elif self._cj_assist and self._cj_assist[0] is marcador and self._cj_t - self._cj_assist[1] < 10:
+                self._cj_contar("assistencias")
+        self._cj_assist = None
+        self._cj_dono_ant = None           # a saída de bola depois do golo não conta como recuperação
+
+    def _pedir_bola(self):
+        """Carreira de jogador: pede a bola ao colega que a tem (ele passa logo)."""
+        eu = self._cj_jogador or self.jogador_humano
+        if self._cj_pedido_cd > 0 or eu.tem_bola:
+            return
+        for agente in self.agentes_azul:
+            if agente.jogador.tem_bola:
+                agente._passar(self.bola, eu)
+                self._cj_pedido_cd = 1.0
+                self._cj_pedido_msg = 1.0
+                sx, sy = self.rink.camera.projetar(eu.pos_x, eu.pos_y)
+                self.efeitos.texto_pop("BOLA!", sx, sy - 70, (120, 230, 255), 24)
+                som.tocar("passe", 0.4)
+                return
+
+    def _nota_ao_vivo(self) -> float:
+        return calcular_nota(self.stats_jogador, self.golos_azul, self.golos_vermelho)
+
+    def _resumo_jogo_cj(self) -> dict:
+        eu = self._cj_jogador
+        return dict(self.stats_jogador, nome=eu.nome if eu else "", nota=self._nota_ao_vivo())
+
+    def _registar_jogo_cj(self):
+        """Fim de um jogo da carreira de jogador: grava o resultado e a atuação e volta ao painel."""
+        resumo = self.carreira_jog.registar_jogo(
+            self.golos_azul, self.golos_vermelho, dict(self.stats_jogador),
+            marcadores_eu=[m["nome"] for m in self.marcadores if m["equipa"] == "azul"],
+            marcadores_adv=[m["nome"] for m in self.marcadores if m["equipa"] == "vermelho"])
+        self.abrir_carreira_jogador(aviso=resumo)
+
+    def _draw_hud_jogador(self):
+        """Cartão do jogador por baixo do marcador: nome, nota ao vivo e estatísticas do jogo."""
+        eu = self._cj_jogador
+        if eu is None:
+            return
+        from carreira_jogador_menu import cor_nota
+        s = self.screen
+        caixa = pygame.Rect(WIDTH - 420, 12, 330, 52)       # ao lado do botão de pausa
+        painel_hud = pygame.Surface(caixa.size, pygame.SRCALPHA)
+        pygame.draw.rect(painel_hud, (8, 12, 26, 215), painel_hud.get_rect(), border_radius=10)
+        pygame.draw.rect(painel_hud, (*self.kit_casa["principal"], 255), painel_hud.get_rect(), 2, border_radius=10)
+        s.blit(painel_hud, caixa)
+        nota = self._nota_ao_vivo()
+        centro = (caixa.left + 30, caixa.centery)
+        pygame.draw.circle(s, cor_nota(nota), centro, 21)
+        txt = self.font_num.render(f"{nota:.1f}".replace(".", ","), True, (15, 20, 35))
+        s.blit(txt, txt.get_rect(center=centro))
+        f = self.font_num
+        nome = f.render(f"{eu.numero}  {eu.nome.upper()}", True, (255, 255, 255))
+        s.blit(nome, (caixa.left + 60, caixa.top + 9))
+        st = self.stats_jogador
+        if getattr(self, "_cj_pedido_msg", 0) > 0:
+            linha, cor = "A pedir a bola...", (120, 230, 255)
+        else:
+            linha = (f"G {st['golos']}   A {st['assistencias']}   REM {st['remates']}   "
+                     f"PAS {st['passes']}   REC {st['recuperacoes']}")
+            cor = (190, 205, 235)
+        s.blit(f.render(linha, True, cor), (caixa.left + 60, caixa.top + 29))
+
     def ir_para_menu_principal(self, casa_id: str = None, fora_id: str = None):
         self._cancelar_mira()
         self.modo_teste = False
         self.remate_pov = None
         self.modo_carreira = False
+        self.modo_jogador = False
         self.pausado = False
         self.jogo_ativo = False
         self.fim_jogo = False
@@ -1416,6 +1683,8 @@ class Game:
         # Marcador: o último jogador da equipa que marcou a tocar na bola
         marcador = self.bola.ultimo_por_equipa.get(equipa)
         nome = marcador.nome if marcador is not None else None
+        if self.modo_jogador:
+            self._cj_golo(equipa, marcador)
         decorrido = (self.parte - 1) * DURACAO_PARTE + (DURACAO_PARTE - max(0.0, self.tempo_restante))
         self.marcadores.append({"equipa": equipa, "nome": nome, "minuto": int(decorrido // 60) + 1})
         if equipa == "azul":
@@ -1506,7 +1775,8 @@ class Game:
             self.fim_jogo   = True
             som.tocar("apito_final")
             self.ecra_fim   = EcraFimJogo(self.screen, modo_carreira=self.modo_carreira,
-                                          jornada=self._jornada_carreira)
+                                          jornada=self._jornada_carreira,
+                                          jogador=self._resumo_jogo_cj() if self.modo_jogador else None)
 
     # ================================================================== #
     # Desenho Principal                                                    #
@@ -1521,6 +1791,10 @@ class Game:
             self.ecra_carreira.draw()
         elif self.estado == "carreira":
             self.ecra_campeonato.draw()
+        elif self.estado == "cj_criar":
+            self.ecra_cj_criar.draw()
+        elif self.estado == "cj":
+            self.ecra_cj.draw()
         elif self.estado == "controlos":
             if self._origem_controlos == "pausa":
                 self._draw_cena()
@@ -1616,6 +1890,8 @@ class Game:
 
         # 7. Painel Inferior (Mini-mapa, Cartão de Jogador e Controlos)
         self.hud.draw_bottom_panel(self.screen, self)
+        if self.modo_jogador:
+            self._draw_hud_jogador()
 
         # 8. Mensagens (golo, intervalo, ...)
         golo_arcade = self.efeitos.ativo and self._msg_texto.startswith("GOLO")

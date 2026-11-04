@@ -29,7 +29,7 @@ TAREFAS = [
     ("Análise e planeamento", None, None, None, None),
     ("", "Anteprojeto, requisitos e escolha das tecnologias", date(2026, 9, 15), date(2026, 10, 10), "Concluído"),
 
-    ("Desenvolvimento (versões 1 a 14)", None, None, None, None),
+    ("Desenvolvimento (versões 1 a 15)", None, None, None, None),
     ("", "Protótipo: rinque, jogadores, bola e física", date(2026, 10, 1), date(2026, 10, 10), "Concluído"),
     ("", "Interface do mockup, símbolos e seleção de equipas", date(2026, 10, 6), date(2026, 10, 15), "Concluído"),
     ("", "Mira de remate, IA com dificuldades e faltas", date(2026, 10, 11), date(2026, 10, 20), "Concluído"),
@@ -45,6 +45,7 @@ TAREFAS = [
     ("", "Remate em movimento, defesas e bloqueio", date(2026, 11, 21), date(2026, 11, 27), "Concluído"),
     ("", "Ecrã do remate (pavilhão, placas, stick)", date(2026, 11, 24), date(2026, 11, 30), "Concluído"),
     ("", "Defesas no remate: perspetiva e sprites HD", date(2026, 11, 27), date(2026, 12, 3), "Concluído"),
+    ("", "Carreira de jogador (só o meu jogador)", date(2026, 12, 4), date(2026, 12, 18), "Concluído"),
 
     ("Novas funcionalidades", None, None, None, None),
     ("", "Estatísticas da partida e modo de 2 jogadores", date(2026, 11, 16), date(2026, 12, 31), "Planeado"),

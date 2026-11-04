@@ -174,6 +174,11 @@ def icone(nome: str, tamanho: int, cor=(255, 255, 255)) -> pygame.Surface:
             pygame.draw.polygon(s, c, [(T * 0.5, T * 0.1), (T * 0.92, T * 0.5), (T * 0.08, T * 0.5)])
             pygame.draw.rect(s, c, (T * 0.2, T * 0.46, T * 0.6, T * 0.42))
             pygame.draw.rect(s, (0, 0, 0, 0), (T * 0.42, T * 0.62, T * 0.16, T * 0.26))
+        elif nome == "jogador":
+            # Um jogador: cabeça e tronco (carreira de jogador)
+            pygame.draw.circle(s, c, (m, T * 0.26), T * 0.17)
+            pygame.draw.ellipse(s, c, (T * 0.18, T * 0.48, T * 0.64, T * 0.56))
+            pygame.draw.rect(s, (0, 0, 0, 0), (0, T * 0.86, T, T * 0.14))
         elif nome == "sair":
             # Símbolo de "desligar"
             w = int(T * 0.11)
