@@ -1323,7 +1323,7 @@ class Game:
         self.fim_jogo = False
         self.estado = "menu_selecao"
         self.menu = TeamSelectMenu(self.screen, self.equipa_casa_id, self.equipa_fora_id,
-                                   dificuldade=self.dificuldade)
+                                   dificuldade=self.dificuldade, arena=self.rink._surf)
 
     # Mantido por compatibilidade com o código antigo
     voltar_ao_menu = abrir_selecao_equipas
@@ -1810,7 +1810,46 @@ class Game:
                 self.menu_pausa.draw(self)
             elif self.fim_jogo:
                 self.ecra_fim.draw(self)
+        self._transicao()
         pygame.display.flip()
+
+    # Duração da transição entre ecrãs (segundos)
+    _DURACAO_TRANSICAO = 0.28
+
+    def _chave_ecra(self):
+        """Identifica o ecrã que está à vista; quando muda, faz-se uma transição."""
+        ecras = {"menu_principal": "menu_principal", "menu_selecao": "menu", "carreira_escolha": "ecra_carreira",
+                 "carreira": "ecra_campeonato", "cj_criar": "ecra_cj_criar", "cj": "ecra_cj",
+                 "controlos": "ecra_controlos"}
+        obj = getattr(self, ecras.get(self.estado, ""), None)
+        return (self.estado, id(obj), self.pausado, self.fim_jogo, self.remate_pov is not None)
+
+    def _transicao(self):
+        """
+        Transição suave entre ecrãs: a imagem do ecrã anterior desaparece aos poucos por cima
+        do novo (fade de 0,28 s). Guarda-se uma cópia de cada frame para isso.
+        """
+        if self._DURACAO_TRANSICAO <= 0:          # transições desligadas (capturas de ecrã automáticas)
+            return
+        agora = pygame.time.get_ticks() / 1000
+        chave = self._chave_ecra()
+        anterior = getattr(self, "_frame_anterior", None)
+        if chave != getattr(self, "_chave_anterior", None) and anterior is not None:
+            self._fade = (anterior.copy(), agora)
+        self._chave_anterior = chave
+        fade = getattr(self, "_fade", None)
+        if fade is not None:
+            k = (agora - fade[1]) / self._DURACAO_TRANSICAO
+            if k >= 1:
+                self._fade = None
+            else:
+                img = fade[0]
+                img.set_alpha(int(255 * (1 - k) ** 2))
+                self.screen.blit(img, (0, 0))
+        if getattr(self, "_frame_anterior", None) is None or self._frame_anterior.get_size() != self.screen.get_size():
+            self._frame_anterior = self.screen.copy()
+        else:
+            self._frame_anterior.blit(self.screen, (0, 0))
 
     def _draw_cena(self):
         """Desenha o ringue, os jogadores e o HUD (sem os menus por cima)."""

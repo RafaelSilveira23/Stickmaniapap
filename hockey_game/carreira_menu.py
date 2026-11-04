@@ -18,7 +18,7 @@ from team import EQUIPAS_LISTA, obter_info_equipa, carregar_logo_equipa
 from ai import DIFICULDADES
 from carreira import FORCA_EQUIPAS
 from cores import cor_visivel_em_escuro, misturar, clarear, escurecer
-from componentes import (fonte, texto, painel, Botao, gradiente_vertical,
+from componentes import (fonte, texto, painel, Botao, gradiente_vertical, painel_vidro,
                          COR_DESTAQUE, COR_TEXTO, COR_TEXTO_SUAVE)
 from graficos import luz, brilho_retangulo, icone, emblema_sticks
 from menu import BotaoMenu, _fundo_arena
@@ -57,28 +57,9 @@ def _bolinhas_forma(s, forma: list, centro, n: int = 5, raio: int = 6, passo: in
             pygame.draw.circle(s, COR_RESULTADO[forma[i - vazios]], (x, centro[1]), raio)
 
 
-_cache_vidro = {}
-
-
 def _vidro(s, rect, raio=14, alpha=210, borda=(60, 90, 150)):
-    """
-    Painel de vidro escuro (como os botões do menu principal), com sombra.
-    O painel é desenhado uma vez e guardado em cache: o ecrã é redesenhado 60 vezes por
-    segundo e o gradiente é a parte mais lenta.
-    """
-    rect = pygame.Rect(rect)
-    chave = (rect.size, raio, alpha, tuple(borda))
-    if chave not in _cache_vidro:
-        w, h = rect.size
-        img = pygame.Surface((w + 3, h + 6), pygame.SRCALPHA)
-        pygame.draw.rect(img, (0, 0, 0, 100), (3, 6, w, h), border_radius=raio)
-        camada = pygame.Surface((w, h), pygame.SRCALPHA)
-        gradiente_vertical(camada, camada.get_rect(), (20, 30, 58), (10, 16, 34), raio=raio)
-        camada.set_alpha(alpha)
-        img.blit(camada, (0, 0))
-        pygame.draw.rect(img, borda, (0, 0, w, h), 2, border_radius=raio)
-        _cache_vidro[chave] = img
-    s.blit(_cache_vidro[chave], rect.topleft)
+    """Painel de vidro (agora em componentes.py, para todos os ecrãs usarem o mesmo)."""
+    painel_vidro(s, rect, raio, alpha, borda)
 
 
 def _titulo_painel(s, rect, txt, cor=COR_DESTAQUE):

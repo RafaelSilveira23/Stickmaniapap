@@ -19,7 +19,7 @@ from team import EQUIPAS_LISTA, obter_info_equipa, carregar_logo_equipa
 from ai import DIFICULDADES
 from cores import (definir_equipamentos, cor_linhas_campo, cor_visivel_em_escuro,
                    cor_texto_sobre, misturar, clarear, escurecer)
-from componentes import (fonte, texto, painel, fundo_menu, Botao, ListaBotoes,
+from componentes import (fonte, texto, painel, fundo_menu, Botao, ListaBotoes, painel_vidro, fundo_desfocado,
                          sprite_equipamento, amostra_cor, faixa_equipa, escurecer_ecra,
                          gradiente_vertical, COR_DESTAQUE, COR_TEXTO, COR_TEXTO_SUAVE, COR_PAINEL)
 from graficos import (gradiente_radial, luz, cone_luz, sombra_suave, brilho_retangulo, vinheta,
@@ -328,7 +328,7 @@ class MenuPrincipal:
         pygame.draw.line(s, (40, 60, 105), (WIDTH // 2 - 220, HEIGHT - 44), (WIDTH // 2 + 220, HEIGHT - 44), 1)
         texto(s, "Projeto PAP  •  Rafael Silveira  •  2026/2027", 13, (110, 130, 175),
               (WIDTH // 2, HEIGHT - 26), negrito=False)
-        texto(s, "v11", 12, (80, 100, 145), (18, HEIGHT - 24), ancora="midleft")
+        texto(s, "v16", 12, (80, 100, 145), (18, HEIGHT - 24), ancora="midleft")
 
 
 # ====================================================================== #
@@ -339,7 +339,7 @@ CONTROLOS = [
     ("MOVIMENTO", [
         ("W A S D  /  Setas", "Mover o jogador"),
         ("SHIFT", "Sprint (correr mais rápido)"),
-        ("C  /  TAB  /  ESPAÇO", "Trocar para o jogador mais perto da bola"),
+        ("C  /  TAB  /  ESPAÇO", "Trocar de jogador (carreira de jogador: pedir a bola)"),
     ]),
     ("COM A BOLA", [
         ("Z", "Passe para o colega mais bem colocado"),
@@ -577,7 +577,7 @@ class EcraControlos:
         emb = emblema_sticks(56)
         s.blit(emb, emb.get_rect(center=(caixa.left + 70, y + 90)))
         texto(s, "STICKMANIA", 20, COR_TEXTO, (caixa.left + 112, y + 70), ancora="midleft")
-        texto(s, "Hóquei em patins 2D  •  versão 11", 12, COR_TEXTO_SUAVE, (caixa.left + 112, y + 94),
+        texto(s, "Hóquei em patins 2D  •  versão 16", 12, COR_TEXTO_SUAVE, (caixa.left + 112, y + 94),
               ancora="midleft", negrito=False)
         texto(s, "Projeto PAP  •  2026/2027", 12, COR_TEXTO_SUAVE, (caixa.left + 112, y + 112),
               ancora="midleft", negrito=False)
@@ -595,8 +595,9 @@ class EcraControlos:
 
 class TeamSelectMenu:
     def __init__(self, screen: pygame.Surface, casa_id: str = "fc_porto",
-                 fora_id: str = "riba_dave", dificuldade: str = "normal"):
+                 fora_id: str = "riba_dave", dificuldade: str = "normal", arena: pygame.Surface | None = None):
         self.screen = screen
+        self.arena = arena                  # pavilhão do jogo (fundo desfocado, como no menu principal)
         self.casa_idx = EQUIPAS_LISTA.index(casa_id) if casa_id in EQUIPAS_LISTA else 0
         self.fora_idx = EQUIPAS_LISTA.index(fora_id) if fora_id in EQUIPAS_LISTA else 1
         if self.fora_idx == self.casa_idx:
@@ -745,7 +746,14 @@ class TeamSelectMenu:
         kit_casa, kit_fora = definir_equipamentos(id_casa, id_fora)
         mpos = pygame.mouse.get_pos()
 
-        fundo_menu(s, self.anim_t, kit_casa["principal"], kit_fora["principal"])
+        if self.arena is not None:
+            # O pavilhão desfocado, com a luz das cores de cada equipa do seu lado
+            s.blit(_fundo_arena(self.arena), (0, 0))
+            for kit, x in ((kit_casa, 340), (kit_fora, WIDTH - 340)):
+                halo = luz(620, 460, cor_visivel_em_escuro(kit["principal"], 110), 70)
+                s.blit(halo, halo.get_rect(center=(x, 230)), special_flags=pygame.BLEND_RGB_ADD)
+        else:
+            fundo_menu(s, self.anim_t, kit_casa["principal"], kit_fora["principal"])
 
         # Cabeçalho
         texto(s, "SELEÇÃO DE EQUIPAS", 34, COR_TEXTO, (WIDTH // 2, 34), sombra=True)
@@ -787,8 +795,7 @@ class TeamSelectMenu:
         cor = info.get("cor_primaria", (20, 50, 120))
         mpos = pygame.mouse.get_pos()
 
-        painel(s, rect, cor=COR_PAINEL, borda=misturar(cor_visivel_em_escuro(cor), (255, 255, 255), 0.2),
-               largura_borda=2)
+        painel_vidro(s, rect, 12, 225, misturar(cor_visivel_em_escuro(cor), (255, 255, 255), 0.2))
         faixa_equipa(s, (rect.left, rect.top, rect.width, 38), cor)
         texto(s, titulo, 14, cor_texto_sobre(cor), (rect.centerx, rect.top + 19))
 
@@ -797,8 +804,10 @@ class TeamSelectMenu:
         if logo:
             s.blit(logo, logo.get_rect(center=(rect.left + 140, rect.top + 108)))
         cx_kit = rect.right - 140
+        foco = luz(150, 46, (255, 240, 210), 90)
+        s.blit(foco, foco.get_rect(center=(cx_kit, rect.top + 162)), special_flags=pygame.BLEND_RGB_ADD)
         pygame.draw.ellipse(s, (6, 10, 22), (cx_kit - 34, rect.top + 156, 68, 12))
-        jogador = sprite_equipamento(kit, 120, self.anim_t, virar=virar)
+        jogador = sprite_equipamento(kit, 136, self.anim_t, virar=virar)
         s.blit(jogador, jogador.get_rect(midbottom=(cx_kit, rect.top + 166)))
 
         # Nome e detalhes
@@ -854,11 +863,17 @@ class TeamSelectMenu:
         elif hover:
             bg, borda, bw = (25, 40, 75), (140, 190, 255), 2
         else:
-            bg, borda, bw = (14, 22, 44), (35, 55, 100), 1
+            bg, borda, bw = None, (45, 70, 120), 1
 
         sobe = -3 if hover else 0
         rr = r.move(0, sobe)
-        pygame.draw.rect(s, bg, rr, border_radius=10)
+        if bg is None:
+            painel_vidro(s, rr, 10, 215, borda)
+        else:
+            pygame.draw.rect(s, bg, rr, border_radius=10)
+            if e_casa or e_fora:
+                brilho = luz(rr.width + 40, rr.height + 30, borda, 60)
+                s.blit(brilho, brilho.get_rect(center=rr.center), special_flags=pygame.BLEND_RGB_ADD)
         # Faixa inferior com as cores do clube
         cor_p, cor_s = info.get("cor_primaria", (40, 40, 40)), info.get("cor_secundaria", (255, 255, 255))
         pygame.draw.rect(s, cor_p, (rr.left + 10, rr.bottom - 7, rr.width // 2 - 10, 3))
@@ -884,37 +899,44 @@ class TeamSelectMenu:
 # ====================================================================== #
 
 class MenuPausa:
+    """
+    Pausa: o jogo fica desfocado por trás, com um painel de vidro, o resultado e o tempo
+    num marcador pequeno e botões grandes com ícones (os mesmos do menu principal).
+    """
+
     def __init__(self, screen: pygame.Surface, modo_carreira: bool = False, modo_teste: bool = False):
         self.screen = screen
         self.t = 0.0
         self.modo_carreira = modo_carreira
         self.modo_teste = modo_teste
-        bw, bh, x = 300, 50, WIDTH // 2 - 150
-        y0 = 248
+        self._fundo = None                     # imagem desfocada do jogo (feita no primeiro desenho)
         if modo_teste:
-            self.lista = ListaBotoes([
-                Botao((x, y0, bw, bh), "CONTINUAR", "continuar", cor=(40, 190, 100), icone="►"),
-                Botao((x, y0 + 62, bw, bh), "DEFINIÇÕES", "controlos", cor=(50, 140, 255)),
-                Botao((x, y0 + 124, bw, bh), "MENU PRINCIPAL", "menu", cor=(150, 110, 255)),
-                Botao((x, y0 + 186, bw, bh), "SAIR DO JOGO", "sair", cor=(230, 70, 70)),
-            ])
+            itens = [("CONTINUAR", "continuar", (40, 190, 100), "jogar"),
+                     ("DEFINIÇÕES", "controlos", (50, 140, 255), "engrenagem"),
+                     ("MENU PRINCIPAL", "menu", (150, 110, 255), "casa"),
+                     ("SAIR DO JOGO", "sair", (230, 70, 70), "sair")]
         elif modo_carreira:
             # No modo carreira não há "reiniciar": desistir volta ao campeonato e o jogo não conta
-            self.lista = ListaBotoes([
-                Botao((x, y0, bw, bh), "CONTINUAR", "continuar", cor=(40, 190, 100), icone="►"),
-                Botao((x, y0 + 62, bw, bh), "DEFINIÇÕES", "controlos", cor=(50, 140, 255)),
-                Botao((x, y0 + 124, bw, bh), "DESISTIR DO JOGO", "desistir", cor=(255, 180, 40)),
-                Botao((x, y0 + 186, bw, bh), "MENU PRINCIPAL", "menu", cor=(150, 110, 255)),
-                Botao((x, y0 + 248, bw, bh), "SAIR DO JOGO", "sair", cor=(230, 70, 70)),
-            ])
+            itens = [("CONTINUAR", "continuar", (40, 190, 100), "jogar"),
+                     ("DEFINIÇÕES", "controlos", (50, 140, 255), "engrenagem"),
+                     ("DESISTIR DO JOGO", "desistir", (255, 180, 40), "recomecar"),
+                     ("MENU PRINCIPAL", "menu", (150, 110, 255), "casa"),
+                     ("SAIR DO JOGO", "sair", (230, 70, 70), "sair")]
         else:
-            self.lista = ListaBotoes([
-                Botao((x, y0, bw, bh), "CONTINUAR", "continuar", cor=(40, 190, 100), icone="►"),
-                Botao((x, y0 + 62, bw, bh), "REINICIAR PARTIDA", "reiniciar", cor=(255, 180, 40)),
-                Botao((x, y0 + 124, bw, bh), "DEFINIÇÕES", "controlos", cor=(50, 140, 255)),
-                Botao((x, y0 + 186, bw, bh), "MENU PRINCIPAL", "menu", cor=(150, 110, 255)),
-                Botao((x, y0 + 248, bw, bh), "SAIR DO JOGO", "sair", cor=(230, 70, 70)),
-            ])
+            itens = [("CONTINUAR", "continuar", (40, 190, 100), "jogar"),
+                     ("REINICIAR PARTIDA", "reiniciar", (255, 180, 40), "recomecar"),
+                     ("DEFINIÇÕES", "controlos", (50, 140, 255), "engrenagem"),
+                     ("MENU PRINCIPAL", "menu", (150, 110, 255), "casa"),
+                     ("SAIR DO JOGO", "sair", (230, 70, 70), "sair")]
+        n = len(itens)
+        altura = 178 + n * 62
+        self.caixa = pygame.Rect(WIDTH // 2 - 230, (HEIGHT - altura) // 2 - 10, 460, altura)
+        y0 = self.caixa.top + 166
+        self.lista = ListaBotoes([BotaoMenu((WIDTH // 2 - 195, y0 + i * 62, 390, 52), titulo, "", acao, cor, ic,
+                                            seta=(i == 0), tamanho=19)
+                                  for i, (titulo, acao, cor, ic) in enumerate(itens)])
+        self._titulo = titulo_estilizado("PAUSA", pygame.font.SysFont("Arial Black", 44), (255, 255, 255),
+                                         (170, 200, 255), contorno=4)
 
     def handle_event(self, event) -> str | None:
         if event.type == pygame.QUIT:
@@ -925,38 +947,48 @@ class MenuPausa:
 
     def update(self, dt: float):
         self.t += dt
+        for i, b in enumerate(self.lista.botoes):
+            b.animar(dt, i == self.lista.foco)
 
     def draw(self, game):
         s = self.screen
-        escurecer_ecra(s, 165)
-        caixa = pygame.Rect(WIDTH // 2 - 200, 110, 400, 410 if self.modo_teste else 470)
-        painel(s, caixa, alpha=240)
-        texto(s, "PAUSA", 40, COR_TEXTO, (WIDTH // 2, caixa.top + 44), sombra=True)
+        if self._fundo is None:
+            self._fundo = fundo_desfocado(s)
+        s.blit(self._fundo, (0, 0))
+        caixa = self.caixa
+        painel_vidro(s, caixa, 20, 238, (90, 130, 210))
+        s.blit(self._titulo, self._titulo.get_rect(center=(WIDTH // 2, caixa.top + 46)))
 
-        # Resultado atual
+        # Marcador pequeno: emblemas, resultado e tempo
         info_c = obter_info_equipa(game.equipa_casa_id)
         info_f = obter_info_equipa(game.equipa_fora_id)
+        pilula = pygame.Rect(0, 0, 330, 46)
+        pilula.center = (WIDTH // 2, caixa.top + 104)
+        pygame.draw.rect(s, (8, 12, 26), pilula, border_radius=23)
+        pygame.draw.rect(s, (70, 100, 160), pilula, 1, border_radius=23)
+        for eq, x in ((game.equipa_casa_id, pilula.left + 28), (game.equipa_fora_id, pilula.right - 28)):
+            logo = carregar_logo_equipa(eq, (32, 32))
+            if logo:
+                s.blit(logo, logo.get_rect(center=(x, pilula.centery)))
         if self.modo_teste:
             t = game.teste
             pct = round(100 * t["golos"] / t["remates"]) if t["remates"] else 0
-            texto(s, f"MODO TESTE  •  {t['golos']} golos em {t['remates']} remates ({pct}%)", 16,
-                  COR_DESTAQUE, (WIDTH // 2, caixa.top + 88))
-            texto(s, f"Defesas: {t['defesas']}   •   Fora / poste: {t['fora']}", 13, COR_TEXTO_SUAVE,
-                  (WIDTH // 2, caixa.top + 112), negrito=False)
+            texto(s, f"{t['golos']} golos  /  {t['remates']} remates", 17, COR_DESTAQUE, pilula.center)
+            texto(s, f"MODO TESTE  •  {pct}% de golos  •  defesas {t['defesas']}  •  fora/poste {t['fora']}", 12,
+                  COR_TEXTO_SUAVE, (WIDTH // 2, caixa.top + 140), negrito=False)
         else:
             mins, segs = divmod(max(0, int(game.tempo_restante)), 60)
-            resumo = f"{info_c['sigla']}  {game.golos_azul} - {game.golos_vermelho}  {info_f['sigla']}"
-            texto(s, resumo, 18, COR_DESTAQUE, (WIDTH // 2, caixa.top + 88))
-            texto(s, f"{game.parte}.ª parte  •  faltam {mins:02d}:{segs:02d}", 13, COR_TEXTO_SUAVE,
-                  (WIDTH // 2, caixa.top + 112), negrito=False)
+            texto(s, f"{info_c['sigla']}   {game.golos_azul}  -  {game.golos_vermelho}   {info_f['sigla']}", 19,
+                  (255, 255, 255), pilula.center)
+            texto(s, f"{game.parte}.ª parte  •  faltam {mins:02d}:{segs:02d}", 12, COR_TEXTO_SUAVE,
+                  (WIDTH // 2, caixa.top + 140), negrito=False)
 
         self.lista.draw(s)
         if self.modo_carreira:
-            aviso = pygame.Rect(0, 0, 420, 28)
-            aviso.midtop = (WIDTH // 2, caixa.bottom + 10)
-            painel(s, aviso, raio=8, alpha=240, largura_borda=1)
             texto(s, "Se desistires, o jogo não conta e podes jogá-lo outra vez.", 12, COR_TEXTO_SUAVE,
-                  aviso.center, negrito=False)
+                  (WIDTH // 2, caixa.bottom + 18), negrito=False)
+        texto(s, "↑ ↓  escolher     ENTER  confirmar     ESC  continuar", 12, (120, 145, 195),
+              (WIDTH // 2, HEIGHT - 22), negrito=False)
 
 
 # ====================================================================== #
@@ -964,6 +996,11 @@ class MenuPausa:
 # ====================================================================== #
 
 class EcraFimJogo:
+    """
+    Fim do jogo: o jogo desfocado por trás, cada equipa do seu lado com as suas cores,
+    o resultado ao centro, "VENCEDOR" por cima de quem ganhou e confetes quando ganhas.
+    """
+
     def __init__(self, screen: pygame.Surface, modo_carreira: bool = False, jornada: int | None = None,
                  jogador: dict | None = None):
         self.screen = screen
@@ -971,19 +1008,28 @@ class EcraFimJogo:
         self.modo_carreira = modo_carreira
         self.jornada = jornada
         self.jogador = jogador          # carreira de jogador: {"nome", "nota", "golos", "assistencias", ...}
-        y, bw, bh = 506, 230, 52
+        self._fundo = None
+        self._confetes = None
+        self.caixa = pygame.Rect(WIDTH // 2 - 460, 62, 920, 586)
+        y, bh = self.caixa.bottom - 84, 58
         cx = WIDTH // 2
         if modo_carreira:
             # O resultado conta para o campeonato: só se pode continuar
             self.lista = ListaBotoes([
-                Botao((cx - 170, y, 340, bh), "CONTINUAR CAMPEONATO", "continuar", cor=(40, 190, 100), icone="►"),
+                BotaoMenu((cx - 210, y, 420, bh), "CONTINUAR", f"O resultado conta para a jornada {jornada}",
+                          "continuar", (40, 190, 100), "jogar")])
+        else:
+            bw = 270
+            self.lista = ListaBotoes([
+                BotaoMenu((cx - bw - bw // 2 - 14, y, bw, bh), "JOGAR DE NOVO", "", "reiniciar", (40, 190, 100),
+                          "recomecar", seta=False, tamanho=19),
+                BotaoMenu((cx - bw // 2, y, bw, bh), "MUDAR EQUIPAS", "", "equipas", (50, 140, 255), "jogador",
+                          seta=False, tamanho=19),
+                BotaoMenu((cx + bw // 2 + 14, y, bw, bh), "MENU PRINCIPAL", "", "menu", (150, 110, 255), "casa",
+                          seta=False, tamanho=19),
             ])
-            return
-        self.lista = ListaBotoes([
-            Botao((cx - bw - bw // 2 - 16, y, bw, bh), "JOGAR DE NOVO", "reiniciar", cor=(40, 190, 100), icone="►"),
-            Botao((cx - bw // 2, y, bw, bh), "MUDAR EQUIPAS", "equipas", cor=(50, 140, 255)),
-            Botao((cx + bw // 2 + 16, y, bw, bh), "MENU PRINCIPAL", "menu", cor=(150, 110, 255)),
-        ])
+        self._titulo = titulo_estilizado("FIM DO JOGO", pygame.font.SysFont("Arial Black", 46), (255, 255, 255),
+                                         (170, 200, 255), contorno=4)
 
     def handle_event(self, event) -> str | None:
         if event.type == pygame.QUIT:
@@ -1008,76 +1054,111 @@ class EcraFimJogo:
 
     def update(self, dt: float):
         self.t += dt
+        for i, b in enumerate(self.lista.botoes):
+            b.animar(dt, i == self.lista.foco)
+        if self._confetes:
+            for c in self._confetes:
+                c[1] += c[2] * dt
+                c[0] += math.sin(self.t * 2 + c[4]) * 30 * dt
+                if c[1] > HEIGHT + 10:
+                    c[1] = -10
+
+    def _criar_confetes(self, cores):
+        rnd = random.Random(5)
+        self._confetes = [[rnd.uniform(0, WIDTH), rnd.uniform(-HEIGHT, 0), rnd.uniform(60, 150),
+                           rnd.choice(cores), rnd.uniform(0, 6.3), rnd.choice((6, 8, 10))] for _ in range(120)]
+
+    def _lado(self, s, game, equipa, info, kit, cx, virar, venceu, perdeu):
+        caixa = self.caixa
+        cor = kit["principal"]
+        zona = pygame.Rect(0, 0, 320, 330)
+        zona.center = (cx, caixa.top + 268)
+        # Luz com a cor da equipa por trás (mais forte em quem ganhou)
+        halo = luz(420, 380, cor_visivel_em_escuro(cor, 120), 130 if venceu else 80)
+        s.blit(halo, halo.get_rect(center=zona.center), special_flags=pygame.BLEND_RGB_ADD)
+        if venceu:
+            fita = pygame.Rect(0, 0, 150, 30)
+            fita.center = (cx, caixa.top + 128)
+            pygame.draw.rect(s, COR_DESTAQUE, fita, border_radius=15)
+            texto(s, "VENCEDOR", 15, (30, 22, 5), fita.center)
+        logo = carregar_logo_equipa(info["id"], (118, 118))
+        dx = -48 if not virar else 48
+        if logo:
+            s.blit(logo, logo.get_rect(center=(cx + dx, caixa.top + 220)))
+        pygame.draw.ellipse(s, (4, 6, 14), (cx - dx - 34, caixa.top + 272, 68, 12))
+        jog = sprite_equipamento(kit, 140, self.t, virar=virar)
+        s.blit(jog, jog.get_rect(midbottom=(cx - dx, caixa.top + 280)))
+        texto(s, info["nome"], 24, COR_TEXTO, (cx, caixa.top + 312), sombra=True)
+        # Marcadores da equipa (nome e minuto), os golos do mesmo jogador juntos
+        por_jogador = {}
+        for m in getattr(game, "marcadores", []):
+            if m["equipa"] == equipa:
+                por_jogador.setdefault(m["nome"] or "Golo", []).append(f"{m['minuto']}'")
+        for k, (nome, minutos) in enumerate(list(por_jogador.items())[:4]):
+            texto(s, f"{nome}  {', '.join(minutos)}", 13, COR_TEXTO_SUAVE, (cx, caixa.top + 340 + k * 19),
+                  negrito=False)
+        if perdeu:
+            # Quem perdeu fica um pouco mais escuro
+            zona_s = pygame.Rect(0, 0, 330, 290)
+            zona_s.center = (cx, caixa.top + 262)
+            sombra = pygame.Surface(zona_s.size, pygame.SRCALPHA)
+            pygame.draw.rect(sombra, (5, 8, 20, 60), sombra.get_rect(), border_radius=24)
+            s.blit(sombra, zona_s)
 
     def draw(self, game):
         s = self.screen
-        escurecer_ecra(s, 175)
-        caixa = pygame.Rect(WIDTH // 2 - 420, 90, 840, 510)
-        painel(s, caixa, alpha=242)
-        texto(s, "FIM DO JOGO", 42, COR_TEXTO, (WIDTH // 2, caixa.top + 48), sombra=True)
+        if self._fundo is None:
+            self._fundo = fundo_desfocado(s, 120)
+            if game.golos_azul > game.golos_vermelho:
+                self._criar_confetes([game.kit_casa["principal"], game.kit_casa["secundaria"], COR_DESTAQUE,
+                                      (255, 255, 255)])
+        s.blit(self._fundo, (0, 0))
+        caixa = self.caixa
+        painel_vidro(s, caixa, 22, 236, (90, 130, 210))
+        s.blit(self._titulo, self._titulo.get_rect(center=(WIDTH // 2, caixa.top + 46)))
 
         info_c = obter_info_equipa(game.equipa_casa_id)
         info_f = obter_info_equipa(game.equipa_fora_id)
         kit_c, kit_f = game.kit_casa, game.kit_fora
+        ga, gv = game.golos_azul, game.golos_vermelho
+        self._lado(s, game, "azul", info_c, kit_c, caixa.left + 200, False, ga > gv, ga < gv)
+        self._lado(s, game, "vermelho", info_f, kit_f, caixa.right - 200, True, gv > ga, gv < ga)
 
-        # Equipas lado a lado com o resultado no meio
-        for info, kit, cx, virar in ((info_c, kit_c, caixa.left + 190, False),
-                                     (info_f, kit_f, caixa.right - 190, True)):
-            logo = carregar_logo_equipa(info["id"], (110, 110))
-            if logo:
-                s.blit(logo, logo.get_rect(center=(cx - 50 if not virar else cx + 50, caixa.top + 190)))
-            jog = sprite_equipamento(kit, 110, self.t, virar=virar)
-            s.blit(jog, jog.get_rect(midbottom=(cx + 60 if not virar else cx - 60, caixa.top + 250)))
-            texto(s, info["nome"], 22, COR_TEXTO, (cx, caixa.top + 286))
+        # Resultado ao centro, com um brilho por trás
+        brilho = luz(300, 200, (120, 160, 255), 60)
+        s.blit(brilho, brilho.get_rect(center=(WIDTH // 2, caixa.top + 228)), special_flags=pygame.BLEND_RGB_ADD)
+        texto(s, f"{ga}", 78, (255, 255, 255), (WIDTH // 2 - 62, caixa.top + 222), sombra=True)
+        texto(s, "-", 60, COR_TEXTO_SUAVE, (WIDTH // 2, caixa.top + 218))
+        texto(s, f"{gv}", 78, (255, 255, 255), (WIDTH // 2 + 62, caixa.top + 222), sombra=True)
 
-        # Marcadores de cada equipa (nome e minuto), por baixo do nome do clube
-        for equipa, cx in (("azul", caixa.left + 190), ("vermelho", caixa.right - 190)):
-            # Os golos do mesmo jogador ficam juntos: "Hélder Nunes 3', 8'"
-            por_jogador = {}
-            for m in getattr(game, "marcadores", []):
-                if m["equipa"] == equipa:
-                    por_jogador.setdefault(m["nome"] or "Golo", []).append(f"{m['minuto']}'")
-            linhas, atual = [], ""
-            for nome, minutos in por_jogador.items():
-                item = f"{nome} {', '.join(minutos)}"
-                prox = f"{atual}   •   {item}" if atual else item
-                if fonte(13, False).size(prox)[0] > 330 and atual:
-                    linhas.append(atual)
-                    prox = item
-                atual = prox
-            if atual:
-                linhas.append(atual)
-            for k, linha in enumerate(linhas[:2]):
-                texto(s, linha, 13, COR_TEXTO_SUAVE, (cx, caixa.top + 312 + k * 18), negrito=False)
-
-        resultado = f"{game.golos_azul}  -  {game.golos_vermelho}"
-        texto(s, resultado, 64, (255, 255, 255), (WIDTH // 2, caixa.top + 196), sombra=True)
-
-        if game.golos_azul > game.golos_vermelho:
-            msg, cor = f"VITÓRIA DO {info_c['nome'].upper()}!", cor_visivel_em_escuro(kit_c["principal"], 120)
-        elif game.golos_vermelho > game.golos_azul:
-            msg, cor = f"VITÓRIA DO {info_f['nome'].upper()}!", cor_visivel_em_escuro(kit_f["principal"], 120)
+        if ga > gv:
+            msg, cor = f"VITÓRIA DO {info_c['nome'].upper()}!", cor_visivel_em_escuro(kit_c["principal"], 140)
+        elif gv > ga:
+            msg, cor = f"VITÓRIA DO {info_f['nome'].upper()}!", cor_visivel_em_escuro(kit_f["principal"], 140)
         else:
             msg, cor = "EMPATE!", COR_DESTAQUE
-        texto(s, msg, 30, cor, (WIDTH // 2, caixa.top + 350), sombra=True)
-
+        texto(s, msg, 28, cor, (WIDTH // 2, caixa.top + 412), sombra=True)
         faltas = f"Faltas:  {info_c['sigla']} {game.faltas_azul}   •   {info_f['sigla']} {game.faltas_vermelho}"
-        texto(s, faltas, 14, COR_TEXTO_SUAVE, (WIDTH // 2, caixa.top + 392), negrito=False)
+        texto(s, faltas, 13, COR_TEXTO_SUAVE, (WIDTH // 2, caixa.top + 444), negrito=False)
 
-        self.lista.draw(s)
         if self.jogador:
             j = self.jogador
             from carreira_jogador_menu import cor_nota
             nota = f"{j['nota']:.1f}".replace(".", ",")
             linha = (f"{j['nome']}  •  NOTA {nota}  •  {j['golos']} golo(s)  •  "
                      f"{j['assistencias']} assist.  •  {j['passes']} passes certos")
-            texto(s, linha, 15, cor_nota(j["nota"]), (WIDTH // 2, caixa.top + 92))
-            texto(s, "[ENTER] continuar", 12, (110, 140, 190), (WIDTH // 2, caixa.bottom - 18), negrito=False)
+            pil = pygame.Rect(0, 0, fonte(15).size(linha)[0] + 40, 32)
+            pil.center = (WIDTH // 2, caixa.top + 96)
+            pygame.draw.rect(s, (8, 12, 26), pil, border_radius=16)
+            pygame.draw.rect(s, cor_nota(j["nota"]), pil, 2, border_radius=16)
+            texto(s, linha, 15, cor_nota(j["nota"]), pil.center)
         elif self.modo_carreira:
-            texto(s, f"MODO CARREIRA  •  o resultado conta para a jornada {self.jornada}", 13,
-                  COR_DESTAQUE, (WIDTH // 2, caixa.top + 92))
-            texto(s, "[ENTER] continuar", 12, (110, 140, 190), (WIDTH // 2, caixa.bottom - 18), negrito=False)
-        else:
-            texto(s, "[R] jogar de novo   [ESC] menu principal", 12, (110, 140, 190),
-                  (WIDTH // 2, caixa.bottom - 18), negrito=False)
+            texto(s, f"MODO CARREIRA  •  jornada {self.jornada}", 14, COR_DESTAQUE, (WIDTH // 2, caixa.top + 96))
 
+        self.lista.draw(s)
+        dica = "ENTER  continuar" if self.modo_carreira else "← →  escolher     ENTER  confirmar     R  jogar de novo     ESC  menu principal"
+        texto(s, dica, 12, (120, 145, 195), (WIDTH // 2, HEIGHT - 22), negrito=False)
+        if self._confetes:
+            for x, y, _v, cor, fase, tam in self._confetes:
+                larg = max(2, abs(round(tam * math.cos(self.t * 5 + fase))))
+                pygame.draw.rect(s, cor, (int(x), int(y), larg, tam))

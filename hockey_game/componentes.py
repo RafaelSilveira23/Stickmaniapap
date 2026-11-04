@@ -86,6 +86,43 @@ def painel(surf, rect, cor=COR_PAINEL, borda=COR_BORDA, raio: int = 12,
         pygame.draw.rect(surf, borda, rect, largura_borda, border_radius=raio)
 
 
+_cache_vidro = {}
+
+
+def painel_vidro(surf, rect, raio: int = 14, alpha: int = 210, borda=(60, 90, 150)):
+    """
+    Painel de vidro escuro (gradiente, sombra e borda), o estilo de todos os ecrãs novos.
+    É desenhado uma vez e guardado em cache: o ecrã é redesenhado 60 vezes por segundo.
+    """
+    rect = pygame.Rect(rect)
+    chave = (rect.size, raio, alpha, tuple(borda))
+    if chave not in _cache_vidro:
+        w, h = rect.size
+        img = pygame.Surface((w + 3, h + 6), pygame.SRCALPHA)
+        pygame.draw.rect(img, (0, 0, 0, 100), (3, 6, w, h), border_radius=raio)
+        camada = pygame.Surface((w, h), pygame.SRCALPHA)
+        gradiente_vertical(camada, camada.get_rect(), (20, 30, 58), (10, 16, 34), raio=raio)
+        camada.set_alpha(alpha)
+        img.blit(camada, (0, 0))
+        pygame.draw.rect(img, borda, (0, 0, w, h), 2, border_radius=raio)
+        if len(_cache_vidro) > 120:
+            _cache_vidro.clear()
+        _cache_vidro[chave] = img
+    surf.blit(_cache_vidro[chave], rect.topleft)
+
+
+def fundo_desfocado(surf, escuro: int = 140) -> pygame.Surface:
+    """Cópia desfocada e escurecida do que está no ecrã (fundo da pausa e do fim de jogo)."""
+    w, h = surf.get_size()
+    peq = pygame.transform.smoothscale(surf, (w // 4, h // 4))
+    peq = pygame.transform.gaussian_blur(peq, 3)
+    img = pygame.transform.smoothscale(peq, (w, h))
+    camada = pygame.Surface((w, h), pygame.SRCALPHA)
+    camada.fill((4, 8, 20, escuro))
+    img.blit(camada, (0, 0))
+    return img
+
+
 def escurecer_ecra(surf, alpha: int = 150):
     """Camada escura por cima de tudo (usada na pausa e no fim de jogo)."""
     camada = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)

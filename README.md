@@ -32,6 +32,9 @@ No Windows também se pode fazer duplo clique em `jogar.bat`.
 
 - Menu principal com o pavilhão desfocado ao fundo e uma **engrenagem no canto** que abre as
   **Definições** (lista de controlos e ecrã inteiro, que fica gravado); menu de pausa e ecrã de fim de jogo
+- Todos os menus com o mesmo estilo (painéis de vidro e botões com ícones); na **pausa** e no **fim de jogo**
+  o jogo fica desfocado por trás, e no fim cada equipa aparece com as suas cores, o vencedor destacado e confetes
+- **Transições suaves** (fade) entre todos os ecrãs
 - **Gráficos melhorados**: piso desenhado com o dobro da resolução (linhas e emblema suaves),
   tábuas com veios e nós, reflexos das luzes no verniz, sombra junto às tabelas e sombras esbatidas
   nos jogadores e na bola; vsync para a imagem não "rasgar"

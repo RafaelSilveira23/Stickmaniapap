@@ -254,15 +254,20 @@ def carregar_logo_equipa(equipa_id: str, tamanho: tuple[int, int]) -> pygame.Sur
 
         if caminho_encontrado:
             try:
-                raw = pygame.image.load(caminho_encontrado)
-                # Se for JPG ou imagem com cantos brancos, remove a moldura branca exterior
-                c0 = raw.get_at((0, 0))
-                c_transparente = (len(c0) >= 4 and c0[3] == 0)
-
-                if not c_transparente and c0[0] > 235 and c0[1] > 235 and c0[2] > 235:
-                    img = remover_fundo_branco_exterior(raw)
-                else:
-                    img = raw.convert_alpha()
+                # O emblema limpo (sem o fundo branco) fica guardado: limpar é lento (píxel a píxel)
+                # e assim um tamanho novo só precisa de ser redimensionado
+                limpo = _cache_logos.get(("limpo", caminho_encontrado))
+                if limpo is None:
+                    raw = pygame.image.load(caminho_encontrado)
+                    # Se for JPG ou imagem com cantos brancos, remove a moldura branca exterior
+                    c0 = raw.get_at((0, 0))
+                    c_transparente = (len(c0) >= 4 and c0[3] == 0)
+                    if not c_transparente and c0[0] > 235 and c0[1] > 235 and c0[2] > 235:
+                        limpo = remover_fundo_branco_exterior(raw)
+                    else:
+                        limpo = raw.convert_alpha()
+                    _cache_logos[("limpo", caminho_encontrado)] = limpo
+                img = limpo
 
                 # Redimensionar preservando o aspecto visual (aspect-ratio)
                 orig_w, orig_h = img.get_size()
