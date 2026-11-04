@@ -8,6 +8,14 @@ para a baliza (como num penálti). O jogador:
 Mais força = a bola chega mais depressa (o guarda-redes tem menos tempo), mas o remate fica
 menos preciso (o círculo da mira fica maior).
 
+Fase de remate em movimento:
+  • o jogador não para: continua a patinar a 50 % da velocidade que trazia, e a câmara avança com ele;
+  • os adversários que estão entre o jogador e a baliza aparecem no ecrã, nas posições que tinham
+    no campo quando se carregou em X;
+  • a linha da bola até ao ponto apontado é testada contra o corpo de cada defesa (um cilindro):
+    se o cruzar abaixo da altura do corpo, o remate é BLOQUEADO; se passar perto, o defesa
+    tapa a vista ao guarda-redes, que tem mais dificuldade em adivinhar o lado.
+
 Como se desenha a vista na primeira pessoa (projeção em perspetiva):
   A câmara está no jogador e olha para o centro da baliza. Para cada ponto do campo
   (x, y no chão e uma altura h) calculamos:
@@ -43,6 +51,14 @@ MEIA_BOCA = 33
 PROF_BALIZA = 38
 RAIO_BOLA = 5.5
 PX_POR_METRO = 1140 / 40      # o rinque tem 40 m de comprimento e 1140 px
+REDUCAO_VELOCIDADE = 0.5      # a carregar o remate, o jogador patina a 50 % da velocidade
+RAIO_DEFESA = 14              # "cilindro" do corpo de um defesa (px do campo)
+ALTURA_DEFESA = 52            # altura do corpo de um defesa (px do campo)
+DIST_MINIMA = 95              # o jogador não avança para mais perto da baliza do que isto
+
+
+def kmh(px_por_segundo: float) -> float:
+    return px_por_segundo / PX_POR_METRO * 3.6
 
 # Guarda-redes por dificuldade: reação (s), velocidade de mergulho, alcance (baixo, meio, alto), leitura
 # (valores afinados simulando milhares de remates: ver o relatório, secção 4.2)
@@ -69,7 +85,7 @@ def _img_gr(nome: str) -> pygame.Surface:
 
 
 def decidir_remate(u_alvo: float, h_alvo: float, forca: float, distancia: float, u_gr: float,
-                   dificuldade: str, rnd=random, precisao: float = 1.0) -> dict:
+                   dificuldade: str, rnd=random, precisao: float = 1.0, tapado: bool = False) -> dict:
     """
     Decide o que acontece a um remate. É uma função à parte (sem desenho) para se poder testar.
       u_alvo, h_alvo : ponto apontado na baliza (u = de lado, 0 = meio; h = altura)
@@ -90,6 +106,8 @@ def decidir_remate(u_alvo: float, h_alvo: float, forca: float, distancia: float,
     movimento = max(0.0, tempo - reacao) * vel_gr
     # Quanto mais tempo a bola demora a chegar, mais fácil é "ler" o lado do remate
     leitura *= min(1.0, max(0.2, (tempo - 0.12) / 0.45))
+    if tapado:
+        leitura *= 0.5          # um defesa à frente tapa a vista ao guarda-redes
     if rnd.random() < leitura:
         destino = u
     else:
@@ -117,7 +135,7 @@ class RematePOV:
     """
 
     def __init__(self, screen, rink, jogador, gr, dificuldade: str, limite_tempo: float | None = 5.0,
-                 cor_linhas=(30, 95, 210)):
+                 cor_linhas=(30, 95, 210), defensores=(), velocidade=(0.0, 0.0)):
         self.screen = screen
         self.rink = rink
         self.jogador = jogador
@@ -135,17 +153,14 @@ class RematePOV:
         self.cy = r.centery
         self.fora_dir = -1                        # "atrás da baliza" é para a esquerda (x menor)
         self.bx = r.left                          # tabela atrás da baliza
-        px, py = jogador.pos_x, jogador.pos_y
-        dx, dy = self.gx - px, self.cy - py
-        self.distancia = max(40.0, math.hypot(dx, dy))
-        dist_cam = max(self.distancia, 115.0)     # muito perto, a câmara recua um pouco (vê-se a baliza toda)
-        self.fx, self.fy = dx / self.distancia, dy / self.distancia
-        self.rx, self.ry = -self.fy, self.fx
-        self.cx_mundo = self.gx - self.fx * dist_cam
-        self.cy_mundo = self.cy - self.fy * dist_cam
-        # Lado do ecrã para onde vai o +u (para as setas andarem para o lado certo)
-        a, b = self._proj(self.gx, self.cy, 10), self._proj(self.gx, self.cy + 1, 10)
-        self.sinal_u = 1 if (a and b and b[0] > a[0]) else -1
+        # O jogador continua a patinar, a 50 % da velocidade que trazia
+        self.pos = [float(jogador.pos_x), float(jogador.pos_y)]
+        self.vel_corrida = math.hypot(*velocidade)
+        self.vel = (velocidade[0] * REDUCAO_VELOCIDADE, velocidade[1] * REDUCAO_VELOCIDADE)
+        # Fotografia dos adversários no momento em que se carregou em X
+        self.defensores = [{"jogador": d, "x": d.pos_x, "y": d.pos_y, "img": d.image.copy()}
+                           for d in defensores]
+        self._definir_camera()
 
         self.u, self.h = 0.0, 12.0                # mira começa no meio, a meia altura baixa
         self.u_gr0 = max(-22.0, min(22.0, gr.pos_y - self.cy))
@@ -160,11 +175,33 @@ class RematePOV:
         self._voo_dur = 0.4
         self._res_t = 0.0
         self._fundo = self._criar_fundo()
-        self._cena = None             # parte fixa da imagem (a câmara não se mexe): feita no 1.º draw
+        self._cena = None             # parte fixa da imagem: refeita só quando a câmara anda
         self._frente = None
-        # Bola no stick: um pouco à frente e à direita dos olhos
-        self.bola_ini = (self.cx_mundo + self.fx * 120 + self.rx * 34,
-                         self.cy_mundo + self.fy * 120 + self.ry * 34, 0.0)
+        self._pos_cena = None
+        self._cache_texto = {}
+
+    def _definir_camera(self):
+        """Câmara nos olhos do jogador, virada para o centro da baliza."""
+        px, py = self.pos
+        dx, dy = self.gx - px, self.cy - py
+        self.distancia = max(40.0, math.hypot(dx, dy))
+        dist_cam = max(self.distancia, 115.0)     # muito perto, a câmara recua um pouco (vê-se a baliza toda)
+        self.fx, self.fy = dx / self.distancia, dy / self.distancia
+        self.rx, self.ry = -self.fy, self.fx
+        self.cx_mundo = self.gx - self.fx * dist_cam
+        self.cy_mundo = self.cy - self.fy * dist_cam
+        self.z_baliza = self._cam(self.gx, self.cy)[1]
+        # Lado do ecrã para onde vai o +u (para as setas andarem para o lado certo)
+        a, b = self._proj(self.gx, self.cy, 10), self._proj(self.gx, self.cy + 1, 10)
+        self.sinal_u = 1 if (a and b and b[0] > a[0]) else -1
+        # Bola na pá do stick. Há duas posições:
+        #  • bola_ini   - onde a bola está mesmo (20 px à frente do jogador): é daqui que sai o remate
+        #                 e que se testa se algum defesa está no caminho;
+        #  • bola_vista - onde se DESENHA a bola parada com o stick (em baixo, à direita, como nos jogos
+        #                 na primeira pessoa). No voo, a bola passa suavemente de uma para a outra.
+        self.bola_ini = (self.pos[0] + self.fx * 20 + self.rx * 8, self.pos[1] + self.fy * 20 + self.ry * 8, 0.0)
+        self.bola_vista = self._proj(self.cx_mundo + self.fx * 154 + self.rx * 27,
+                                     self.cy_mundo + self.fy * 154 + self.ry * 27, 0.0)
 
     # ------------------------------------------------------------------ #
     # Projeção                                                           #
@@ -256,6 +293,50 @@ class RematePOV:
         elif event.type == pygame.MOUSEMOTION:
             self._mira_do_rato(*event.pos)
 
+    def _avancar(self, dt: float):
+        """O jogador continua a patinar (a 50 %) enquanto aponta e carrega o remate."""
+        if self.vel == (0.0, 0.0):
+            return
+        nx, ny = self.pos[0] + self.vel[0] * dt, self.pos[1] + self.vel[1] * dt
+        r = self.rink.rect
+        perto = math.hypot(self.gx - nx, self.cy - ny) < DIST_MINIMA or nx < self.gx + 40
+        fora = not (r.left + 20 < nx < r.right - 20 and r.top + 20 < ny < r.bottom - 20)
+        choca = any(math.hypot(d["x"] - nx, d["y"] - ny) < 26 for d in self.defensores)
+        if perto or fora or choca:
+            self.vel = (0.0, 0.0)               # parou (baliza, tabela ou um defesa à frente)
+            return
+        self.pos = [nx, ny]
+        self._definir_camera()
+
+    # ------------------------------------------------------------------ #
+    # Bloqueio pelos defesas (raycasting)                                #
+    # ------------------------------------------------------------------ #
+    def _linha_bloqueada(self, u: float, h: float):
+        """
+        Segue a linha da bola (do stick até ao ponto (u, h) da baliza) e devolve o primeiro
+        defesa que a corta: (índice, t) com t = fração do caminho; ou None.
+        Também devolve se algum defesa passa perto da linha (tapa a vista ao guarda-redes).
+        O corpo de cada defesa é um cilindro de raio RAIO_DEFESA e altura ALTURA_DEFESA.
+        """
+        x0, y0, h0 = self.bola_ini
+        x1, y1, h1 = self.gx, self.cy + u, h
+        vx, vy = x1 - x0, y1 - y0
+        comp2 = vx * vx + vy * vy
+        primeiro, tapado = None, False
+        for i, d in enumerate(self.defensores):
+            # Ponto do caminho (no chão) mais perto do centro do defesa
+            t = max(0.0, min(1.0, ((d["x"] - x0) * vx + (d["y"] - y0) * vy) / comp2))
+            if not 0.02 < t < 0.98:
+                continue
+            dist = math.hypot(x0 + vx * t - d["x"], y0 + vy * t - d["y"])
+            altura = h0 + (h1 - h0) * t
+            if dist < RAIO_DEFESA + RAIO_BOLA and altura < ALTURA_DEFESA:
+                if primeiro is None or t < primeiro[1]:
+                    primeiro = (i, t)
+            elif dist < 38 and t > 0.3:
+                tapado = True
+        return primeiro, tapado
+
     def _comecar_carga(self):
         if not self.a_carregar:
             self.a_carregar = True
@@ -272,6 +353,7 @@ class RematePOV:
             self.h = max(0.0, min(60.0, self.h + dh * 50 * dt))
             # O guarda-redes inclina-se um pouco para o lado para onde estás a apontar
             self.u_gr = self.u_gr0 + max(-12.0, min(12.0, self.u * 0.15))
+            self._avancar(dt)
             if self.a_carregar:
                 # A barra sobe e desce: é preciso largar no momento certo
                 self.forca += self._sentido_forca * dt / 0.9
@@ -295,11 +377,17 @@ class RematePOV:
             kr = max(0.0, min(1.0, (k * d["tempo"] - reacao) / max(0.05, d["tempo"] - reacao)))
             ini = d["u_gr_inicio"]
             self.u_gr = ini + (d["u_gr"] - ini) * (1 - (1 - kr) ** 2)
+            if d["resultado"] == "bloqueado":
+                # A bola só vai até ao defesa: a animação dura a parte do caminho até lá
+                k = min(1.0, self._voo_t / max(0.12, self._voo_dur * d["t_bloqueio"]))
             if k >= 1.0:
                 self.estado = "resultado"
                 self._res_t = 0.0
                 r = d["resultado"]
-                if r == "defesa":
+                if r == "bloqueado":
+                    som.tocar("defesa", 1.0)
+                    som.tocar("publico_uh", 0.6)
+                elif r == "defesa":
                     som.tocar("defesa", 0.9)
                     som.tocar("publico_uh", 0.7)
                 elif r == "poste":
@@ -316,9 +404,23 @@ class RematePOV:
     def _rematar(self):
         self.a_carregar = False
         precisao = 1.15 - getattr(self.jogador, "stat_remate", 80) / 400
+        _b, tapado = self._linha_bloqueada(self.u, self.h)
         self._decisao = decidir_remate(self.u, self.h, self.forca, self.distancia, self.u_gr0,
-                                       self.dificuldade, precisao=precisao)
+                                       self.dificuldade, precisao=precisao, tapado=tapado)
         self._decisao["forca"] = self.forca
+        self._decisao["tapado"] = tapado
+        self._decisao["pos"] = tuple(self.pos)
+        self._decisao["vel"] = self.vel
+        self._decisao["bola_ini"] = self.bola_ini
+        self._decisao["bola_vista"] = self.bola_vista
+        # A linha REAL do remate (já com o erro) pode bater num defesa
+        bloqueio, _t = self._linha_bloqueada(self._decisao["u"], self._decisao["h"])
+        if bloqueio is not None:
+            i, t = bloqueio
+            d = self.defensores[i]
+            self._decisao.update(resultado="bloqueado", t_bloqueio=t, bloqueador=d["jogador"],
+                                 pos_bloqueio=(d["x"], d["y"]))
+            self._decisao["u_gr"] = self._decisao["u_gr_inicio"]
         # A animação dura mais do que o voo real, para se perceber o que aconteceu
         self._voo_dur = max(0.3, min(0.75, self._decisao["tempo"] * 1.7))
         self._voo_t = 0.0
@@ -352,11 +454,11 @@ class RematePOV:
         if len(piso) >= 3:
             pygame.draw.polygon(s, (218, 170, 112), piso)
             # Mais escuro ao longe (perto do horizonte)
-            sombra = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+            sombra = self._buffer("sombra")
             for y in range(HORIZONTE - 60, HORIZONTE + 160, 4):
                 a = max(0, int(90 * (1 - (y - HORIZONTE + 60) / 220)))
                 pygame.draw.rect(sombra, (60, 30, 10, a), (0, y, WIDTH, 4))
-            mascara = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+            mascara = self._buffer("mascara")
             pygame.draw.polygon(mascara, (255, 255, 255, 255), piso)
             sombra.blit(mascara, (0, 0), special_flags=pygame.BLEND_RGBA_MIN)
             s.blit(sombra, (0, 0))
@@ -401,7 +503,7 @@ class RematePOV:
         H, M, P = ALTURA_BALIZA, MEIA_BOCA, PROF_BALIZA
         trasx = gx + o * P
         if not frente:
-            rede = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+            rede = self._buffer("rede")
             cor_rede = (235, 240, 250, 150)
             for k in range(0, 2 * M + 1, 6):                         # rede de trás: verticais
                 y = cy - M + k
@@ -473,10 +575,45 @@ class RematePOV:
         centro = (p[0] + desvio, p[1] - alt * 0.36 - F * levanta / p[2])
         s.blit(img, img.get_rect(center=centro))
 
+    def _desenhar_defensores(self, s, perto_de: float, longe_de: float):
+        """Desenha os defesas com z entre perto_de e longe_de (do mais longe para o mais perto)."""
+        lista = []
+        for d in self.defensores:
+            p = self._proj(d["x"], d["y"], 0)
+            # Os que estão quase encostados ao jogador (z < 40) não se desenham (estão ao lado dele)
+            if not p or not (perto_de <= p[2] < longe_de) or p[2] < 40 or p[2] > self.z_baliza - 2:
+                continue
+            if not -300 < p[0] < WIDTH + 300:
+                continue
+            lista.append((p[2], p, d))
+        for _z, p, d in sorted(lista, key=lambda e: -e[0]):
+            img = d["img"]
+            alt = min(380.0, F * 58 / p[2])      # muito perto ficavam enormes: limita-se o tamanho
+            larg = alt * img.get_width() / img.get_height()
+            img = pygame.transform.scale(img, (max(2, round(larg)), max(2, round(alt))))
+            caixa = img.get_bounding_rect()
+            desvio = img.get_width() / 2 - caixa.centerx
+            sombra = pygame.Surface((max(2, round(alt * 0.6)), max(2, round(alt * 0.14))), pygame.SRCALPHA)
+            pygame.draw.ellipse(sombra, (20, 10, 0, 100), sombra.get_rect())
+            s.blit(sombra, sombra.get_rect(center=(p[0], p[1])))
+            s.blit(img, img.get_rect(midtop=(p[0] + desvio, p[1] - alt * 0.9)))
+
     def _pos_bola(self):
         """Posição da bola no mundo (x, y, h) durante a animação do remate."""
         d = self._decisao
-        bx0, by0, bh0 = self.bola_ini
+        bx0, by0, bh0 = d["bola_ini"]
+        if d["resultado"] == "bloqueado":
+            t = d["t_bloqueio"]
+            cx, cy_, ch = bx0 + (self.gx - bx0) * t, by0 + (self.cy + d["u"] - by0) * t, d["h"] * t
+            if self.estado == "voo":
+                k = min(1.0, self._voo_t / max(0.12, self._voo_dur * t))
+                return bx0 + (cx - bx0) * k, by0 + (cy_ - by0) * k, ch * k
+            # Ressalto no defesa: volta para trás e para o lado
+            k2 = min(1.0, self._res_t / 0.5)
+            lado = 1 if d["u"] >= 0 else -1
+            return (cx - self.fx * 45 * k2 + self.rx * lado * 30 * k2,
+                    cy_ - self.fy * 45 * k2 + self.ry * lado * 30 * k2,
+                    max(0.0, ch + 14 * math.sin(math.pi * k2) - ch * k2))
         gx, cy = self.gx, self.cy
         alvo = (gx, cy + d["u"], d["h"])
         k = min(1.0, self._voo_t / self._voo_dur) if self.estado == "voo" else 1.0
@@ -498,42 +635,112 @@ class RematePOV:
         h = bh0 + (alvo[2] - bh0) * k + 6 * math.sin(math.pi * k) * (1 - d["forca"])
         return x, y, h
 
-    def _desenhar_bola(self, s, pos):
+    def _bola_no_ecra(self, pos):
+        """(x, y, raio, y_sombra) da bola no ecrã; no início do voo mistura com a posição «vista»."""
         p = self._proj(*pos)
-        if not p:
-            return
-        r = max(2, F * RAIO_BOLA / p[2])
         chao = self._proj(pos[0], pos[1], 0)
-        if chao:
-            sombra = pygame.Surface((round(r * 2.4), round(r * 0.9)), pygame.SRCALPHA)
-            pygame.draw.ellipse(sombra, (20, 10, 0, 100), sombra.get_rect())
-            s.blit(sombra, sombra.get_rect(center=(chao[0], chao[1])))
-        pygame.draw.circle(s, (20, 12, 6), (p[0], p[1] - r), r + max(1, r * 0.12))
-        pygame.draw.circle(s, (255, 140, 30), (p[0], p[1] - r), r)
-        pygame.draw.circle(s, (255, 205, 140), (p[0] - r * 0.35, p[1] - r * 1.35), r * 0.35)
+        if not p or not chao:
+            return None
+        x, y, r, ys = p[0], p[1], max(2, F * RAIO_BOLA / p[2]), chao[1]
+        if self.estado == "voo" and self.bola_vista:
+            k = min(1.0, self._voo_t / 0.14)
+            k = k * k * (3 - 2 * k)
+            vx, vy, vz = self.bola_vista
+            vr = F * RAIO_BOLA / vz
+            x, y, r, ys = vx + (x - vx) * k, vy + (y - vy) * k, vr + (r - vr) * k, vy + (ys - vy) * k
+        return x, y, r, ys
+
+    def _desenhar_bola(self, s, pos):
+        e = self._bola_no_ecra(pos)
+        if e:
+            self._desenhar_bola_ecra(s, *e)
+
+    def _desenhar_bola_ecra(self, s, x, y, r, y_sombra):
+        p = (x, y)
+        sombra = pygame.Surface((round(r * 2.4), round(r * 0.9)), pygame.SRCALPHA)
+        pygame.draw.ellipse(sombra, (20, 10, 0, 100), sombra.get_rect())
+        s.blit(sombra, sombra.get_rect(center=(x, y_sombra)))
+        # Bola preta de hóquei em patins, com um reflexo de luz
+        pygame.draw.circle(s, (0, 0, 0), (p[0], p[1] - r), r + max(1, r * 0.1))
+        pygame.draw.circle(s, (28, 28, 32), (p[0], p[1] - r), r)
+        pygame.draw.circle(s, (55, 55, 62), (p[0] - r * 0.25, p[1] - r * 1.25), r * 0.55)
+        pygame.draw.circle(s, (150, 150, 160), (p[0] - r * 0.38, p[1] - r * 1.4), max(1, r * 0.18))
+
+    def _texto_rodado(self, txt, tam, cor, ang):
+        chave = (txt, tam, cor, round(ang))
+        if chave not in self._cache_texto:
+            f = pygame.font.SysFont("Arial Black", tam, italic=True)
+            img = f.render(txt, True, cor)
+            self._cache_texto[chave] = pygame.transform.rotozoom(img, round(ang), 1.0)
+        return self._cache_texto[chave]
 
     def _desenhar_stick(self, s):
-        """O stick do jogador em primeira pessoa (puxa atrás ao carregar, vai à frente no remate)."""
-        bola = self._proj(*self.bola_ini)
+        """
+        Stick em primeira pessoa (modelo «SUPER» / «AZEMAD.»): o cabo vem do canto de cima à esquerda
+        e a pá curva fica por baixo da bola. Ao carregar puxa para trás; no remate vai à frente.
+        """
+        bola = self.bola_vista if self.estado == "mirar" else self._decisao["bola_vista"]
         if not bola:
             return
         bx, by = bola[0], bola[1]
+        rb = F * RAIO_BOLA / bola[2]
         if self.estado == "mirar":
-            ang = self.forca * 0.55 if self.a_carregar else 0.0
+            ang = -0.22 * self.forca if self.a_carregar else 0.0
         else:
-            ang = -0.5 * min(1.0, (self._voo_t if self.estado == "voo" else 1.0) / 0.12)
-        base = (min(WIDTH + 40, bx + 300), HEIGHT + 60)
-        lamina = (bx + 38 + math.sin(ang) * 260, by - 8 - (1 - math.cos(ang)) * 120)
-        for cor, w in (((25, 15, 8), 26), ((200, 150, 90), 18), ((235, 195, 140), 6)):
-            pygame.draw.line(s, cor, base, lamina, w)
-        # Pá curva
-        pts = [(lamina[0] + 14 * math.cos(a) - 26, lamina[1] + 18 * math.sin(a)) for a in
-               [i * math.pi / 8 for i in range(0, 9)]]
-        pygame.draw.lines(s, (25, 15, 8), False, pts, 20)
-        pygame.draw.lines(s, (200, 150, 90), False, pts, 13)
-        # Fita preta no punho
-        fita = (base[0] + (lamina[0] - base[0]) * 0.12, base[1] + (lamina[1] - base[1]) * 0.12)
-        pygame.draw.line(s, (20, 20, 25), base, fita, 22)
+            ang = 0.30 * min(1.0, (self._voo_t if self.estado == "voo" else 1.0) / 0.12)
+        cabo = (bx - 900, by - 360)                  # ponta do cabo (fora do ecrã)
+
+        def rodar(p):
+            dx, dy = p[0] - cabo[0], p[1] - cabo[1]
+            c, sn = math.cos(ang), math.sin(ang)
+            return (cabo[0] + dx * c - dy * sn, cabo[1] + dx * sn + dy * c)
+
+        calcanhar = rodar((bx - 70, by + rb * 0.9))
+        ponta = rodar((bx + 150, by - 26))
+        ctrl = rodar((bx + 70, by + rb * 1.7))
+        # Pá: curva (Bézier quadrática) do calcanhar à ponta, com espessura
+        curva = []
+        for i in range(13):
+            t = i / 12
+            x = (1 - t) ** 2 * calcanhar[0] + 2 * (1 - t) * t * ctrl[0] + t * t * ponta[0]
+            y = (1 - t) ** 2 * calcanhar[1] + 2 * (1 - t) * t * ctrl[1] + t * t * ponta[1]
+            curva.append((x, y))
+        cima, baixo = [], []
+        for i, (x, y) in enumerate(curva):
+            x2, y2 = curva[min(i + 1, 12)]
+            x1, y1 = curva[max(i - 1, 0)]
+            nx, ny = -(y2 - y1), x2 - x1
+            n = math.hypot(nx, ny) or 1
+            esp = 19 - 5 * i / 12
+            cima.append((x + nx / n * esp, y + ny / n * esp))
+            baixo.append((x - nx / n * esp, y - ny / n * esp))
+        pa = cima + baixo[::-1]
+        # Cabo: quadrilátero que engrossa um pouco até ao calcanhar
+        dxs, dys = calcanhar[0] - cabo[0], calcanhar[1] - cabo[1]
+        n = math.hypot(dxs, dys)
+        px_, py_ = -dys / n, dxs / n
+        cabo_poli = [(cabo[0] + px_ * 17, cabo[1] + py_ * 17), (calcanhar[0] + px_ * 20, calcanhar[1] + py_ * 20),
+                     (calcanhar[0] - px_ * 20, calcanhar[1] - py_ * 20), (cabo[0] - px_ * 17, cabo[1] - py_ * 17)]
+        madeira, claro, escuro = (214, 172, 118), (240, 208, 160), (24, 16, 10)
+        for poli in (cabo_poli, pa):
+            pygame.draw.polygon(s, madeira, poli)
+        # Veio claro ao longo do cabo e da pá
+        pygame.draw.line(s, claro, (cabo[0] + px_ * 8, cabo[1] + py_ * 8),
+                         (calcanhar[0] + px_ * 10, calcanhar[1] + py_ * 10), 5)
+        pygame.draw.lines(s, claro, False, [(x * 0.6 + cx * 0.4, y * 0.6 + cy * 0.4) for (x, y), (cx, cy) in zip(cima, curva)], 3)
+        for poli in (cabo_poli, pa):
+            pygame.draw.polygon(s, escuro, poli, 4)
+        # Letras: «SUPER» no cabo e «AZEMAD.» na pá
+        ang_cabo = -math.degrees(math.atan2(dys, dxs))
+        sup = self._texto_rodado("SUPER", 30, escuro, ang_cabo)
+        meio = (cabo[0] + dxs * 0.82, cabo[1] + dys * 0.82)
+        s.blit(sup, sup.get_rect(center=meio))
+        mx, my = curva[6]
+        ax, ay = curva[8][0] - curva[4][0], curva[8][1] - curva[4][1]
+        aze = self._texto_rodado("AZEMAD.", 22, escuro, -math.degrees(math.atan2(ay, ax)))
+        s.blit(aze, aze.get_rect(center=(mx, my)))
+        tx, ty = curva[11]
+        pygame.draw.polygon(s, escuro, [(tx - 8, ty + 6), (tx + 8, ty + 2), (tx - 4, ty - 8)])
 
     def _desenhar_mira(self, s):
         p = self._proj(self.gx, self.cy + self.u, self.h)
@@ -543,7 +750,11 @@ class RematePOV:
         erro = erro_remate(self.forca, self.distancia, precisao)
         r = max(8, F * 2 * erro / p[2])
         pulso = 1 + 0.06 * math.sin(self.t * 8)
-        cor = (255, 230, 80) if self.a_carregar else (255, 255, 255)
+        bloqueio, tapado = self._linha_bloqueada(self.u, self.h)
+        if bloqueio is not None:
+            cor = (255, 70, 60)
+        else:
+            cor = (255, 230, 80) if self.a_carregar else (255, 255, 255)
         lado = int(2 * (r * pulso + 18))
         c = lado / 2
         camada = pygame.Surface((lado, lado), pygame.SRCALPHA)
@@ -555,6 +766,10 @@ class RematePOV:
                              (c + math.cos(ang) * (r + 14), c + math.sin(ang) * (r + 14)), 3)
         pygame.draw.circle(camada, (255, 60, 60, 255), (c, c), 4)
         s.blit(camada, (p[0] - c, p[1] - c))
+        if bloqueio is not None:
+            texto(s, "LINHA TAPADA", 13, (255, 90, 80), (p[0], p[1] - r - 26), sombra=True)
+        elif tapado:
+            texto(s, "GR TAPADO", 13, (120, 230, 140), (p[0], p[1] - r - 26), sombra=True)
 
     def _desenhar_interface(self, s):
         # Barra de força (à direita)
@@ -563,7 +778,7 @@ class RematePOV:
         cheio = round(barra.height * self.forca)
         for i in range(cheio):
             k = i / barra.height
-            cor = (int(60 + 195 * min(1, k * 1.6)), int(220 - 170 * max(0, k - 0.5) * 2), 60)
+            cor = (int(60 + 180 * k), int(110 - 50 * k), int(255 - 195 * k))      # azul -> vermelho
             pygame.draw.line(s, cor, (barra.left, barra.bottom - i), (barra.right - 1, barra.bottom - i))
         pygame.draw.rect(s, (220, 230, 250), barra, 2, border_radius=6)
         texto(s, "FORÇA", 14, (230, 236, 255), (barra.centerx, barra.bottom + 22))
@@ -585,6 +800,25 @@ class RematePOV:
             if k > 0:
                 pygame.draw.arc(s, cor, ret, math.pi / 2, math.pi / 2 + 2 * math.pi * k, 6)
             texto(s, f"{math.ceil(self.tempo_restante)}", 18, (255, 255, 255), ret.center)
+        # Velocidade: o jogador continua a patinar a 50 % enquanto prepara o remate
+        if self.vel_corrida > 5:
+            agora = math.hypot(*self.vel)
+            barra_v = pygame.Rect(WIDTH - 330, HEIGHT - 96, 300, 20)
+            texto(s, "VELOCIDADE", 13, (230, 236, 255), (barra_v.right, barra_v.top - 12), ancora="midright")
+            pygame.draw.rect(s, (10, 14, 28), barra_v.inflate(6, 6), border_radius=8)
+            cheio_v = round(barra_v.width * min(1.0, agora / max(1.0, self.vel_corrida)))
+            for i in range(cheio_v):
+                k = i / barra_v.width
+                pygame.draw.line(s, (int(60 + 180 * k), int(110 - 50 * k), int(255 - 195 * k)),
+                                 (barra_v.left + i, barra_v.top), (barra_v.left + i, barra_v.bottom - 1))
+            pygame.draw.rect(s, (220, 230, 250), barra_v, 2, border_radius=6)
+            pct = round(100 * agora / self.vel_corrida)
+            texto(s, f"Corrida: {kmh(self.vel_corrida):.0f} km/h  →  a rematar: {kmh(agora):.0f} km/h ({pct}%)",
+                  11, (220, 230, 250), (barra_v.right, barra_v.bottom + 12), ancora="midright", negrito=False)
+        if self.defensores and self.estado == "mirar":
+            n = sum(1 for d in self.defensores if (p := self._proj(d["x"], d["y"])) and p[2] < self.z_baliza - 2)
+            if n:
+                texto(s, f"Defesas à frente: {n}", 14, (255, 190, 120), (30, 80), ancora="midleft", negrito=False)
         if self.estado == "mirar":
             dica = ("Rato ou setas: apontar     Manter X ou o botão do rato: força (larga para rematar)"
                     "     ESC: cancelar")
@@ -596,6 +830,7 @@ class RematePOV:
     def _desenhar_resultado(self, s):
         r = self._decisao["resultado"]
         txt, cor = {"golo": ("GOLO!", (255, 220, 60)), "defesa": ("DEFESA!", (120, 255, 160)),
+                    "bloqueado": ("BLOQUEADO!", (255, 150, 70)),
                     "poste": ("POSTE!", (130, 200, 255)), "fora": ("FORA!", (255, 140, 120))}[r]
         t = self._res_t
         esc = (0.4 + 0.9 * t / 0.12) if t < 0.12 else 1.0 + 0.25 * math.exp(-(t - 0.12) * 10)
@@ -603,41 +838,66 @@ class RematePOV:
                                 cor, contorno=10)
         img = pygame.transform.rotozoom(img, -5, esc * 0.9)
         s.blit(img, img.get_rect(center=(WIDTH // 2, 190)))
-        if r != "golo":
-            vel_kmh = self._decisao["velocidade"] / PX_POR_METRO * 3.6
-            texto(s, f"Remate a {vel_kmh:.0f} km/h", 16, (230, 236, 255), (WIDTH // 2, 262), sombra=True)
+        if r == "bloqueado":
+            texto(s, f"{self._decisao['bloqueador'].nome} meteu-se à frente da bola", 16, (230, 236, 255),
+                  (WIDTH // 2, 262), sombra=True)
+        elif r != "golo":
+            vel_kmh = kmh(self._decisao["velocidade"])
+            extra = "  •  guarda-redes tapado" if self._decisao.get("tapado") else ""
+            texto(s, f"Remate a {vel_kmh:.0f} km/h{extra}", 16, (230, 236, 255), (WIDTH // 2, 262), sombra=True)
+
+    def _buffer(self, nome: str) -> pygame.Surface:
+        """Superfícies de ecrã inteiro reaproveitadas (criar uma nova em cada frame é lento)."""
+        if not hasattr(self, "_buffers"):
+            self._buffers = {}
+        if nome not in self._buffers:
+            self._buffers[nome] = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+        b = self._buffers[nome]
+        b.fill((0, 0, 0, 0))
+        return b
 
     def _preparar_cena(self):
         """Fundo, tabelas, campo e rede não mudam durante o remate: desenham-se uma vez."""
-        self._cena = pygame.Surface((WIDTH, HEIGHT))
+        if self._cena is None:
+            self._cena = pygame.Surface((WIDTH, HEIGHT))
         self._cena.blit(self._fundo, (0, 0))
         self._desenhar_tabelas(self._cena)
         self._desenhar_campo(self._cena)
         self._desenhar_baliza(self._cena, frente=False)
-        self._frente = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+        self._frente = self._buffer("frente")
         self._desenhar_baliza(self._frente, frente=True)
 
     def draw(self):
         s = self.screen
-        if self._cena is None:
+        # A cena fixa só é refeita quando a câmara anda (o jogador continua a patinar)
+        if self._cena is None or (self._pos_cena and math.dist(self._pos_cena, self.pos) > 1.5):
             self._preparar_cena()
+            self._pos_cena = tuple(self.pos)
         s.blit(self._cena, (0, 0))
         if self.estado == "resultado" and self._decisao["resultado"] == "golo":
             self._desenhar_ondulacao(s)
+        pos_bola = None if self.estado == "mirar" else self._pos_bola()
+        z_bola = 0.0
         bola_atras = False
-        pos_bola = None
-        if self.estado != "mirar":
-            pos_bola = self._pos_bola()
-            # Atrás da linha de golo, a bola fica por trás do guarda-redes e dos postes
+        if pos_bola:
+            z_bola = self._cam(pos_bola[0], pos_bola[1])[1]
+            if self.estado == "voo" and self._voo_t < 0.14:
+                z_bola = 0.0           # ainda a sair do stick: fica à frente de tudo
             bola_atras = (pos_bola[0] - self.gx) * self.fora_dir > 0
             if bola_atras:
                 self._desenhar_bola(s, pos_bola)
         self._desenhar_gr(s)
         s.blit(self._frente, (0, 0))
-        if self.estado == "mirar":
-            self._desenhar_bola(s, self.bola_ini)
-        elif not bola_atras:
+        # Defesas e bola por ordem de profundidade: a bola fica tapada por quem está mais perto
+        if pos_bola and not bola_atras:
+            self._desenhar_defensores(s, z_bola, 1e9)
             self._desenhar_bola(s, pos_bola)
+            self._desenhar_defensores(s, 0, z_bola)
+        else:
+            self._desenhar_defensores(s, 0, 1e9)
+        if self.estado == "mirar" and self.bola_vista:
+            vx, vy, vz = self.bola_vista
+            self._desenhar_bola_ecra(s, vx, vy, F * RAIO_BOLA / vz, vy)
         self._desenhar_stick(s)
         if self.estado == "mirar":
             self._desenhar_mira(s)

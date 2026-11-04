@@ -693,7 +693,9 @@ class Game:
             return
         self.remate_pov = RematePOV(self.screen, self.rink, j, self.gr_vermelho, self.dificuldade,
                                     limite_tempo=None if self.modo_teste else 5.0,
-                                    cor_linhas=self.rink.cor_linhas)
+                                    cor_linhas=self.rink.cor_linhas,
+                                    defensores=list(self.equipa_vermelha),
+                                    velocidade=(j.vel_x, j.vel_y))
 
     def _aplicar_remate(self, res):
         """Depois do remate na primeira pessoa, põe a bola no sítio certo do jogo 2D."""
@@ -704,16 +706,31 @@ class Game:
         gx, cy = self.rink.linha_golo_esq_x, self.rink.rect.centery
         r, u, v = res["resultado"], res["u"], res["velocidade"]
         lado = 1 if u >= 0 else -1
+        # O jogador continuou a patinar durante o remate: fica onde chegou, a 50 % da velocidade
+        j.pos_x, j.pos_y = res["pos"]
+        j.vel_x, j.vel_y = res["vel"]
+        j.rect.center = (round(j.pos_x), round(j.pos_y))
+        b.pos_x, b.pos_y = j.pos_x, j.pos_y
         j._comecar_acao("remate", 0.30)
         j.tem_bola = False
         b.libertar(pygame.math.Vector2(0, 0), dono_anterior=j)
         b.eventos.clear()                   # os sons já tocaram no ecrã do remate
         if self.modo_teste:
             self.teste["remates"] += 1
-            chave = {"golo": "golos", "defesa": "defesas"}.get(r, "fora")
+            chave = {"golo": "golos", "defesa": "defesas", "bloqueado": "defesas"}.get(r, "fora")
             self.teste[chave] += 1
             self._teste_espera = 1.6
-        if r == "golo":
+        if r == "bloqueado":
+            # A bola bate no defesa e ressalta para trás (para o lado de quem rematou)
+            dx_, dy_ = res["pos_bloqueio"]
+            vx, vy = j.pos_x - dx_, j.pos_y - dy_
+            n = math.hypot(vx, vy) or 1
+            b.pos_x, b.pos_y = dx_ + vx / n * 20, dy_ + vy / n * 20
+            b.vel.update(vx / n * v * 0.25 + random.uniform(-60, 60), vy / n * v * 0.25 + random.uniform(-60, 60))
+            sx, sy = self.rink.camera.projetar(b.pos_x, b.pos_y)
+            self._efeitos_bola("defesa", v, sx, sy)
+            self.efeitos.texto_pop("BLOQUEADO!", sx, sy - 60, (255, 150, 70), 30)
+        elif r == "golo":
             b.pos_x, b.pos_y = gx - 16, cy + max(-28, min(28, u))
             b.vel.update(-60, 0)
             self._golo("azul")

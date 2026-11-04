@@ -57,6 +57,9 @@ No Windows também se pode fazer duplo clique em `jogar.bat`.
 - **Remate na primeira pessoa**: a câmara passa para os olhos do jogador; apontas a qualquer ponto da baliza
   (também em altura) e escolhes a força — mais força é mais rápido mas menos preciso. O guarda-redes tem
   tempo de reação, mergulho e pode adivinhar o lado (`hockey_game/remate_pov.py`)
+  - O jogador continua a patinar a 50 % enquanto carrega o remate (barra de velocidade)
+  - Os defesas que estão entre ti e a baliza aparecem no ecrã e podem **bloquear** o remate
+    (a mira fica vermelha com "LINHA TAPADA"); se passarem perto, tapam a vista ao guarda-redes
 - **MODO TESTE** no menu principal: só tu contra o guarda-redes, para treinar remates (golos / remates no marcador)
 - **Animações de patinagem melhoradas**: o jogador vira-se para o lado para onde patina,
   inclina-se ao acelerar e para trás ao travar, balança a cada passada, tem sombra no chão
