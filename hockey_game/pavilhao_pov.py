@@ -64,8 +64,92 @@ def textura_placa(indice: int, w: int = 360, h: int = 100) -> pygame.Surface:
     return _cache[chave]
 
 
+CORES_CADEIRAS = [
+    ((36, 96, 206), 0.34),     # azul
+    ((44, 140, 222), 0.27),    # azul-claro
+    ((226, 230, 236), 0.32),   # branco
+    ((78, 168, 176), 0.055),   # verde-água
+    ((60, 64, 186), 0.01),     # anil
+    ((110, 64, 176), 0.005),   # roxo
+]
+
+
+def _cor_cadeira(rnd):
+    r = rnd.random()
+    for cor, p in CORES_CADEIRAS:
+        if r < p:
+            return cor
+        r -= p
+    return CORES_CADEIRAS[0][0]
+
+
+def _mais(cor, d):
+    return tuple(max(0, min(255, c + d)) for c in cor)
+
+
+def _cadeira(s, x, y_base, h, cor, Q):
+    """Cadeira de bancada vista de frente e um pouco de cima: encosto (concha) e assento."""
+    w = h * 1.0
+    encosto = pygame.Rect(0, 0, round(w * Q), round(h * 0.56 * Q))
+    encosto.midbottom = (round(x * Q), round((y_base - h * 0.16) * Q))
+    raio = round(w * 0.32 * Q)
+    pygame.draw.rect(s, _mais(cor, -70), encosto.move(round(Q * 1.5), round(Q * 2)), border_radius=raio)   # sombra
+    pygame.draw.rect(s, cor, encosto, border_top_left_radius=raio, border_top_right_radius=raio,
+                     border_bottom_left_radius=raio // 3, border_bottom_right_radius=raio // 3)
+    # Parte de baixo do encosto mais escura (curva da concha) e brilho em cima
+    pygame.draw.rect(s, _mais(cor, -28), (encosto.left, encosto.top + encosto.height * 0.62, encosto.width,
+                                          encosto.height * 0.38), border_bottom_left_radius=raio // 3,
+                     border_bottom_right_radius=raio // 3)
+    pygame.draw.rect(s, _mais(cor, 30), (encosto.left + encosto.width * 0.18, encosto.top + Q * 1.5,
+                                         encosto.width * 0.64, encosto.height * 0.16), border_radius=raio // 2)
+    # Assento (por baixo do encosto, um pouco mais largo e mais claro)
+    assento = pygame.Rect(0, 0, round(w * 1.02 * Q), round(h * 0.2 * Q))
+    assento.midtop = (encosto.centerx, encosto.bottom - round(Q))
+    pygame.draw.rect(s, _mais(cor, -45), assento.move(0, round(Q * 1.5)), border_radius=round(h * 0.08 * Q))
+    pygame.draw.rect(s, _mais(cor, 18), assento, border_radius=round(h * 0.08 * Q))
+
+
+def _adepto(s, x, y_base, h, rnd, cor_casa, Q, de_pe=False):
+    """Adepto sentado (ou de pé): pernas, tronco com a camisola, braços e cabeça."""
+    pele = rnd.choice([(232, 192, 158), (214, 168, 128), (180, 128, 90), (130, 88, 60), (240, 206, 176)])
+    cabelo = rnd.choice([(40, 28, 20), (66, 42, 24), (20, 20, 22), (120, 85, 50), (170, 140, 95)])
+    camisola = cor_casa if rnd.random() < 0.35 else rnd.choice(
+        [(190, 50, 46), (46, 150, 80), (60, 64, 74), (230, 230, 235), (150, 110, 70), (40, 90, 170)])
+    calcas = rnd.choice([(44, 56, 86), (36, 40, 50), (70, 80, 100)])
+    q = Q
+    if de_pe:
+        alt = h * 2.6
+        tronco = pygame.Rect(0, 0, round(alt * 0.3 * q), round(alt * 0.38 * q))
+        tronco.midbottom = (round(x * q), round((y_base - alt * 0.42) * q))
+        pygame.draw.rect(s, calcas, (tronco.left + tronco.width * 0.1, tronco.bottom, tronco.width * 0.8, alt * 0.42 * q))
+    else:
+        alt = h * 1.9
+        tronco = pygame.Rect(0, 0, round(alt * 0.36 * q), round(alt * 0.4 * q))
+        tronco.midbottom = (round(x * q), round((y_base - h * 0.24) * q))
+        # Pernas por cima do assento
+        pygame.draw.rect(s, calcas, (tronco.left + tronco.width * 0.05, tronco.bottom - q * 2, tronco.width * 0.9,
+                                     h * 0.28 * q), border_radius=round(q * 2))
+    pygame.draw.rect(s, camisola, tronco, border_top_left_radius=round(tronco.width * 0.35),
+                     border_top_right_radius=round(tronco.width * 0.35))
+    pygame.draw.rect(s, _mais(camisola, -35), (tronco.left, tronco.top + tronco.height * 0.55, tronco.width,
+                                               tronco.height * 0.45))
+    # Braços
+    for lado in (-1, 1):
+        bx = tronco.centerx + lado * tronco.width * 0.5
+        pygame.draw.line(s, _mais(camisola, -20), (bx, tronco.top + tronco.height * 0.2),
+                         (bx + lado * q, tronco.bottom - tronco.height * 0.1), max(1, round(tronco.width * 0.18)))
+    r = alt * 0.12 * q
+    cab = (tronco.centerx, tronco.top - r * 0.85)
+    pygame.draw.circle(s, pele, cab, r)
+    pygame.draw.circle(s, cabelo, (cab[0], cab[1] - r * 0.25), r * 1.02, draw_top_left=True, draw_top_right=True)
+
+
 def bancada(altura: int, cor_casa=(30, 80, 180), semente: int = 4) -> pygame.Surface:
-    """Parede, faixas, bancada com cadeiras e adeptos (sem o marcador). Fica em cache."""
+    """
+    Bancada como na imagem de referência: parede de cimento com faixas e pilares, corrimões
+    azul-escuros, filas de cadeiras «concha» azuis, brancas e verde-água em degraus de cimento,
+    escadas entre os blocos e poucos adeptos. Fica em cache.
+    """
     chave = ("bancada", altura, tuple(cor_casa), semente)
     if chave in _cache:
         return _cache[chave]
@@ -74,103 +158,90 @@ def bancada(altura: int, cor_casa=(30, 80, 180), semente: int = 4) -> pygame.Sur
     s = pygame.Surface((W, H))
     rnd = random.Random(semente)
 
-    # Parede de cima (escura) com pilares
-    for y in range(int(80 * Q)):
-        k = y / (80 * Q)
-        c = int(40 + 22 * k)
-        pygame.draw.line(s, (c, c + 3, c + 10), (0, y), (W, y))
-    for px in (0, 330, 950, 1280):
-        pygame.draw.rect(s, (86, 90, 100), ((px - 14) * Q, 0, 28 * Q, 96 * Q))
-        pygame.draw.rect(s, (110, 114, 124), ((px - 14) * Q, 0, 6 * Q, 96 * Q))
-    # Faixas dos patrocinadores na parede
-    for i, (x, w) in enumerate(((22, 210), (360, 150), (800, 140), (970, 200), (1180, 120))):
-        tex = textura_placa(i + 2, 300, 70)
-        s.blit(pygame.transform.smoothscale(tex, (w * Q, 40 * Q)), (x * Q, 14 * Q))
+    # Teto escuro com luzes
+    pygame.draw.rect(s, (32, 34, 40), (0, 0, W, 20 * Q))
+    for x in range(60, WIDTH, 160):
+        pygame.draw.rect(s, (235, 238, 245), ((x - 18) * Q, 6 * Q, 36 * Q, 6 * Q), border_radius=Q * 2)
+    # Parede de cima (cimento), com painéis mais escuros entre os pilares
+    for y in range(20 * Q, 118 * Q):
+        k = (y - 20 * Q) / (98 * Q)
+        c = int(112 + 26 * k)
+        pygame.draw.line(s, (c, c + 3, c + 9), (0, y), (W, y))
+    pilares = (0, 330, 950, 1280)
+    for a, b in zip(pilares, pilares[1:]):
+        pygame.draw.rect(s, (104, 108, 116), ((a + 24) * Q, 82 * Q, (b - a - 48) * Q, 34 * Q))
+    for px in pilares:
+        pygame.draw.rect(s, (148, 152, 160), ((px - 15) * Q, 20 * Q, 30 * Q, 100 * Q))
+        pygame.draw.rect(s, (120, 124, 132), ((px + 6) * Q, 20 * Q, 9 * Q, 100 * Q))
+    # Faixas dos patrocinadores
+    for i, (x, w) in enumerate(((24, 236), (360, 175), (812, 132), (980, 240), (1232, 110))):
+        tex = textura_placa(i + 2, 320, 80)
+        s.blit(pygame.transform.smoothscale(tex, (w * Q, 42 * Q)), (x * Q, 32 * Q))
+    # Rebordo do piso de cima e um adepto de pé atrás do corrimão (como na imagem)
+    pygame.draw.rect(s, (176, 178, 184), (0, 116 * Q, W, 7 * Q))
+    _adepto(s, 418, 117, 19, rnd, cor_casa, Q, de_pe=True)
+    _adepto(s, 1108, 117, 19, rnd, cor_casa, Q, de_pe=True)
 
-    # Varanda de cima com corrimão
-    y_var = 84
-    pygame.draw.rect(s, (160, 162, 168), (0, y_var * Q, W, 10 * Q))
-    pygame.draw.rect(s, (195, 197, 202), (0, y_var * Q, W, 2 * Q))
-    pygame.draw.line(s, (120, 124, 134), (0, (y_var - 16) * Q), (W, (y_var - 16) * Q), 2 * Q)
-    for x in range(10, WIDTH, 44):
-        pygame.draw.line(s, (120, 124, 134), (x * Q, (y_var - 16) * Q), (x * Q, y_var * Q), Q)
-    # Dois adeptos de pé na varanda
-    for x in (215, 1040):
-        _adepto(s, x * Q, (y_var - 2) * Q, 26 * Q, rnd, cor_casa, de_pe=True)
-
-    # Bancada: filas de cadeiras (as de baixo estão mais perto: um pouco maiores)
-    y = y_var + 10
+    # Filas de cadeiras (as da frente, em baixo, estão mais perto: maiores)
+    blocos = [(46, 596), (684, 1234)]
+    y = 128
     filas = []
     k = 0
-    while y < altura - 26:
-        h = 15 + k * 0.8
+    while True:
+        h = 23 + k * 1.8
+        if y + h > altura - 34:
+            break
         filas.append((y, h))
         y += h
         k += 1
-    escadas = [(615, 50), (20, 30), (1255, 30)]     # (x do centro, largura)
-    cores = [(38, 112, 214), (38, 112, 214), (38, 112, 214), (232, 236, 242), (232, 236, 242), (98, 168, 232)]
-    for y, h in filas:
-        # Degrau de cimento
-        pygame.draw.rect(s, (186, 188, 194), (0, (y + h * 0.62) * Q, W, (h * 0.38 + 1) * Q))
-        pygame.draw.line(s, (150, 152, 160), (0, (y + h * 0.62) * Q), (W, (y + h * 0.62) * Q), Q)
-        pygame.draw.rect(s, (168, 170, 176), (0, y * Q, W, h * 0.62 * Q))
-        passo = h * 1.12
-        x = passo / 2
-        while x < WIDTH:
-            if any(abs(x - ex) < ew / 2 + passo * 0.45 for ex, ew in escadas):
-                x += passo
-                continue
-            cor = rnd.choice(cores)
-            cad = pygame.Rect(0, 0, round(h * 0.86 * Q), round(h * 0.6 * Q))
-            cad.midbottom = (round(x * Q), round((y + h * 0.66) * Q))
-            pygame.draw.rect(s, tuple(max(0, c - 40) for c in cor), cad.move(0, Q), border_radius=int(h * 0.2 * Q))
-            pygame.draw.rect(s, cor, cad, border_radius=int(h * 0.2 * Q))
-            pygame.draw.rect(s, tuple(min(255, c + 25) for c in cor),
-                             (cad.left + Q, cad.top + Q, cad.width - 2 * Q, cad.height * 0.3), border_radius=int(h * 0.15 * Q))
-            if rnd.random() < 0.07:
-                _adepto(s, x * Q, (y + h * 0.62) * Q, h * 1.15 * Q, rnd, cor_casa)
-            x += passo
-    # Escadas: degraus mais claros e corrimão
-    for ex, ew in escadas:
-        for y, h in filas:
+    y_fim = y
+    # Degraus de cimento (toda a largura) e escadas
+    for y0, h in filas:
+        pygame.draw.rect(s, (150, 152, 158), (0, y0 * Q, W, h * 0.34 * Q))             # espelho do degrau
+        pygame.draw.rect(s, (184, 186, 192), (0, (y0 + h * 0.34) * Q, W, h * 0.66 * Q))  # piso do degrau
+        pygame.draw.line(s, (132, 134, 140), (0, y0 * Q), (W, y0 * Q), Q)
+    for ex0, ex1 in ((0, 46), (596, 684), (1234, 1280)):
+        for y0, h in filas:
             for j in range(2):
-                cor = (205, 207, 212) if j == 0 else (172, 174, 180)
-                pygame.draw.rect(s, cor, ((ex - ew / 2) * Q, (y + j * h / 2) * Q, ew * Q, (h / 2 + 1) * Q))
-        if ew > 40:
-            for lado in (-1, 1):
-                xx = (ex + lado * ew * 0.42) * Q
-                pygame.draw.line(s, (130, 134, 144), (xx, (y_var + 10) * Q), (xx, (altura - 30) * Q), 2 * Q)
-    # Muro da frente da bancada (por trás das placas)
-    pygame.draw.rect(s, (46, 50, 60), (0, (altura - 26) * Q, W, 26 * Q))
-    pygame.draw.line(s, (120, 124, 134), (0, (altura - 26) * Q), (W, (altura - 26) * Q), 2 * Q)
-    # Luz do pavilhão: o topo um pouco mais escuro
+                cor = (196, 198, 204) if j == 0 else (166, 168, 174)
+                pygame.draw.rect(s, cor, (ex0 * Q, (y0 + j * h / 2) * Q, (ex1 - ex0) * Q, (h / 2 + 1) * Q))
+                pygame.draw.line(s, (140, 142, 148), (ex0 * Q, (y0 + j * h / 2) * Q), (ex1 * Q, (y0 + j * h / 2) * Q), Q)
+    # Corrimão das escadas do meio (metal)
+    for xx in (606, 674):
+        pygame.draw.line(s, (196, 200, 210), (xx * Q, 124 * Q), (xx * Q, y_fim * Q), 2 * Q)
+        for y0, h in filas[::2]:
+            pygame.draw.line(s, (150, 154, 164), (xx * Q, y0 * Q), (xx * Q, (y0 + 6) * Q), 3 * Q)
+    # Molduras azul-escuras atrás da 1.ª fila de cada bloco
+    for a, b in blocos:
+        pygame.draw.line(s, (34, 44, 74), (a * Q, 124 * Q), (b * Q, 124 * Q), 3 * Q)
+        for xx in (a, b):
+            pygame.draw.line(s, (34, 44, 74), (xx * Q, 124 * Q), (xx * Q, (filas[1][0] + 4) * Q), 3 * Q)
+    # Cadeiras e adeptos
+    lugares = []
+    for y0, h in filas:
+        passo = h * 1.45
+        for a, b in blocos:
+            x = a + passo * 0.55
+            while x < b - passo * 0.4:
+                lugares.append((x, y0 + h, h))
+                x += passo
+    ocupados = set(rnd.sample(range(len(lugares)), k=min(8, len(lugares))))
+    for i, (x, yb, h) in enumerate(lugares):
+        _cadeira(s, x, yb, h, _cor_cadeira(rnd), Q)
+        if i in ocupados:
+            _adepto(s, x, yb, h, rnd, cor_casa, Q)
+    # Muro da frente da bancada (por trás das placas de publicidade)
+    pygame.draw.rect(s, (74, 78, 88), (0, y_fim * Q, W, H - y_fim * Q))
+    pygame.draw.rect(s, (196, 198, 204), (0, y_fim * Q, W, 3 * Q))
+    # Luz: em cima um pouco mais escuro
     sombra = pygame.Surface((W, H), pygame.SRCALPHA)
     for yy in range(0, H, 2):
-        a = int(70 * max(0.0, 1 - yy / (H * 0.7)))
-        pygame.draw.line(sombra, (6, 8, 16, a), (0, yy), (W, yy), 2)
+        a = int(55 * max(0.0, 1 - yy / (H * 0.6)))
+        pygame.draw.line(sombra, (8, 10, 18, a), (0, yy), (W, yy), 2)
     s.blit(sombra, (0, 0))
     final = pygame.transform.smoothscale(s, (WIDTH, altura))
     _cache[chave] = final
     return final
-
-
-def _adepto(s, x, y_base, alt, rnd, cor_casa, de_pe=False):
-    """Um adepto sentado (ou de pé): corpo com a camisola e cabeça."""
-    pele = rnd.choice([(232, 192, 158), (214, 168, 128), (180, 128, 90), (130, 88, 60), (240, 206, 176)])
-    cabelo = rnd.choice([(40, 28, 20), (66, 42, 24), (20, 20, 22), (120, 85, 50), (170, 140, 95)])
-    camisola = cor_casa if rnd.random() < 0.4 else rnd.choice(
-        [(200, 40, 40), (40, 140, 80), (230, 230, 235), (60, 60, 70), (230, 160, 40)])
-    larg = alt * (0.42 if de_pe else 0.55)
-    corpo_h = alt * (0.62 if de_pe else 0.48)
-    corpo = pygame.Rect(0, 0, round(larg), round(corpo_h))
-    corpo.midbottom = (round(x), round(y_base))
-    pygame.draw.rect(s, camisola, corpo, border_top_left_radius=int(larg * 0.4), border_top_right_radius=int(larg * 0.4))
-    if de_pe:
-        pygame.draw.rect(s, (50, 55, 70), (corpo.left + larg * 0.1, corpo.bottom, larg * 0.8, alt * 0.35))
-    r = alt * 0.15
-    cab = (corpo.centerx, corpo.top - r * 0.8)
-    pygame.draw.circle(s, pele, cab, r)
-    pygame.draw.circle(s, cabelo, (cab[0], cab[1] - r * 0.3), r, draw_top_left=True, draw_top_right=True)
 
 
 def marcador(s, centro_x: int, placar):

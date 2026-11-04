@@ -79,6 +79,47 @@ def esfera_preta(lado: int) -> pygame.Surface:
     return pygame.transform.smoothscale(sup, (lado, lado))
 
 
+def _e_madeira(c) -> bool:
+    """Píxel de madeira: opaco, claro e de cor quente (as letras e o contorno são pretos)."""
+    r, g, b, a = c
+    return a > 200 and (r + g + b) / 3 > 95 and r - b > 25
+
+
+def igualar_madeira(img, x_ref: int, largura: int = 16):
+    """
+    Deixa a madeira do stick toda com o mesmo tom (a parte de baixo, com o «SUPER», era mais
+    escura do que o cabo). O stick está na horizontal: divide-se em fatias verticais; em cada
+    fatia calcula-se a cor média da madeira e multiplica-se cada píxel para essa média ficar
+    igual à do cabo. Os veios mantêm-se (só muda a média) e as letras pretas não mudam.
+    """
+    w, h = img.get_size()
+    medias = []
+    for x0 in range(0, w, largura):
+        soma, n = [0, 0, 0], 0
+        for x in range(x0, min(w, x0 + largura)):
+            for y in range(h):
+                c = img.get_at((x, y))
+                if _e_madeira(c):
+                    soma[0] += c[0]; soma[1] += c[1]; soma[2] += c[2]; n += 1
+        medias.append([v / n for v in soma] if n > 30 else None)
+    # Cor de referência: o cabo, um pouco antes da zona da bola
+    ref = [m for m in medias[max(0, x_ref // largura - 12):x_ref // largura] if m]
+    alvo = [sum(m[i] for m in ref) / len(ref) for i in range(3)]
+    fatores = [None if m is None else [alvo[i] / max(1.0, m[i]) for i in range(3)] for m in medias]
+    # Suavizar os fatores entre fatias vizinhas (para não se verem "degraus" de cor)
+    suaves = []
+    for i in range(len(fatores)):
+        viz = [f for f in fatores[max(0, i - 2):i + 3] if f]
+        suaves.append([sum(f[k] for f in viz) / len(viz) for k in range(3)] if viz else [1, 1, 1])
+    for x in range(w):
+        f = suaves[min(len(suaves) - 1, x // largura)]
+        for y in range(h):
+            c = img.get_at((x, y))
+            if _e_madeira(c):
+                img.set_at((x, y), (min(255, int(c[0] * f[0])), min(255, int(c[1] * f[1])),
+                                    min(255, int(c[2] * f[2])), c[3]))
+
+
 def main(origem):
     pygame.display.init()
     pygame.display.set_mode((1, 1))
@@ -138,6 +179,8 @@ def main(origem):
         st_h.fill((0, 0, 0, 0), (x, round(my - 70), 1, 140))
         # Usa-se só a fatia da esquerda (madeira lisa; a da direita já tem a risca do logótipo)
         st_h.blit(fatia_e, (x, round(desvio * k)))
+    igualar_madeira(st_h, esq)
+
     # Rodar para a inclinação final do ecrã do remate e recortar
     final = pygame.transform.rotozoom(st_h, -INCLINACAO_FINAL, 1.0)
     final = final.subsurface(final.get_bounding_rect()).copy()
