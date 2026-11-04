@@ -84,6 +84,11 @@ RAIO_BOLA_ECRA = 40
 ANCORA_STICK = (128, 480)    # ponto da imagem stick_pov.png onde a bola assenta (em cima da pá)
 ESCALA_STICK = 1.0
 LADO_STICK = 1               # +1: o cabo está à direita da bola (o "puxar atrás" vai para a direita)
+# Animação da stickada: o stick roda à volta das mãos (no punho preto)
+PIVO_STICK = (790, 72)       # ponto da imagem stick_pov.png onde estão as mãos
+ANG_PREPARAR = 34            # graus que o stick vem para trás (para o jogador) com a força toda
+ANG_ACOMPANHAR = 26          # graus que o stick segue para a frente (para a baliza) depois do golpe
+DUR_GOLPE = (0.15, 0.08)     # duração da descida do stick até à bola: fraco -> forte (segundos)
 
 _PASTA_GR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "sprites_v2", "hd", "frames",
                          "guarda_redes")
@@ -197,7 +202,14 @@ class RematePOV:
         self.a_carregar = False
         self.forca = 0.0
         self._sentido_forca = 1
-        self.estado = "mirar"                     # mirar -> voo -> resultado
+        self.estado = "mirar"                     # mirar -> golpe -> voo -> resultado
+        self._ang = 0.0                           # ângulo do stick (graus): + = para trás (para o jogador), − = para a frente
+        self._ang_inicio = 0.0
+        self._golpe_t = 0.0
+        self._golpe_dur = 0.1
+        self._rasto = []                          # ângulos anteriores do stick (rasto de velocidade)
+        self._impacto_t = -1.0                    # tempo desde o contacto com a bola (clarão)
+        self._cache_stick = {}
         self._rato_ant = pygame.mouse.get_pos()
         self._decisao = None
         self._voo_t = 0.0
@@ -377,8 +389,41 @@ class RematePOV:
             self.forca = 0.0
             self._sentido_forca = 1
 
+    def _angulo_stick(self, dt: float) -> float:
+        """
+        Ângulo do stick em cada fase (o stick roda à volta das mãos):
+          • mirar  - parado balança um pouco; a carregar vem para trás (para o jogador) conforme a força;
+          • golpe  - varre cada vez mais depressa até à bola (aceleração: ângulo × (1 − k²));
+          • depois - segue para a frente, em direção à baliza (acompanhamento), e volta um pouco.
+        """
+        if self.estado == "mirar":
+            alvo = ANG_PREPARAR * self.forca if self.a_carregar else 1.2 * math.sin(self.t * 2.2)
+            return self._ang + (alvo - self._ang) * min(1.0, dt * 16)
+        if self.estado == "golpe":
+            k = min(1.0, self._golpe_t / self._golpe_dur)
+            return self._ang_inicio * (1 - k * k)
+        tt = self._voo_t if self.estado == "voo" else self._voo_dur + self._res_t
+        forca = self._decisao.get("forca", 0.5) if self._decisao else 0.5
+        ida = ANG_ACOMPANHAR * (0.45 + 0.55 * forca) * (1 - math.exp(-tt * 14))
+        volta = 0.4 * min(1.0, max(0.0, (tt - 0.45) / 0.6))
+        return -ida * (1 - volta)
+
     def update(self, dt: float):
         self.t += dt
+        self._ang = self._angulo_stick(dt)
+        self._rasto = ([self._ang] + self._rasto)[:4]
+        if self._impacto_t >= 0:
+            self._impacto_t += dt
+        if self.estado == "golpe":
+            self._golpe_t += dt
+            if self._golpe_t >= self._golpe_dur:
+                # Contacto com a bola: só agora a bola sai
+                self.estado = "voo"
+                self._voo_t = 0.0
+                self._impacto_t = 0.0
+                self._ang = 0.0
+                som.tocar("remate", 0.6 + 0.4 * self._decisao.get("forca", 0.5))
+            return
         if self.estado == "mirar":
             teclas = pygame.key.get_pressed()
             du = (teclas[pygame.K_RIGHT] or teclas[pygame.K_d]) - (teclas[pygame.K_LEFT] or teclas[pygame.K_a])
@@ -462,8 +507,11 @@ class RematePOV:
         # Tempo em que a bola passa do canto do ecrã (onde está desenhada) para o caminho real
         voo_real = self._voo_dur * self._decisao.get("t_bloqueio", 1.0)
         self._mistura = max(0.06, min(0.22, 0.8 * voo_real))
-        self.estado = "voo"
-        som.tocar("remate", 0.6 + 0.4 * self.forca)
+        # Primeiro o stick desce até à bola (mais força = desce mais depressa); a bola sai no contacto
+        self.estado = "golpe"
+        self._golpe_t = 0.0
+        self._golpe_dur = DUR_GOLPE[0] + (DUR_GOLPE[1] - DUR_GOLPE[0]) * self.forca
+        self._ang_inicio = max(self._ang, 6.0)      # mesmo sem carregar, há um pequeno balanço
 
     # ------------------------------------------------------------------ #
     # Desenho                                                            #
@@ -788,14 +836,65 @@ class RematePOV:
         img = _img_ui("stick_pov.png", ESCALA_STICK)
         if img is None:
             return self._desenhar_stick_desenhado(s)
-        if self.estado == "mirar":
-            k = self.forca if self.a_carregar else 0.0
-            dx, dy = LADO_STICK * 70 * k, -45 * k          # puxa o stick para trás e para cima
-        else:
-            k = min(1.0, (self._voo_t if self.estado == "voo" else 1.0) / 0.10)
-            dx, dy = -LADO_STICK * 70 * k, 20 * k          # acompanha o remate
-        ax, ay = ANCORA_STICK[0] * ESCALA_STICK, ANCORA_STICK[1] * ESCALA_STICK
-        s.blit(img, (BOLA_ECRA[0] - ax + dx, BOLA_ECRA[1] - ay + dy))
+        # As mãos (pivô) ficam no mesmo sítio do ecrã; o stick roda à volta delas
+        pivo_img = pygame.math.Vector2(PIVO_STICK[0] * ESCALA_STICK, PIVO_STICK[1] * ESCALA_STICK)
+        pivo_ecra = pygame.math.Vector2(BOLA_ECRA[0] - ANCORA_STICK[0] * ESCALA_STICK,
+                                        BOLA_ECRA[1] - ANCORA_STICK[1] * ESCALA_STICK) + pivo_img
+        centro_img = pygame.math.Vector2(img.get_width() / 2, img.get_height() / 2)
+        v = pivo_img - centro_img
+
+        def escala(ang):
+            """Para trás o stick vem para perto da câmara (maior); para a frente afasta-se (mais pequeno)."""
+            if ang >= 0:
+                return 1.0 + 0.14 * ang / ANG_PREPARAR
+            return 1.0 - 0.12 * (-ang) / ANG_ACOMPANHAR
+
+        def desenhar(ang, alpha=255):
+            # As imagens rodadas ficam guardadas: o rasto usa os ângulos dos frames anteriores,
+            # que já estão na cache (rodar uma imagem deste tamanho demora ~4,6 ms)
+            chave = round(ang * 4) / 4
+            if abs(chave) < 0.05:
+                rod, chave = img, 0.0
+            else:
+                rod = self._cache_stick.get(chave)
+                if rod is None:
+                    rod = pygame.transform.rotozoom(img, chave, escala(chave))
+                    if len(self._cache_stick) > 12:
+                        self._cache_stick.pop(next(iter(self._cache_stick)))
+                    self._cache_stick[chave] = rod
+            centro = pivo_ecra - (v * escala(chave)).rotate(-chave)
+            if alpha < 255:
+                rod.set_alpha(alpha)
+            s.blit(rod, rod.get_rect(center=(round(centro.x), round(centro.y))))
+            if alpha < 255:
+                rod.set_alpha(None)
+
+        # Rasto de velocidade: cópias meio transparentes dos ângulos anteriores (só quando anda depressa)
+        if self.estado in ("golpe", "voo") and len(self._rasto) > 1:
+            depressa = abs(self._rasto[0] - self._rasto[-1]) > 4
+            if depressa:
+                for i, ang in enumerate(reversed(self._rasto[1:])):
+                    desenhar(ang, 40 + 25 * i)
+        desenhar(self._ang)
+
+    def _desenhar_impacto(self, s):
+        """Clarão e raios no sítio onde o stick bateu na bola (dura 0,15 s)."""
+        t = self._impacto_t
+        if not 0 <= t < 0.15:
+            return
+        k = t / 0.15
+        x, y = BOLA_ECRA[0], BOLA_ECRA[1] - RAIO_BOLA_ECRA
+        r = 30 + 70 * k
+        camada = pygame.Surface((int(r * 2.6), int(r * 2.6)), pygame.SRCALPHA)
+        c = camada.get_width() / 2
+        a = int(230 * (1 - k))
+        pygame.draw.circle(camada, (255, 250, 220, a // 2), (c, c), r * 0.6)
+        pygame.draw.circle(camada, (255, 255, 255, a), (c, c), r, 4)
+        for i in range(10):
+            ang = i * math.pi / 5 + 0.3
+            pygame.draw.line(camada, (255, 230, 150, a), (c + math.cos(ang) * r * 0.7, c + math.sin(ang) * r * 0.7),
+                             (c + math.cos(ang) * r * 1.25, c + math.sin(ang) * r * 1.25), 4)
+        s.blit(camada, camada.get_rect(center=(x, y)))
 
     def _desenhar_stick_desenhado(self, s):
         """
@@ -1013,7 +1112,7 @@ class RematePOV:
         s.blit(self._cena, (0, 0))
         if self.estado == "resultado" and self._decisao["resultado"] == "golo":
             self._desenhar_ondulacao(s)
-        pos_bola = None if self.estado == "mirar" else self._pos_bola()
+        pos_bola = None if self.estado in ("mirar", "golpe") else self._pos_bola()
         z_bola = 0.0
         bola_atras = False
         if pos_bola:
@@ -1032,10 +1131,12 @@ class RematePOV:
             self._desenhar_defensores(s, 0, z_bola)
         else:
             self._desenhar_defensores(s, 0, 1e9)
-        self._desenhar_stick(s)
-        if self.estado == "mirar":
+        if self.estado in ("mirar", "golpe"):
+            # A bola parada fica no chão; o stick (por cima) desce até ela no golpe
             vx, vy, _vz = self.bola_vista
             self._desenhar_bola_ecra(s, vx, vy, RAIO_BOLA_ECRA, vy + 4)
+        self._desenhar_stick(s)
+        self._desenhar_impacto(s)
         if self.estado == "mirar":
             self._desenhar_mira(s)
         self._desenhar_interface(s)
