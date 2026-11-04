@@ -60,6 +60,7 @@ No Windows também se pode fazer duplo clique em `jogar.bat`.
   - O jogador continua a patinar a 50 % enquanto carrega o remate (barra de velocidade)
   - Os defesas que estão entre ti e a baliza aparecem no ecrã e podem **bloquear** o remate
     (a mira fica vermelha com "LINHA TAPADA"); se passarem perto, tapam a vista ao guarda-redes
+  - Os defesas têm sempre o tamanho certo em perspetiva (crescem ao aproximar-te, já não encolhem nem desaparecem), com sprites HD nas cores do clube; quem tapa a linha do remate fica com contorno vermelho e o nome por cima
 - **MODO TESTE** no menu principal: só tu contra o guarda-redes, para treinar remates (golos / remates no marcador)
 - **Animações de patinagem melhoradas**: o jogador vira-se para o lado para onde patina,
   inclina-se ao acelerar e para trás ao travar, balança a cada passada, tem sombra no chão

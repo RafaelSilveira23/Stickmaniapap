@@ -57,6 +57,7 @@ REDUCAO_VELOCIDADE = 0.5      # a carregar o remate, o jogador patina a 50 % da 
 RAIO_DEFESA = 14              # "cilindro" do corpo de um defesa (px do campo)
 ALTURA_DEFESA = 52            # altura do corpo de um defesa (px do campo)
 DIST_MINIMA = 95              # o jogador não avança para mais perto da baliza do que isto
+DIST_TRAVAR = 80              # trava a ~2,8 m de um defesa que esteja mesmo à frente
 
 
 def kmh(px_por_segundo: float) -> float:
@@ -99,6 +100,39 @@ def _img_gr(nome: str) -> pygame.Surface:
     if nome not in _cache:
         _cache[nome] = pygame.image.load(os.path.join(_PASTA_GR, nome + ".png")).convert_alpha()
     return _cache[nome]
+
+
+# Defesas no ecrã do remate: sprites HD (128 px) com as cores do clube, em vez da imagem
+# pequena (52 px) do jogo visto de cima, que ficava pixelizada quando era ampliada.
+_POSES_DEFESA = {"parado": ["parado_01", "parado_02", "parado_03", "parado_02"]}
+
+
+def _frames_defesa(jogador) -> dict:
+    """Frames HD de um defesa (pintados com o equipamento dele), já recortados pelo corpo."""
+    from animation import load_animation_from_names
+    from cores import recolorir_frames, escurecer_stick, chave_kit
+    kit = getattr(jogador, "kit", None)
+    equipa = getattr(jogador, "equipa", "vermelho")
+    chave = ("defesa_pov", chave_kit(kit) if kit else equipa)
+    if chave in _cache:
+        return _cache[chave]
+    pasta = os.path.join(os.path.dirname(_PASTA_GR), "azul" if kit else equipa)
+    poses = {}
+    for pose, nomes in _POSES_DEFESA.items():
+        frames = load_animation_from_names(pasta, nomes, alinhar=True).frames
+        frames = escurecer_stick(("defesa_pov", pose), frames)
+        if kit:
+            frames = recolorir_frames(("defesa_pov", pose), frames, kit)
+        poses[pose] = frames
+    # Recorte comum a todos os frames (para o boneco não "saltar" ao trocar de frame)
+    caixa = None
+    for frames in poses.values():
+        for f in frames:
+            r = f.get_bounding_rect()
+            caixa = r if caixa is None else caixa.union(r)
+    poses = {p: [f.subsurface(caixa).copy() for f in fs] for p, fs in poses.items()}
+    _cache[chave] = poses
+    return poses
 
 
 def _img_ui(nome: str, escala: float = 1.0):
@@ -192,8 +226,13 @@ class RematePOV:
         self.vel_corrida = math.hypot(*velocidade)
         self.vel = (velocidade[0] * REDUCAO_VELOCIDADE, velocidade[1] * REDUCAO_VELOCIDADE)
         # Fotografia dos adversários no momento em que se carregou em X
-        self.defensores = [{"jogador": d, "x": d.pos_x, "y": d.pos_y, "img": d.image.copy()}
-                           for d in defensores]
+        self.defensores = [{"jogador": d, "x": d.pos_x, "y": d.pos_y, "img": d.image.copy(),
+                            "fase": random.uniform(0, 4)} for d in defensores]
+        for d in self.defensores:
+            try:
+                d["poses"] = _frames_defesa(d["jogador"])
+            except (pygame.error, FileNotFoundError, ValueError):
+                d["poses"] = None              # sem os sprites HD usa-se a imagem do jogo
         self._definir_camera()
 
         self.u, self.h = 0.0, 12.0                # mira começa no meio, a meia altura baixa
@@ -347,7 +386,17 @@ class RematePOV:
         r = self.rink.rect
         perto = math.hypot(self.gx - nx, self.cy - ny) < DIST_MINIMA or nx < self.gx + 40
         fora = not (r.left + 20 < nx < r.right - 20 and r.top + 20 < ny < r.bottom - 20)
-        choca = any(math.hypot(d["x"] - nx, d["y"] - ny) < 26 for d in self.defensores)
+        # Trava antes de um defesa que esteja mesmo à frente (senão ficava encostado a ele e o
+        # defesa tapava o ecrã todo); os que estão ao lado só travam se houver contacto
+        fx, fy = self.gx - nx, self.cy - ny
+        n = math.hypot(fx, fy) or 1.0
+        fx, fy = fx / n, fy / n
+
+        def no_caminho(d):
+            vx, vy = d["x"] - nx, d["y"] - ny
+            frente, lado = vx * fx + vy * fy, abs(vx * fy - vy * fx)
+            return (0 < frente < DIST_TRAVAR and lado < 30) or math.hypot(vx, vy) < 30
+        choca = any(no_caminho(d) for d in self.defensores)
         if perto or fora or choca:
             self.vel = (0.0, 0.0)               # parou (baliza, tabela ou um defesa à frente)
             return
@@ -723,28 +772,115 @@ class RematePOV:
         centro = (p[0] + desvio, p[1] - alt * 0.36 - F * levanta / p[2])
         s.blit(img, img.get_rect(center=centro))
 
+    def _defesa_destacado(self):
+        """Índice do defesa que tapa a linha do remate (a apontar) ou que bloqueou a bola."""
+        if self.estado == "mirar":
+            bloqueio, _t = self._linha_bloqueada(self.u, self.h)
+            return bloqueio[0] if bloqueio else None
+        d = self._decisao
+        if d and d["resultado"] == "bloqueado":
+            for i, df in enumerate(self.defensores):
+                if df["jogador"] is d["bloqueador"]:
+                    return i
+        return None
+
+    def _blit_escalado(self, s, src, rect, alpha=255):
+        """
+        Desenha 'src' esticada até 'rect', mas só a parte que cabe no ecrã: um defesa mesmo à
+        frente pode ter milhares de píxeis de altura e não vale a pena ampliar o que não se vê.
+        """
+        vis = rect.clip(s.get_rect())
+        if vis.w <= 0 or vis.h <= 0:
+            return
+        kx, ky = src.get_width() / rect.w, src.get_height() / rect.h
+        x0, y0 = int((vis.x - rect.x) * kx), int((vis.y - rect.y) * ky)
+        x1 = min(src.get_width(), math.ceil((vis.right - rect.x) * kx))
+        y1 = min(src.get_height(), math.ceil((vis.bottom - rect.y) * ky))
+        if x1 <= x0 or y1 <= y0:
+            return
+        # Volta a converter o recorte para o ecrã (assim os píxeis ficam no sítio certo)
+        dx, dy = rect.x + x0 / kx, rect.y + y0 / ky
+        w, h = max(1, round((x1 - x0) / kx)), max(1, round((y1 - y0) / ky))
+        parte = pygame.transform.scale(src.subsurface((x0, y0, x1 - x0, y1 - y0)), (w, h))
+        if alpha < 255:
+            parte.set_alpha(alpha)
+        s.blit(parte, (round(dx), round(dy)))
+
+    def _silhueta(self, img, cor):
+        """Silhueta de uma cor só (para o contorno do defesa destacado)."""
+        chave = ("silhueta", id(img), cor)
+        if chave not in _cache:
+            _cache[chave] = pygame.mask.from_surface(img).to_surface(setcolor=(*cor, 255),
+                                                                     unsetcolor=(0, 0, 0, 0))
+        return _cache[chave]
+
     def _desenhar_defensores(self, s, perto_de: float, longe_de: float):
-        """Desenha os defesas com z entre perto_de e longe_de (do mais longe para o mais perto)."""
+        """
+        Desenha os defesas com z entre perto_de e longe_de (do mais longe para o mais perto).
+        O tamanho segue SEMPRE a perspetiva (F · altura / z): quanto mais perto, maior, sem limite.
+        Antes havia um limite de 380 px e os defesas desapareciam a menos de 40 px; ao avançar
+        deixavam de crescer enquanto o campo à volta crescia, e pareciam encolher.
+        """
         lista = []
-        for d in self.defensores:
-            p = self._proj(d["x"], d["y"], 0)
-            # Os que estão quase encostados ao jogador (z < 40) não se desenham (estão ao lado dele)
-            if not p or not (perto_de <= p[2] < longe_de) or p[2] < 40 or p[2] > self.z_baliza - 2:
+        for i, d in enumerate(self.defensores):
+            _x, z = self._cam(d["x"], d["y"])
+            if z < PERTO + 6 or not (perto_de <= z < longe_de) or z > self.z_baliza - 2:
                 continue
-            if not -300 < p[0] < WIDTH + 300:
-                continue
-            lista.append((p[2], p, d))
-        for _z, p, d in sorted(lista, key=lambda e: -e[0]):
+            lista.append((z, i, d))
+        destaque = self._defesa_destacado()
+        for z, i, d in sorted(lista, key=lambda e: -e[0]):
+            self._desenhar_defesa(s, d, z, i == destaque)
+
+    def _desenhar_defesa(self, s, d, z, destacado):
+        p = self._proj(d["x"], d["y"], 0)
+        if not p:
+            return
+        bloqueou = destacado and self.estado == "resultado"
+        if d["poses"]:
+            frames = d["poses"]["parado"]
+            img = frames[0] if bloqueou else frames[int((self.t + d["fase"]) * 3) % len(frames)]
+            if p[0] > CX:                       # os sprites olham para a direita: viram-se para o meio
+                chave = ("espelho", id(img))
+                if chave not in _cache:
+                    _cache[chave] = pygame.transform.flip(img, True, False)
+                img = _cache[chave]
+            alt = F * ALTURA_DEFESA / z
+        else:
             img = d["img"]
-            alt = min(380.0, F * 58 / p[2])      # muito perto ficavam enormes: limita-se o tamanho
-            larg = alt * img.get_width() / img.get_height()
-            img = pygame.transform.scale(img, (max(2, round(larg)), max(2, round(alt))))
-            caixa = img.get_bounding_rect()
-            desvio = img.get_width() / 2 - caixa.centerx
-            sombra = pygame.Surface((max(2, round(alt * 0.6)), max(2, round(alt * 0.14))), pygame.SRCALPHA)
-            pygame.draw.ellipse(sombra, (20, 10, 0, 100), sombra.get_rect())
-            s.blit(sombra, sombra.get_rect(center=(p[0], p[1])))
-            s.blit(img, img.get_rect(midtop=(p[0] + desvio, p[1] - alt * 0.9)))
+            alt = F * 58 / z
+        larg = alt * img.get_width() / img.get_height()
+        x = p[0]
+        if bloqueou:                            # a bola bate-lhe no corpo: abana
+            x += math.sin(self._res_t * 70) * alt * 0.025 * max(0.0, 1 - self._res_t / 0.4)
+        # Muito perto ficam meio transparentes, para não taparem a baliza toda
+        alpha = 255 if z >= 140 else int(110 + 145 * max(0.0, (z - 60) / 80))
+        # Sombra no chão
+        sombra = pygame.Surface((max(2, round(alt * 0.55)), max(2, round(alt * 0.12))), pygame.SRCALPHA)
+        pygame.draw.ellipse(sombra, (20, 10, 0, int(110 * alpha / 255)), sombra.get_rect())
+        s.blit(sombra, sombra.get_rect(center=(x, p[1])))
+        rect = pygame.Rect(round(x - larg / 2), round(p[1] - alt), max(1, round(larg)), max(1, round(alt)))
+        if destacado:
+            # Anel e contorno vermelhos: é este defesa que está no caminho da bola
+            anel = pygame.Rect(0, 0, max(4, round(alt * 0.7)), max(3, round(alt * 0.16)))
+            anel.center = (round(x), round(p[1]))
+            pygame.draw.ellipse(s, (255, 70, 60), anel, max(2, round(alt * 0.012)))
+            if alpha == 255:
+                # (meio transparente não leva contorno: as várias cópias somavam-se numa mancha)
+                sil = self._silhueta(img, (255, 70, 60))
+                e = max(2, min(6, round(alt * 0.012)))
+                for ox, oy in ((-e, 0), (e, 0), (0, -e), (0, e), (-e, -e), (e, -e), (-e, e), (e, e)):
+                    self._blit_escalado(s, sil, rect.move(ox, oy))
+        self._blit_escalado(s, img, rect, alpha)
+        if bloqueou and self._res_t < 0.3:
+            # A bola bate-lhe no corpo: pisca a branco
+            self._blit_escalado(s, self._silhueta(img, (255, 255, 255)), rect, int(200 * (1 - self._res_t / 0.3)))
+        if destacado and self.estado == "mirar":
+            nome = getattr(d["jogador"], "nome", "")
+            txt = fonte(14).render(nome, True, (255, 255, 255))
+            caixa = txt.get_rect(center=(round(x), max(112, rect.top - 18))).inflate(16, 8)
+            pygame.draw.rect(s, (200, 40, 40), caixa, border_radius=8)
+            pygame.draw.rect(s, (255, 200, 190), caixa, 1, border_radius=8)
+            s.blit(txt, txt.get_rect(center=caixa.center))
 
     def _pos_bola(self):
         """Posição da bola no mundo (x, y, h) durante a animação do remate."""
