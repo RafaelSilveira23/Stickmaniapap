@@ -39,6 +39,8 @@ from settings import WIDTH, HEIGHT
 from graficos import titulo_estilizado, luz
 from componentes import texto, fonte
 from sons import som
+from team import obter_info_equipa
+import pavilhao_pov
 
 F = 1000           # distância focal (quanto maior, mais "zoom")
 HORIZONTE = 330    # y do horizonte no ecrã
@@ -73,6 +75,14 @@ def erro_remate(forca: float, distancia: float, precisao: float = 1.0) -> float:
     """Desvio típico do remate (px): cresce muito com a força (força³) e com a distância."""
     return (1.0 + 6 * forca ** 3) * (distancia / 230) * precisao
 
+ALTURA_TABELA_POV = 30       # no ecrã do remate as tabelas/placas têm ~1 m (como num pavilhão a sério)
+_PASTA_UI = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "ui")
+# Stick e bola desenhados por cima de tudo (como nos jogos na primeira pessoa). Valores em píxeis do ecrã.
+BOLA_ECRA = (815, 568)       # ponto onde a bola parada toca na pá
+RAIO_BOLA_ECRA = 40
+ANCORA_STICK = (830, 585)    # ponto da imagem stick_pov.png onde a bola assenta (na pá)
+ESCALA_STICK = 1.08
+
 _PASTA_GR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "sprites_v2", "hd", "frames",
                          "guarda_redes")
 _cache = {}
@@ -82,6 +92,22 @@ def _img_gr(nome: str) -> pygame.Surface:
     if nome not in _cache:
         _cache[nome] = pygame.image.load(os.path.join(_PASTA_GR, nome + ".png")).convert_alpha()
     return _cache[nome]
+
+
+def _img_ui(nome: str, escala: float = 1.0):
+    """Imagens do ecrã do remate (stick e bola, feitas com ferramentas/preparar_stick.py)."""
+    chave = ("ui", nome, escala)
+    if chave not in _cache:
+        caminho = os.path.join(_PASTA_UI, nome)
+        if not os.path.exists(caminho):
+            _cache[chave] = None
+        else:
+            img = pygame.image.load(caminho).convert_alpha()
+            if escala != 1.0:
+                img = pygame.transform.smoothscale(img, (round(img.get_width() * escala),
+                                                         round(img.get_height() * escala)))
+            _cache[chave] = img
+    return _cache[chave]
 
 
 def decidir_remate(u_alvo: float, h_alvo: float, forca: float, distancia: float, u_gr: float,
@@ -135,7 +161,7 @@ class RematePOV:
     """
 
     def __init__(self, screen, rink, jogador, gr, dificuldade: str, limite_tempo: float | None = 5.0,
-                 cor_linhas=(30, 95, 210), defensores=(), velocidade=(0.0, 0.0)):
+                 cor_linhas=(30, 95, 210), defensores=(), velocidade=(0.0, 0.0), placar=None):
         self.screen = screen
         self.rink = rink
         self.jogador = jogador
@@ -144,6 +170,7 @@ class RematePOV:
         self.limite = limite_tempo
         self.tempo_restante = limite_tempo or 0.0
         self.cor_linhas = cor_linhas
+        self.placar = placar                  # (sigla casa, golos, sigla fora, golos, tempo) para o marcador
         self.terminado = False
         self.resultado = None
         self.t = 0.0
@@ -200,8 +227,7 @@ class RematePOV:
         #  • bola_vista - onde se DESENHA a bola parada com o stick (em baixo, à direita, como nos jogos
         #                 na primeira pessoa). No voo, a bola passa suavemente de uma para a outra.
         self.bola_ini = (self.pos[0] + self.fx * 20 + self.rx * 8, self.pos[1] + self.fy * 20 + self.ry * 8, 0.0)
-        self.bola_vista = self._proj(self.cx_mundo + self.fx * 154 + self.rx * 27,
-                                     self.cy_mundo + self.fy * 154 + self.ry * 27, 0.0)
+        self.bola_vista = (BOLA_ECRA[0], BOLA_ECRA[1], F * RAIO_BOLA / RAIO_BOLA_ECRA)
 
     # ------------------------------------------------------------------ #
     # Projeção                                                           #
@@ -424,6 +450,9 @@ class RematePOV:
         # A animação dura mais do que o voo real, para se perceber o que aconteceu
         self._voo_dur = max(0.3, min(0.75, self._decisao["tempo"] * 1.7))
         self._voo_t = 0.0
+        # Tempo em que a bola passa do canto do ecrã (onde está desenhada) para o caminho real
+        voo_real = self._voo_dur * self._decisao.get("t_bloqueio", 1.0)
+        self._mistura = max(0.06, min(0.22, 0.8 * voo_real))
         self.estado = "voo"
         som.tocar("remate", 0.6 + 0.4 * self.forca)
 
@@ -431,20 +460,15 @@ class RematePOV:
     # Desenho                                                            #
     # ------------------------------------------------------------------ #
     def _criar_fundo(self):
-        """Fundo: o público da bancada (do próprio pavilhão), ampliado e desfocado."""
+        """Fundo: a bancada do pavilhão (com cadeiras e adeptos), as faixas e o marcador eletrónico."""
         fundo = pygame.Surface((WIDTH, HEIGHT))
-        arena = self.rink._surf
-        topo = arena.subsurface((0, 0, WIDTH, 110)).copy()
-        topo = pygame.transform.smoothscale(topo, (WIDTH // 3, 120))
-        topo = pygame.transform.gaussian_blur(topo, 2)
-        fundo.blit(pygame.transform.smoothscale(topo, (WIDTH, HORIZONTE + 40)), (0, 0))
-        escuro = pygame.Surface((WIDTH, HORIZONTE + 40), pygame.SRCALPHA)
-        for y in range(HORIZONTE + 40):
-            pygame.draw.line(escuro, (6, 10, 24, int(150 - 90 * y / (HORIZONTE + 40))), (0, y), (WIDTH, y))
-        fundo.blit(escuro, (0, 0))
-        for x in (260, 640, 1020):                     # luzes do pavilhão
-            l = luz(420, 240, (255, 240, 210), 70)
-            fundo.blit(l, l.get_rect(center=(x, 40)), special_flags=pygame.BLEND_RGB_ADD)
+        fundo.fill((40, 44, 52))
+        cor_casa = obter_info_equipa(self.rink.equipa_casa).get("cor_primaria", (30, 80, 180))
+        fundo.blit(pavilhao_pov.bancada(HORIZONTE + 40, cor_casa), (0, 0))
+        pavilhao_pov.marcador(fundo, CX, self.placar)
+        for x in (300, 980):                           # luzes do teto
+            l = luz(460, 200, (255, 245, 225), 40)
+            fundo.blit(l, l.get_rect(center=(x, 30)), special_flags=pygame.BLEND_RGB_ADD)
         return fundo
 
     def _desenhar_campo(self, s):
@@ -452,7 +476,7 @@ class RematePOV:
         # Piso de madeira
         piso = self._poligono([(r.left, r.top, 0), (r.right, r.top, 0), (r.right, r.bottom, 0), (r.left, r.bottom, 0)])
         if len(piso) >= 3:
-            pygame.draw.polygon(s, (218, 170, 112), piso)
+            pygame.draw.polygon(s, (170, 98, 54), piso)          # madeira envernizada (mais escura)
             # Mais escuro ao longe (perto do horizonte)
             sombra = self._buffer("sombra")
             for y in range(HORIZONTE - 60, HORIZONTE + 160, 4):
@@ -464,7 +488,7 @@ class RematePOV:
             s.blit(sombra, (0, 0))
         # Tábuas: linhas paralelas às tabelas laterais
         for y in range(r.top + 16, r.bottom, 16):
-            self._segmento(s, (r.left, y, 0), (r.right, y, 0), (196, 150, 96), 0.4)
+            self._segmento(s, (r.left, y, 0), (r.right, y, 0), (138, 76, 40) if (y // 16) % 2 else (190, 116, 66), 0.4)
         # Linhas do campo: grande área, linha de golo e marcas de penálti
         a_y0, a_y1 = self.cy - 125, self.cy + 125
         gx, cor = self.gx, self.cor_linhas
@@ -479,7 +503,74 @@ class RematePOV:
                 pygame.draw.ellipse(s, cor, pygame.Rect(0, 0, max(2, F * rr * 2 / p[2]),
                                                          max(2, F * rr / p[2])).move(p[0] - F * rr / p[2], p[1] - F * rr / 2 / p[2]))
 
+    def _reflexos(self, s):
+        """O verniz reflete as luzes e as placas: manchas de luz somadas às cores do piso."""
+        p = self._proj(self.bx, self.cy, 0)
+        if not p:
+            return
+        yb = p[1]
+        faixa = luz(int(WIDTH * 1.1), 70, (255, 235, 210), 45)
+        s.blit(faixa, faixa.get_rect(center=(CX, yb + 18)), special_flags=pygame.BLEND_RGB_ADD)
+        for x in (300, 640, 980):
+            l = luz(150, 420, (255, 230, 200), 30, 1.2)
+            s.blit(l, l.get_rect(midtop=(x, yb + 4)), special_flags=pygame.BLEND_RGB_ADD)
+
+    def _placa(self, s, a, b, alt, tex):
+        """
+        Cola uma placa de publicidade numa tabela em perspetiva: a placa é cortada em tiras
+        verticais e cada tira é esticada para a altura certa naquele ponto da tabela.
+        """
+        pa, pb = self._proj(a[0], a[1], 0), self._proj(b[0], b[1], 0)
+        if not pa or not pb:
+            return
+        if pb[0] < pa[0]:                      # para o texto ficar sempre da esquerda para a direita
+            a, b, pa, pb = b, a, pb, pa
+        n = max(2, min(40, int((pb[0] - pa[0]) / 10)))
+        tw, th = tex.get_size()
+        for i in range(n):
+            t0, t1 = i / n, (i + 1) / n
+            p0 = (a[0] + (b[0] - a[0]) * t0, a[1] + (b[1] - a[1]) * t0)
+            p1 = (a[0] + (b[0] - a[0]) * t1, a[1] + (b[1] - a[1]) * t1)
+            b0, c0 = self._proj(p0[0], p0[1], 0), self._proj(p0[0], p0[1], alt)
+            b1, c1 = self._proj(p1[0], p1[1], 0), self._proj(p1[0], p1[1], alt)
+            if not (b0 and b1 and c0 and c1):
+                continue
+            x0, x1 = b0[0], b1[0]
+            topo, base = (c0[1] + c1[1]) / 2, (b0[1] + b1[1]) / 2
+            w, h = math.ceil(abs(x1 - x0)) + 1, math.ceil(base - topo)
+            if w < 1 or h < 1 or w > 600:
+                continue
+            u0, u1 = int(t0 * tw), max(int(t0 * tw) + 1, int(t1 * tw))
+            tira = tex.subsurface((u0, 0, min(u1, tw) - u0, th))
+            s.blit(pygame.transform.scale(tira, (w, h)), (min(x0, x1), topo))
+
     def _desenhar_tabelas(self, s):
+        """Tabelas com placas de publicidade (atrás da baliza e dos lados, perto dela)."""
+        r = self.rink.rect
+        alt = ALTURA_TABELA_POV
+        for quad in (
+            [(self.bx, r.top, 0), (self.bx, r.bottom, 0), (self.bx, r.bottom, alt), (self.bx, r.top, alt)],
+            [(self.bx, r.top, 0), (r.right, r.top, 0), (r.right, r.top, alt), (self.bx, r.top, alt)],
+            [(self.bx, r.bottom, 0), (r.right, r.bottom, 0), (r.right, r.bottom, alt), (self.bx, r.bottom, alt)],
+        ):
+            pts = self._poligono(quad)
+            if len(pts) >= 3:
+                pygame.draw.polygon(s, (226, 230, 238), pts)
+        seg = (r.bottom - r.top) / 4
+        for i in range(4):                                         # atrás da baliza
+            self._placa(s, (self.bx, r.top + i * seg), (self.bx, r.top + (i + 1) * seg), alt,
+                        pavilhao_pov.textura_placa(i))
+        for i in range(4):                                         # nos lados, perto da baliza
+            x0 = self.bx + i * 130
+            self._placa(s, (x0, r.top), (x0 + 130, r.top), alt, pavilhao_pov.textura_placa(i + 4))
+            self._placa(s, (x0, r.bottom), (x0 + 130, r.bottom), alt, pavilhao_pov.textura_placa(i + 2))
+        # Corrimão na cor da equipa da casa e rodapé
+        for p1, p2 in (((self.bx, r.top), (self.bx, r.bottom)), ((self.bx, r.top), (r.right, r.top)),
+                       ((self.bx, r.bottom), (r.right, r.bottom))):
+            self._segmento(s, (*p1, alt), (*p2, alt), self.cor_linhas, 2.0, 2)
+            self._segmento(s, (*p1, 0), (*p2, 0), (40, 30, 24), 1.0, 1)
+
+    def _desenhar_tabelas_simples(self, s):
         r = self.rink.rect
         alt = 13
         # Tabela atrás da baliza e tabelas dos lados
@@ -643,7 +734,7 @@ class RematePOV:
             return None
         x, y, r, ys = p[0], p[1], max(2, F * RAIO_BOLA / p[2]), chao[1]
         if self.estado == "voo" and self.bola_vista:
-            k = min(1.0, self._voo_t / 0.14)
+            k = min(1.0, self._voo_t / getattr(self, "_mistura", 0.14))
             k = k * k * (3 - 2 * k)
             vx, vy, vz = self.bola_vista
             vr = F * RAIO_BOLA / vz
@@ -660,6 +751,14 @@ class RematePOV:
         sombra = pygame.Surface((round(r * 2.4), round(r * 0.9)), pygame.SRCALPHA)
         pygame.draw.ellipse(sombra, (20, 10, 0, 100), sombra.get_rect())
         s.blit(sombra, sombra.get_rect(center=(x, y_sombra)))
+        img = _img_ui("bola_pov.png")
+        if img is not None:
+            lado = max(2, round(2 * r))
+            chave = ("bola", lado)
+            if chave not in _cache:
+                _cache[chave] = pygame.transform.smoothscale(img, (lado, lado))
+            s.blit(_cache[chave], _cache[chave].get_rect(center=(x, y - r)))
+            return
         # Bola preta de hóquei em patins, com um reflexo de luz
         pygame.draw.circle(s, (0, 0, 0), (p[0], p[1] - r), r + max(1, r * 0.1))
         pygame.draw.circle(s, (28, 28, 32), (p[0], p[1] - r), r)
@@ -675,6 +774,20 @@ class RematePOV:
         return self._cache_texto[chave]
 
     def _desenhar_stick(self, s):
+        """Stick «SUPER / AZEMAD.» (imagem): puxa atrás ao carregar e vai à frente no remate."""
+        img = _img_ui("stick_pov.png", ESCALA_STICK)
+        if img is None:
+            return self._desenhar_stick_desenhado(s)
+        if self.estado == "mirar":
+            k = self.forca if self.a_carregar else 0.0
+            dx, dy = -70 * k, -40 * k
+        else:
+            k = min(1.0, (self._voo_t if self.estado == "voo" else 1.0) / 0.10)
+            dx, dy = 60 * k, 26 * k
+        ax, ay = ANCORA_STICK[0] * ESCALA_STICK, ANCORA_STICK[1] * ESCALA_STICK
+        s.blit(img, (BOLA_ECRA[0] - ax + dx, BOLA_ECRA[1] - ay + dy))
+
+    def _desenhar_stick_desenhado(self, s):
         """
         Stick em primeira pessoa (modelo «SUPER» / «AZEMAD.»): o cabo vem do canto de cima à esquerda
         e a pá curva fica por baixo da bola. Ao carregar puxa para trás; no remate vai à frente.
@@ -773,18 +886,31 @@ class RematePOV:
 
     def _desenhar_interface(self, s):
         # Barra de força (à direita)
-        barra = pygame.Rect(WIDTH - 90, 210, 36, 300)
-        pygame.draw.rect(s, (10, 14, 28), barra.inflate(8, 8), border_radius=10)
+        barra = pygame.Rect(WIDTH - 92, 200, 40, 340)
+        pygame.draw.rect(s, (14, 16, 26), barra.inflate(10, 10), border_radius=14)
         cheio = round(barra.height * self.forca)
-        for i in range(cheio):
+        for i in range(barra.height):
             k = i / barra.height
-            cor = (int(60 + 180 * k), int(110 - 50 * k), int(255 - 195 * k))      # azul -> vermelho
-            pygame.draw.line(s, cor, (barra.left, barra.bottom - i), (barra.right - 1, barra.bottom - i))
-        pygame.draw.rect(s, (220, 230, 250), barra, 2, border_radius=6)
+            cor = (int(50 + 190 * k), int(110 - 60 * k), int(250 - 190 * k))       # azul (baixo) -> vermelho (cima)
+            if i > cheio:
+                cor = tuple(int(c * 0.35) for c in cor)                             # parte ainda vazia: escurecida
+            pygame.draw.line(s, cor, (barra.left + 3, barra.bottom - i), (barra.right - 4, barra.bottom - i))
+        pygame.draw.rect(s, (235, 240, 250), barra, 3, border_radius=10)
+        if self.forca > 0:
+            yk = barra.bottom - cheio
+            pygame.draw.line(s, (255, 255, 255), (barra.left - 6, yk), (barra.right + 5, yk), 3)
         texto(s, "FORÇA", 14, (230, 236, 255), (barra.centerx, barra.bottom + 22))
-        texto(s, f"{round(self.forca * 100)}%", 14, (255, 220, 80), (barra.centerx, barra.top - 18))
-        # Informação em cima
+        pct = pygame.Rect(0, 0, 58, 24)
+        pct.center = (barra.centerx, barra.top - 20)
+        pygame.draw.rect(s, (14, 16, 26), pct, border_radius=8)
+        texto(s, f"{round(self.forca * 100)}%", 15, (255, 255, 255), pct.center)
+        # Informação em cima (em painéis escuros, para se ler por cima das faixas do pavilhão)
         dist_m = self.distancia / PX_POR_METRO
+        for caixa in (pygame.Rect(14, 12, 360, 82 if self.defensores else 60), pygame.Rect(WIDTH - 334, 12, 320, 36)):
+            painel_hud = pygame.Surface(caixa.size, pygame.SRCALPHA)
+            pygame.draw.rect(painel_hud, (8, 12, 26, 215), painel_hud.get_rect(), border_radius=10)
+            pygame.draw.rect(painel_hud, (90, 120, 180, 255), painel_hud.get_rect(), 1, border_radius=10)
+            s.blit(painel_hud, caixa)
         texto(s, f"REMATE  •  {self.jogador.nome}", 20, (255, 255, 255), (30, 30), ancora="midleft", sombra=True)
         texto(s, f"Distância à baliza: {dist_m:.1f} m", 14, (200, 215, 245), (30, 56), ancora="midleft",
               negrito=False)
@@ -794,7 +920,7 @@ class RematePOV:
         if self.limite and self.estado == "mirar":
             k = max(0.0, self.tempo_restante / self.limite)
             ret = pygame.Rect(0, 0, 54, 54)
-            ret.center = (WIDTH // 2, 44)
+            ret.center = (WIDTH - 72, 130)                  # (ao centro, em cima, está o marcador do pavilhão)
             pygame.draw.circle(s, (10, 14, 28), ret.center, 30)
             cor = (90, 220, 120) if k > 0.4 else (240, 80, 70)
             if k > 0:
@@ -861,8 +987,9 @@ class RematePOV:
         if self._cena is None:
             self._cena = pygame.Surface((WIDTH, HEIGHT))
         self._cena.blit(self._fundo, (0, 0))
-        self._desenhar_tabelas(self._cena)
         self._desenhar_campo(self._cena)
+        self._reflexos(self._cena)
+        self._desenhar_tabelas(self._cena)
         self._desenhar_baliza(self._cena, frente=False)
         self._frente = self._buffer("frente")
         self._desenhar_baliza(self._frente, frente=True)
@@ -881,7 +1008,7 @@ class RematePOV:
         bola_atras = False
         if pos_bola:
             z_bola = self._cam(pos_bola[0], pos_bola[1])[1]
-            if self.estado == "voo" and self._voo_t < 0.14:
+            if self.estado == "voo" and self._voo_t < getattr(self, "_mistura", 0.14):
                 z_bola = 0.0           # ainda a sair do stick: fica à frente de tudo
             bola_atras = (pos_bola[0] - self.gx) * self.fora_dir > 0
             if bola_atras:
@@ -895,10 +1022,10 @@ class RematePOV:
             self._desenhar_defensores(s, 0, z_bola)
         else:
             self._desenhar_defensores(s, 0, 1e9)
-        if self.estado == "mirar" and self.bola_vista:
-            vx, vy, vz = self.bola_vista
-            self._desenhar_bola_ecra(s, vx, vy, F * RAIO_BOLA / vz, vy)
         self._desenhar_stick(s)
+        if self.estado == "mirar":
+            vx, vy, _vz = self.bola_vista
+            self._desenhar_bola_ecra(s, vx, vy, RAIO_BOLA_ECRA, vy + 4)
         if self.estado == "mirar":
             self._desenhar_mira(s)
         self._desenhar_interface(s)

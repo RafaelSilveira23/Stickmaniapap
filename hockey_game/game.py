@@ -695,7 +695,17 @@ class Game:
                                     limite_tempo=None if self.modo_teste else 5.0,
                                     cor_linhas=self.rink.cor_linhas,
                                     defensores=list(self.equipa_vermelha),
-                                    velocidade=(j.vel_x, j.vel_y))
+                                    velocidade=(j.vel_x, j.vel_y), placar=self._placar_pov())
+
+    def _placar_pov(self):
+        """Resultado e tempo para o marcador eletrónico do pavilhão (no ecrã do remate)."""
+        if self.modo_teste:
+            tempo = "TESTE"
+        else:
+            m, sg = divmod(max(0, int(self.tempo_restante)), 60)
+            tempo = f"{m:02d}:{sg:02d}"
+        return (obter_info_equipa(self.equipa_casa_id)["sigla"], self.golos_azul,
+                obter_info_equipa(self.equipa_fora_id)["sigla"], self.golos_vermelho, tempo)
 
     def _aplicar_remate(self, res):
         """Depois do remate na primeira pessoa, põe a bola no sítio certo do jogo 2D."""
