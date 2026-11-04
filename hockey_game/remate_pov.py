@@ -78,10 +78,12 @@ def erro_remate(forca: float, distancia: float, precisao: float = 1.0) -> float:
 ALTURA_TABELA_POV = 30       # no ecrã do remate as tabelas/placas têm ~1 m (como num pavilhão a sério)
 _PASTA_UI = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "ui")
 # Stick e bola desenhados por cima de tudo (como nos jogos na primeira pessoa). Valores em píxeis do ecrã.
-BOLA_ECRA = (815, 568)       # ponto onde a bola parada toca na pá
+# O stick (sprite «SUPER / AZEMAD.») vem de cima à direita e a pá fica em baixo à esquerda.
+BOLA_ECRA = (470, 592)       # ponto onde a bola parada toca na pá
 RAIO_BOLA_ECRA = 40
-ANCORA_STICK = (830, 585)    # ponto da imagem stick_pov.png onde a bola assenta (na pá)
-ESCALA_STICK = 1.08
+ANCORA_STICK = (128, 480)    # ponto da imagem stick_pov.png onde a bola assenta (em cima da pá)
+ESCALA_STICK = 1.0
+LADO_STICK = 1               # +1: o cabo está à direita da bola (o "puxar atrás" vai para a direita)
 
 _PASTA_GR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "sprites_v2", "hd", "frames",
                          "guarda_redes")
@@ -226,8 +228,14 @@ class RematePOV:
         #                 e que se testa se algum defesa está no caminho;
         #  • bola_vista - onde se DESENHA a bola parada com o stick (em baixo, à direita, como nos jogos
         #                 na primeira pessoa). No voo, a bola passa suavemente de uma para a outra.
-        self.bola_ini = (self.pos[0] + self.fx * 20 + self.rx * 8, self.pos[1] + self.fy * 20 + self.ry * 8, 0.0)
+        self.bola_ini = (self.pos[0] + self.fx * 20, self.pos[1] + self.fy * 20, 0.0)
         self.bola_vista = (BOLA_ECRA[0], BOLA_ECRA[1], F * RAIO_BOLA / RAIO_BOLA_ECRA)
+        # Ponto do chão que está por baixo da bola desenhada (projeção ao contrário): é daqui que a
+        # animação do remate parte, para a bola sair da pá sem saltos nem crescer
+        z = F * OLHOS / max(1.0, BOLA_ECRA[1] - HORIZONTE)
+        xc = (BOLA_ECRA[0] - CX) * z / F
+        self.bola_anim = (self.cx_mundo + self.fx * z + self.rx * xc,
+                          self.cy_mundo + self.fy * z + self.ry * xc, 0.0)
 
     # ------------------------------------------------------------------ #
     # Projeção                                                           #
@@ -439,6 +447,7 @@ class RematePOV:
         self._decisao["vel"] = self.vel
         self._decisao["bola_ini"] = self.bola_ini
         self._decisao["bola_vista"] = self.bola_vista
+        self._decisao["bola_anim"] = self.bola_anim
         # A linha REAL do remate (já com o erro) pode bater num defesa
         bloqueio, _t = self._linha_bloqueada(self._decisao["u"], self._decisao["h"])
         if bloqueio is not None:
@@ -692,10 +701,11 @@ class RematePOV:
     def _pos_bola(self):
         """Posição da bola no mundo (x, y, h) durante a animação do remate."""
         d = self._decisao
-        bx0, by0, bh0 = d["bola_ini"]
+        bx0, by0, bh0 = d["bola_anim"]
         if d["resultado"] == "bloqueado":
             t = d["t_bloqueio"]
-            cx, cy_, ch = bx0 + (self.gx - bx0) * t, by0 + (self.cy + d["u"] - by0) * t, d["h"] * t
+            rx0, ry0, _rh = d["bola_ini"]          # o ponto do bloqueio é o da linha real
+            cx, cy_, ch = rx0 + (self.gx - rx0) * t, ry0 + (self.cy + d["u"] - ry0) * t, d["h"] * t
             if self.estado == "voo":
                 k = min(1.0, self._voo_t / max(0.12, self._voo_dur * t))
                 return bx0 + (cx - bx0) * k, by0 + (cy_ - by0) * k, ch * k
@@ -780,10 +790,10 @@ class RematePOV:
             return self._desenhar_stick_desenhado(s)
         if self.estado == "mirar":
             k = self.forca if self.a_carregar else 0.0
-            dx, dy = -70 * k, -40 * k
+            dx, dy = LADO_STICK * 70 * k, -45 * k          # puxa o stick para trás e para cima
         else:
             k = min(1.0, (self._voo_t if self.estado == "voo" else 1.0) / 0.10)
-            dx, dy = 60 * k, 26 * k
+            dx, dy = -LADO_STICK * 70 * k, 20 * k          # acompanha o remate
         ax, ay = ANCORA_STICK[0] * ESCALA_STICK, ANCORA_STICK[1] * ESCALA_STICK
         s.blit(img, (BOLA_ECRA[0] - ax + dx, BOLA_ECRA[1] - ay + dy))
 
@@ -920,7 +930,7 @@ class RematePOV:
         if self.limite and self.estado == "mirar":
             k = max(0.0, self.tempo_restante / self.limite)
             ret = pygame.Rect(0, 0, 54, 54)
-            ret.center = (WIDTH - 72, 130)                  # (ao centro, em cima, está o marcador do pavilhão)
+            ret.center = (52, 136)                          # (ao centro está o marcador e à direita o punho do stick)
             pygame.draw.circle(s, (10, 14, 28), ret.center, 30)
             cor = (90, 220, 120) if k > 0.4 else (240, 80, 70)
             if k > 0:
