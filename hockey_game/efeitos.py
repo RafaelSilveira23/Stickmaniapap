@@ -16,7 +16,7 @@ import math
 import random
 
 import pygame
-
+import fontes
 from settings import WIDTH, HEIGHT
 from graficos import titulo_estilizado, luz
 
@@ -25,7 +25,7 @@ COR_CONTORNO = (18, 14, 30)
 
 def _fonte_bd(tamanho: int) -> pygame.font.Font:
     """Fonte grossa para os textos de banda desenhada."""
-    return pygame.font.SysFont("Arial Black", tamanho)
+    return fontes.SysFont("Arial Black", tamanho)
 
 
 _cache_fontes = {}

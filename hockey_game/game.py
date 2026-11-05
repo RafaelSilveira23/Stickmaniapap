@@ -4,6 +4,7 @@ import json
 import math
 import os
 import pygame
+import fontes
 from settings import *
 from rink import Rink
 from player import Player
@@ -57,9 +58,9 @@ class Game:
         pygame.display.set_caption(TITLE)
         self.clock = pygame.time.Clock()
 
-        self.font_num = pygame.font.SysFont("Arial", 12, bold=True)
-        self.font_big = pygame.font.SysFont("Arial", 44, bold=True)
-        self.font_med = pygame.font.SysFont("Arial", 26, bold=True)
+        self.font_num = fontes.SysFont("Arial", 12, bold=True)
+        self.font_big = fontes.SysFont("Arial", 44, bold=True)
+        self.font_med = fontes.SysFont("Arial", 26, bold=True)
 
         self.equipa_casa_id = "fc_porto"
         self.equipa_fora_id = "riba_dave"
@@ -2076,12 +2077,12 @@ class Game:
         pygame.draw.rect(screen, (200, 200, 200), (bar_x, bar_y, bar_w, bar_h), 1, border_radius=6)
 
         # Texto "FORÇA"
-        f_txt = pygame.font.SysFont("Arial", 11, bold=True)
+        f_txt = fontes.SysFont("Arial", 11, bold=True)
         pct = int(self._mira_forca * 100)
         t = f_txt.render(f"FORÇA  {pct}%", True, (255, 255, 255))
         screen.blit(t, (bar_x + bar_w // 2 - t.get_width() // 2, bar_y - 18))
 
         # ── 4. Instrução ──────────────────────────────────────────────────
-        fi = pygame.font.SysFont("Arial", 13, bold=True)
+        fi = fontes.SysFont("Arial", 13, bold=True)
         ti = fi.render("[X] ou Clique para rematar  •  [ESC] para cancelar", True, (220, 220, 100))
         screen.blit(ti, (WIDTH // 2 - ti.get_width() // 2, HEIGHT - 30))

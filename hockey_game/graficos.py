@@ -14,6 +14,8 @@ _cache = {}
 
 def _guardar(chave, criar):
     if chave not in _cache:
+        if len(_cache) > 800:          # nunca cresce sem limite (as cores animadas criavam imagens novas)
+            _cache.clear()
         _cache[chave] = criar()
     return _cache[chave]
 

@@ -11,7 +11,10 @@ pip install -r hockey_game/requirements.txt
 python main.py
 ```
 
-No Windows também se pode fazer duplo clique em `jogar.bat`.
+No Windows basta fazer duplo clique em `jogar.vbs`: o jogo abre **sem a janela preta da consola**.
+Se faltar o Python ou o pygame-ce, abre o `jogar_com_consola.bat`, que mostra o que se passa e instala o pygame-ce
+(também se pode abrir esse ficheiro diretamente para ver as mensagens do jogo). Se o jogo fechar com um erro,
+aparece uma janela com a mensagem, que também fica gravada em `hockey_game/saves/erro.txt`.
 
 ## Controlos
 
@@ -119,6 +122,9 @@ No Windows também se pode fazer duplo clique em `jogar.bat`.
 | `hockey_game/baliza.py` | Desenho das balizas (camada de fundo e da frente) |
 | `hockey_game/animation.py` | Carregamento de animações (redução suave e alinhamento pelos patins) |
 | `hockey_game/ui.py` | HUD (marcador, mini-mapa, cartão do jogador) |
+| `hockey_game/fontes.py` | Fontes do sistema com cache (cada fonte é criada uma só vez) |
+| `jogar.vbs` / `jogar_com_consola.bat` | Arrancar o jogo sem consola / com consola (e instalar o pygame-ce) |
+| `sprites_v2/` | Sprites usados pelo jogo (jogadores, guarda-redes, bola e público) |
 
 Para mudar as cores de uma equipa, edita `cor_primaria`, `cor_secundaria` e `padrao` (`"liso"` ou `"riscas"`) em `hockey_game/team.py`.
 Para mudar os jogadores, edita `PLANTEIS` no mesmo ficheiro (guarda-redes + 4 jogadores de campo, pela ordem avançado, médio, médio, defesa).

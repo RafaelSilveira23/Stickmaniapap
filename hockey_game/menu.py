@@ -13,7 +13,7 @@ Quem decide o que fazer com a ação é a classe Game (game.py).
 import math
 import random
 import pygame
-
+import fontes
 from settings import WIDTH, HEIGHT
 from team import EQUIPAS_LISTA, obter_info_equipa, carregar_logo_equipa
 from ai import DIFICULDADES
@@ -57,8 +57,10 @@ class BotaoMenu:
         self.k += (alvo - self.k) * min(1.0, dt * 12)
 
     def draw(self, surf, _mpos=None, focado: bool = False):
-        k = self.k
-        r = self.rect.move(round(8 * k), 0)
+        # As cores usam o foco arredondado a 5 %: assim o fundo e o ícone ficam em cache
+        # (antes o gradiente do fundo era redesenhado linha a linha em todos os frames)
+        k = round(self.k * 20) / 20
+        r = self.rect.move(round(8 * self.k), 0)
         raio = 16
 
         # Halo de luz quando tem o foco
@@ -67,25 +69,7 @@ class BotaoMenu:
             halo.set_alpha(int(255 * k))
             surf.blit(halo, (r.x - 22, r.y - 22))
 
-        # Sombra
-        sombra = pygame.Surface(r.size, pygame.SRCALPHA)
-        pygame.draw.rect(sombra, (0, 0, 0, 110), sombra.get_rect(), border_radius=raio)
-        surf.blit(sombra, (r.x + 3, r.y + 6))
-
-        # Fundo: vidro escuro que se pinta na cor do botão
-        topo = misturar((22, 32, 62), clarear(self.cor, 0.05), k * 0.85)
-        base = misturar((12, 18, 38), escurecer(self.cor, 0.35), k * 0.85)
-        camada = pygame.Surface(r.size, pygame.SRCALPHA)
-        gradiente_vertical(camada, camada.get_rect(), topo, base, raio=raio)
-        camada.set_alpha(int(215 + 40 * k))
-        surf.blit(camada, r)
-        # Reflexo de vidro na metade de cima
-        reflexo = pygame.Surface((r.width - 8, r.height // 2 - 4), pygame.SRCALPHA)
-        pygame.draw.rect(reflexo, (255, 255, 255, int(14 + 16 * k)), reflexo.get_rect(),
-                         border_radius=raio - 4)
-        surf.blit(reflexo, (r.x + 4, r.y + 4))
-        borda = misturar((70, 95, 150), clarear(self.cor, 0.45), k)
-        pygame.draw.rect(surf, borda, r, 2, border_radius=raio)
+        surf.blit(_fundo_botao(r.size, self.cor, k, raio), (r.x, r.y))
 
         # Ícone dentro de um círculo
         cx, cy = r.x + 40, r.centery
@@ -112,6 +96,33 @@ class BotaoMenu:
             seta = icone("jogar", 16, (255, 255, 255)).copy()
             seta.set_alpha(int(255 * k))
             surf.blit(seta, seta.get_rect(center=(r.right - 30, cy)))
+
+
+_cache_fundo_botao = {}
+
+
+def _fundo_botao(tamanho, cor, k, raio):
+    """Sombra, vidro com gradiente, reflexo e borda de um BotaoMenu (feito uma vez por cor e foco)."""
+    chave = (tamanho, tuple(cor), k, raio)
+    img = _cache_fundo_botao.get(chave)
+    if img is None:
+        w, h = tamanho
+        img = pygame.Surface((w + 3, h + 6), pygame.SRCALPHA)
+        pygame.draw.rect(img, (0, 0, 0, 110), (3, 6, w, h), border_radius=raio)          # sombra
+        topo = misturar((22, 32, 62), clarear(cor, 0.05), k * 0.85)
+        base = misturar((12, 18, 38), escurecer(cor, 0.35), k * 0.85)
+        camada = pygame.Surface((w, h), pygame.SRCALPHA)
+        gradiente_vertical(camada, camada.get_rect(), topo, base, raio=raio)
+        camada.set_alpha(int(215 + 40 * k))
+        img.blit(camada, (0, 0))
+        reflexo = pygame.Surface((w - 8, h // 2 - 4), pygame.SRCALPHA)                  # reflexo de vidro
+        pygame.draw.rect(reflexo, (255, 255, 255, int(14 + 16 * k)), reflexo.get_rect(), border_radius=raio - 4)
+        img.blit(reflexo, (4, 4))
+        pygame.draw.rect(img, misturar((70, 95, 150), clarear(cor, 0.45), k), (0, 0, w, h), 2, border_radius=raio)
+        if len(_cache_fundo_botao) > 400:
+            _cache_fundo_botao.clear()
+        _cache_fundo_botao[chave] = img
+    return img
 
 
 class BotaoEngrenagem:
@@ -214,7 +225,7 @@ class MenuPrincipal:
         ])
         self._cone = cone_luz(360, 470)
         self._feixe = cone_luz(240, 760, (190, 215, 255), 6, 26)
-        fonte_titulo = pygame.font.SysFont("Arial Black", 86)
+        fonte_titulo = fontes.SysFont("Arial Black", 86)
         self._titulo = titulo_estilizado("STICKMANIA", fonte_titulo, (255, 255, 255), (170, 200, 255),
                                          contorno=5, cor_brilho=(60, 120, 255))
         self._mascara_titulo = fonte_titulo.render("STICKMANIA", True, (255, 255, 255))
@@ -239,7 +250,9 @@ class MenuPrincipal:
         # Dois projetores a varrer o pavilhão devagar
         for x0, fase in ((150, 0.0), (WIDTH - 150, 2.2)):
             ang = 22 * math.sin(self.t * 0.35 + fase)
-            feixe = pygame.transform.rotozoom(self._feixe, ang, 1.0)
+            # O feixe é uma luz esbatida: rodar sem suavização (rotate) dá o mesmo aspeto e é muito
+            # mais rápido do que rotozoom
+            feixe = pygame.transform.rotate(self._feixe, round(ang, 1))
             # O topo do feixe fica preso ao projetor (por cima do ecrã)
             dx = math.sin(math.radians(ang)) * 380
             s.blit(feixe, feixe.get_rect(center=(x0 - dx, -60 + 380 * math.cos(math.radians(ang)))),
@@ -935,7 +948,7 @@ class MenuPausa:
         self.lista = ListaBotoes([BotaoMenu((WIDTH // 2 - 195, y0 + i * 62, 390, 52), titulo, "", acao, cor, ic,
                                             seta=(i == 0), tamanho=19)
                                   for i, (titulo, acao, cor, ic) in enumerate(itens)])
-        self._titulo = titulo_estilizado("PAUSA", pygame.font.SysFont("Arial Black", 44), (255, 255, 255),
+        self._titulo = titulo_estilizado("PAUSA", fontes.SysFont("Arial Black", 44), (255, 255, 255),
                                          (170, 200, 255), contorno=4)
 
     def handle_event(self, event) -> str | None:
@@ -1028,7 +1041,7 @@ class EcraFimJogo:
                 BotaoMenu((cx + bw // 2 + 14, y, bw, bh), "MENU PRINCIPAL", "", "menu", (150, 110, 255), "casa",
                           seta=False, tamanho=19),
             ])
-        self._titulo = titulo_estilizado("FIM DO JOGO", pygame.font.SysFont("Arial Black", 46), (255, 255, 255),
+        self._titulo = titulo_estilizado("FIM DO JOGO", fontes.SysFont("Arial Black", 46), (255, 255, 255),
                                          (170, 200, 255), contorno=4)
 
     def handle_event(self, event) -> str | None:

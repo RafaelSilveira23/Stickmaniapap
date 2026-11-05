@@ -2,6 +2,7 @@
 """rink.py - ringue oficial de hóquei em patins com piso de madeira, tabelas e balizas reais."""
 import os
 import pygame
+import fontes
 from settings import *
 from team import carregar_logo_equipa, obter_info_equipa
 from cores import cor_linhas_campo, misturar, cor_texto_sobre
@@ -326,7 +327,7 @@ class Rink:
 
         nome = info.get("nome", "").upper()
         textos = ["HÓQUEI EM PATINS", nome, "JOGO • PAIXÃO • TRADIÇÃO", "STICKMANIA", nome]
-        fonte = pygame.font.SysFont("Arial", 13, bold=True)
+        fonte = fontes.SysFont("Arial", 13, bold=True)
         n = len(textos)
         for i, txt in enumerate(textos):
             x0 = faixa.width * i // n
@@ -470,13 +471,13 @@ class Rink:
             sigla = info.get("sigla", "FCP")
             pygame.draw.circle(surf, cor, (cx, cy), 28 * escala)
             pygame.draw.circle(surf, (230, 200, 60), (cx, cy), 28 * escala, 2 * escala)
-            f = pygame.font.SysFont("Arial", 11 * escala, bold=True)
+            f = fontes.SysFont("Arial", 11 * escala, bold=True)
             t = f.render(sigla, True, (255, 255, 255))
             surf.blit(t, (cx - t.get_width() // 2, cy - t.get_height() // 2))
 
     def _desenhar_placards(self, surf, muro):
         """Faixa publicitária estilizada ao longo da tabela superior."""
-        font_pl = pygame.font.SysFont("Arial", 11, bold=True)
+        font_pl = fontes.SysFont("Arial", 11, bold=True)
         pl_h = 16
         pl_y = muro.top + 2
         w_total = muro.width - 240

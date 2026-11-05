@@ -34,7 +34,7 @@ import os
 import random
 
 import pygame
-
+import fontes
 from settings import WIDTH, HEIGHT
 from graficos import titulo_estilizado, luz
 from componentes import texto, fonte
@@ -962,7 +962,7 @@ class RematePOV:
     def _texto_rodado(self, txt, tam, cor, ang):
         chave = (txt, tam, cor, round(ang))
         if chave not in self._cache_texto:
-            f = pygame.font.SysFont("Arial Black", tam, italic=True)
+            f = fontes.SysFont("Arial Black", tam, italic=True)
             img = f.render(txt, True, cor)
             self._cache_texto[chave] = pygame.transform.rotozoom(img, round(ang), 1.0)
         return self._cache_texto[chave]
@@ -1205,9 +1205,17 @@ class RematePOV:
                     "poste": ("POSTE!", (130, 200, 255)), "fora": ("FORA!", (255, 140, 120))}[r]
         t = self._res_t
         esc = (0.4 + 0.9 * t / 0.12) if t < 0.12 else 1.0 + 0.25 * math.exp(-(t - 0.12) * 10)
-        img = titulo_estilizado(txt, pygame.font.SysFont("Arial Black", 100), tuple(min(255, c + 60) for c in cor),
-                                cor, contorno=10)
-        img = pygame.transform.rotozoom(img, -5, esc * 0.9)
+        # O título é feito uma vez; a escala é arredondada (passos de 2 %) para as imagens rodadas
+        # ficarem em cache em vez de se rodar a imagem grande em todos os frames
+        chave_t = ("titulo", txt)
+        if chave_t not in _cache:
+            _cache[chave_t] = titulo_estilizado(txt, fontes.SysFont("Arial Black", 100),
+                                                tuple(min(255, c + 60) for c in cor), cor, contorno=10)
+        escala = round(esc * 0.9 * 50) / 50
+        chave_r = ("titulo_rodado", txt, escala)
+        if chave_r not in _cache:
+            _cache[chave_r] = pygame.transform.rotozoom(_cache[chave_t], -5, escala)
+        img = _cache[chave_r]
         s.blit(img, img.get_rect(center=(WIDTH // 2, 190)))
         if r == "bloqueado":
             texto(s, f"{self._decisao['bloqueador'].nome} meteu-se à frente da bola", 16, (230, 236, 255),

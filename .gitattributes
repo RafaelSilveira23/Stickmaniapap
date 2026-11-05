@@ -1,0 +1,3 @@
+# Os ficheiros do Windows têm de manter as quebras de linha CRLF (senão o .bat pode falhar)
+*.bat text eol=crlf
+*.vbs text eol=crlf

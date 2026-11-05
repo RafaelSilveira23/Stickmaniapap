@@ -8,6 +8,7 @@ Desenvolvido para corresponder à interface moderna do mockup:
   4. Botões de ação arcade (Remate, Passe, Acelerar, Defender)
 """
 import pygame
+import fontes
 from settings import *
 from team import carregar_logo_equipa, obter_info_equipa
 from cores import cor_texto_sobre, cor_visivel_em_escuro, clarear
@@ -15,14 +16,14 @@ from cores import cor_texto_sobre, cor_visivel_em_escuro, clarear
 
 class HUDController:
     def __init__(self):
-        self.font_time = pygame.font.SysFont("Arial", 19, bold=True)
-        self.font_title = pygame.font.SysFont("Arial", 14, bold=True)
-        self.font_score = pygame.font.SysFont("Arial", 20, bold=True)
-        self.font_card_nome = pygame.font.SysFont("Arial", 18, bold=True)
-        self.font_card_role = pygame.font.SysFont("Arial", 11, bold=True)
-        self.font_stat = pygame.font.SysFont("Arial", 12, bold=True)
-        self.font_btn = pygame.font.SysFont("Arial", 11, bold=True)
-        self.font_key = pygame.font.SysFont("Arial", 9, bold=True)
+        self.font_time = fontes.SysFont("Arial", 19, bold=True)
+        self.font_title = fontes.SysFont("Arial", 14, bold=True)
+        self.font_score = fontes.SysFont("Arial", 20, bold=True)
+        self.font_card_nome = fontes.SysFont("Arial", 18, bold=True)
+        self.font_card_role = fontes.SysFont("Arial", 11, bold=True)
+        self.font_stat = fontes.SysFont("Arial", 12, bold=True)
+        self.font_btn = fontes.SysFont("Arial", 11, bold=True)
+        self.font_key = fontes.SysFont("Arial", 9, bold=True)
 
         # Botões de ação (retângulos para clique do rato)
         self.btn_rects = {}
@@ -59,6 +60,24 @@ class HUDController:
     # ================================================================== #
 
     def draw_top_bar(self, screen: pygame.Surface, game):
+        """
+        Marcador, tempo, dificuldade e botão de pausa. Só muda uma vez por segundo (ou num golo,
+        falta, ...), por isso é desenhado numa camada guardada e refeito apenas quando algo muda.
+        Antes eram 9 textos e 2 fontes novas em cada frame (cerca de 1,5 ms).
+        """
+        teste = getattr(game, "teste", {}) if getattr(game, "modo_teste", False) else None
+        chave = (getattr(game, "equipa_casa_id", ""), getattr(game, "equipa_fora_id", ""),
+                 str(getattr(game, "kit_casa", "")), str(getattr(game, "kit_fora", "")),
+                 game.golos_azul, game.golos_vermelho, getattr(game, "faltas_azul", 0),
+                 getattr(game, "faltas_vermelho", 0), max(0, int(game.tempo_restante)), game.parte,
+                 getattr(game, "dificuldade", "normal"), str(teste))
+        if chave != getattr(self, "_chave_topo", None):
+            camada = pygame.Surface((WIDTH, 66), pygame.SRCALPHA)
+            self._desenhar_topo(camada, game)
+            self._camada_topo, self._chave_topo = camada, chave
+        screen.blit(self._camada_topo, (0, 0))
+
+    def _desenhar_topo(self, screen: pygame.Surface, game):
         # O marcador fica sobreposto à bancada de público no canto superior esquerdo
         sc_x = 28
         sc_y = 12
@@ -119,7 +138,7 @@ class HUDController:
         screen.blit(g_fora, (sc_x + card_w - 24, sc_y + linha_h + 2))
 
         # Divisória subtil entre as duas linhas
-        pygame.draw.line(screen, (0, 0, 0, 100), (sc_x, sc_y + linha_h), (sc_x + card_w, sc_y + linha_h), 1)
+        pygame.draw.line(screen, (0, 0, 0), (sc_x, sc_y + linha_h), (sc_x + card_w, sc_y + linha_h), 1)
 
         # ── 3. Bloco do Cronómetro e Parte (à direita do placar) ────────
         time_x = sc_x + card_w
@@ -129,7 +148,7 @@ class HUDController:
                          border_top_right_radius=8, border_bottom_right_radius=8)
         screen.blit(surf_timer, (time_x, sc_y))
 
-        f_parte = pygame.font.SysFont("Arial", 11, bold=True)
+        f_parte = fontes.SysFont("Arial", 11, bold=True)
         if getattr(game, "modo_teste", False):
             # MODO TESTE: em vez do tempo, mostra golos / remates
             t = game.teste
@@ -157,7 +176,7 @@ class HUDController:
         lbl_dif = nomes_dif.get(dif_str, "NORMAL")
         cor_badge = cores_dif.get(dif_str, (70, 160, 255))
 
-        f_badge = pygame.font.SysFont("Arial", 10, bold=True)
+        f_badge = fontes.SysFont("Arial", 10, bold=True)
         txt_b = f_badge.render(f"IA: {lbl_dif}", True, (255, 255, 255))
         bw = txt_b.get_width() + 16
         bh = 22
@@ -188,7 +207,7 @@ class HUDController:
             r = pygame.Rect(x, y, 22, 22)
             pygame.draw.circle(surf, cor_bg, r.center, 10)
             pygame.draw.circle(surf, cor_fg, r.center, 10, 2)
-            f = pygame.font.SysFont("Arial", 8, bold=True)
+            f = fontes.SysFont("Arial", 8, bold=True)
             sigla = info.get("sigla", "FCP")
             t = f.render(sigla[:3], True, cor_fg)
             surf.blit(t, (r.centerx - t.get_width() // 2, r.centery - t.get_height() // 2))
@@ -476,18 +495,18 @@ class HUDController:
         cx_ico = bx + 36
         cy_ico = by + bh // 2
         pygame.draw.circle(screen, cor_borda, (cx_ico, cy_ico), 18)
-        f_ico = pygame.font.SysFont("Arial", 18, bold=True)
+        f_ico = fontes.SysFont("Arial", 18, bold=True)
         t_ico = f_ico.render("!", True, (10, 16, 32))
         screen.blit(t_ico, (cx_ico - t_ico.get_width() // 2, cy_ico - t_ico.get_height() // 2))
 
         # Título da Falta
-        f_tit = pygame.font.SysFont("Arial", 17, bold=True)
+        f_tit = fontes.SysFont("Arial", 17, bold=True)
         msg_tit = getattr(game, "_msg_falta", "FALTA!")
         t_tit = f_tit.render(msg_tit, True, cor_titulo)
         screen.blit(t_tit, (bx + 66, by + 12))
 
         # Subtítulo com detalhes
-        f_sub = pygame.font.SysFont("Arial", 12)
+        f_sub = fontes.SysFont("Arial", 12)
         msg_sub = getattr(game, "_msg_falta_sub", "")
         t_sub = f_sub.render(msg_sub, True, (220, 235, 255))
         screen.blit(t_sub, (bx + 66, by + 40))

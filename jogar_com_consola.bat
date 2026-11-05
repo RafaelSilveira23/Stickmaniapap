@@ -44,7 +44,7 @@ exit /b
 
 :sem_pasta
 echo [ERRO] Nao encontrei a pasta hockey_game ao lado deste ficheiro.
-echo O jogar.bat tem de estar na pasta principal do projeto.
+echo O jogar_com_consola.bat tem de estar na pasta principal do projeto.
 pause
 exit /b 1
 

@@ -13,7 +13,7 @@ import math
 import random
 
 import pygame
-
+import fontes
 from settings import WIDTH
 
 PATROCINADORES = [
@@ -51,7 +51,7 @@ def textura_placa(indice: int, w: int = 360, h: int = 100) -> pygame.Surface:
         claro = pygame.Surface((w, h // 2), pygame.SRCALPHA)
         claro.fill((255, 255, 255, 25))
         s.blit(claro, (0, 0))
-        f = pygame.font.SysFont("Arial Black", int(h * 0.42))
+        f = fontes.SysFont("Arial Black", int(h * 0.42))
         img = f.render(nome, True, cor)
         if img.get_width() > w * 0.78:
             img = pygame.transform.smoothscale(img, (int(w * 0.78), int(img.get_height() * w * 0.78 / img.get_width())))
@@ -254,8 +254,8 @@ def marcador(s, centro_x: int, placar):
     if not placar:
         return
     sig_c, g_c, sig_f, g_f, tempo = placar
-    f_led = pygame.font.SysFont("Consolas", 40, bold=True)
-    f_peq = pygame.font.SysFont("Arial", 11, bold=True)
+    f_led = fontes.SysFont("Consolas", 40, bold=True)
+    f_peq = fontes.SysFont("Arial", 11, bold=True)
     for txt, x, cor in ((str(g_c), caixa.left + 56, (255, 70, 50)), (str(g_f), caixa.right - 56, (255, 70, 50)),
                         (tempo, caixa.centerx, (255, 190, 40))):
         img = f_led.render(txt, True, cor)
