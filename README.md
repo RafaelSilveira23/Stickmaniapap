@@ -57,6 +57,11 @@ No Windows também se pode fazer duplo clique em `jogar.bat`.
     **atividade** (`V`): treino extra, ginásio, descansar, sair com os amigos, estudar, ... Tudo fica no **diário** (`L`)
   - As escolhas mexem no hóquei: forma e moral somam-se aos atributos, pouca forma dá **lesões**, sem a
     confiança do treinador vais para o **banco**, e a fama ajuda a ter propostas (`hockey_game/vida.py`)
+  - **Pessoas** (`P`): mãe, pai, melhor amigo e um namoro que pode começar nos eventos; cada uma tem uma relação
+    que desce se não lhe ligares; uma vez por semana podes passar tempo, conversar, pedir conselho ou dar uma prenda
+  - **42 eventos**, alguns com **consequências** mais tarde (a polémica nas redes dá um processo disciplinar,
+    o primeiro encontro pode dar um namoro, ...), **bens** (carta, carro, casa própria, agente, braçadeira de capitão)
+    e **14 conquistas** (`C`)
 - **Estilo arcade** (liga/desliga nas Definições): "GOLO!" gigante com o nome do marcador, câmara lenta e
   confetes; nos impactos o jogo congela por um instante, o ecrã treme e saltam faíscas; textos de banda
   desenhada ("DEFESA!", "POSTE!", "ROUBO!"), rasto da bola e contorno nos jogadores (`hockey_game/efeitos.py`)

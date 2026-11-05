@@ -365,6 +365,8 @@ class CarreiraJogador:
         if media < limiar:
             return []
         salto = 6 + (media - limiar) * 12 + fama / 20
+        if "agente" in self.vida.marcas():
+            salto += 5                               # o agente arranja propostas de clubes maiores
         clubes = [e for e in EQUIPAS_LISTA if e != atual and f_atual < FORCA_EQUIPAS.get(e, 75) <= f_atual + salto]
         clubes.sort(key=lambda e: -FORCA_EQUIPAS.get(e, 75))
         return clubes[:2]

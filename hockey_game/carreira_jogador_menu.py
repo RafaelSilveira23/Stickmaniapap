@@ -17,12 +17,18 @@ from carreira import FORCA_EQUIPAS
 from carreira_jogador import (POSICOES, NOME_POSICAO, GERAL_INICIAL, ATRIBUTOS, atributos)
 from cores import kit_principal, misturar, cor_texto_sobre
 from componentes import fonte, texto, sprite_equipamento, COR_DESTAQUE, COR_TEXTO, COR_TEXTO_SUAVE
-from graficos import luz
+from graficos import luz, icone
 from menu import BotaoMenu, _fundo_arena
 from carreira_menu import _vidro, _titulo_painel, _barra_forca
 from sons import som
 
 NOME_ATRIBUTO = {"velocidade": "VEL", "remate": "REM", "passe": "PAS", "defesa": "DEF"}
+# Cor e ícone de cada tipo de evento da vida
+CATEGORIA = {"hoquei": ((90, 200, 255), "jogar", "HÓQUEI"), "festa": ((255, 140, 190), "estrela", "AMIGOS"),
+             "escola": ((120, 170, 255), "livro", "ESCOLA"), "dinheiro": ((110, 215, 140), "moeda", "DINHEIRO"),
+             "familia": ((255, 185, 100), "casa", "FAMÍLIA"), "amor": ((255, 95, 130), "coracao", "AMOR"),
+             "imprensa": ((255, 205, 60), "estrela", "FAMA"), "saude": ((240, 90, 90), "cruz", "SAÚDE")}
+COR_PAPEL = {"mae": (255, 185, 100), "pai": (120, 170, 255), "amigo": (110, 215, 140), "namoro": (255, 95, 130)}
 DESCRICAO_POSICAO = {"avancado": "Marca golos. Remate forte.",
                      "medio": "Liga o jogo. Passe certeiro.",
                      "defesa": "Recupera bolas. Duro a defender."}
@@ -355,7 +361,8 @@ class EcraCarreiraJogador:
                                   "jogador", seta=False, tamanho=18)
         self.btn_menu = BotaoMenu((WIDTH - 310, 646, 270, 50), "MENU PRINCIPAL", "", "menu", (150, 110, 255),
                                   "casa", seta=False, tamanho=18)
-        self.r_diario = pygame.Rect(740, 400, 80, 22)
+        self.r_pilulas = {k: pygame.Rect(470 + i * 116, 590, 108, 26)
+                          for i, k in enumerate(("pessoas", "diario", "conquistas"))}
         self.foco = 0
 
     @property
@@ -399,6 +406,13 @@ class EcraCarreiraJogador:
             if not at["possivel"]:
                 return
             res = self.cj.vida.fazer_atividade(at["id"])
+        elif m["tipo"] == "pessoas":
+            acoes = self._acoes_pessoas()
+            if i >= len(acoes) or not acoes[i][3]:
+                return
+            p, ac, _info, _ok = acoes[i]
+            res = self.cj.vida.interagir(p["papel"], ac)
+            res["voltar"] = "pessoas"
         else:
             return
         som.ui("confirmar")
@@ -410,12 +424,11 @@ class EcraCarreiraJogador:
         m = self.modal
         n = len(self._opcoes)
         if event.type == pygame.KEYDOWN:
-            if m["tipo"] in ("resultado", "diario"):
+            if m["tipo"] in ("resultado", "diario", "conquistas"):
                 if event.key in (pygame.K_RETURN, pygame.K_KP_ENTER, pygame.K_SPACE, pygame.K_ESCAPE):
-                    self.modal = None
-                    self._abrir_evento_se_houver()
+                    self._fechar_modal()
                 return None
-            if event.key == pygame.K_ESCAPE and m["tipo"] == "atividades":
+            if event.key == pygame.K_ESCAPE and m["tipo"] in ("atividades", "pessoas"):
                 self.modal = None
             elif pygame.K_1 <= event.key <= pygame.K_9 and event.key - pygame.K_1 < n:
                 self._escolher(event.key - pygame.K_1)
@@ -428,17 +441,25 @@ class EcraCarreiraJogador:
         elif event.type == pygame.MOUSEMOTION:
             self._hover = next((i for i, r in enumerate(self._opcoes) if r.collidepoint(event.pos)), self._hover)
         elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-            if m["tipo"] in ("resultado", "diario"):
-                self.modal = None
-                self._abrir_evento_se_houver()
+            if m["tipo"] in ("resultado", "diario", "conquistas"):
+                self._fechar_modal()
                 return None
             for i, r in enumerate(self._opcoes):
                 if r.collidepoint(event.pos):
                     self._escolher(i)
                     return None
-            if m["tipo"] == "atividades":
+            if m["tipo"] in ("atividades", "pessoas"):
                 self.modal = None
         return None
+
+    def _fechar_modal(self):
+        """Fecha a janela; depois de interagir com alguém volta à janela das pessoas."""
+        voltar = self.modal.get("res", {}).get("voltar") if self.modal["tipo"] == "resultado" else None
+        self.modal = None
+        if voltar:
+            self._abrir_modal(voltar)
+        else:
+            self._abrir_evento_se_houver()
 
     # ------------------------------------------------------------------ #
     def handle_event(self, event):
@@ -459,7 +480,11 @@ class EcraCarreiraJogador:
             if event.key == pygame.K_v:
                 self._abrir_atividades()
             if event.key == pygame.K_l:
-                self.modal = {"tipo": "diario"}
+                self._abrir_modal("diario")
+            if event.key == pygame.K_p:
+                self._abrir_modal("pessoas")
+            if event.key == pygame.K_c:
+                self._abrir_modal("conquistas")
             if event.key in (pygame.K_LEFT, pygame.K_UP, pygame.K_a, pygame.K_w):
                 self.foco = (self.foco - 1) % len(self.botoes_principais)
                 som.ui("mover")
@@ -476,9 +501,10 @@ class EcraCarreiraJogador:
             if self.btn_ativ.por_cima(p):
                 self._abrir_atividades()
                 return None
-            if self.r_diario.collidepoint(p):
-                self.modal = {"tipo": "diario"}
-                return None
+            for k, r in self.r_pilulas.items():
+                if r.collidepoint(p):
+                    self._abrir_modal(k)
+                    return None
             if self.btn_nova.por_cima(p):
                 return "nova_carreira" if self._pedir_confirmacao(self.btn_nova, "NOVA CARREIRA") else None
             if self.btn_epoca is not None and self.btn_epoca.por_cima(p):
@@ -494,6 +520,24 @@ class EcraCarreiraJogador:
         if acao in ("jogar", "simular") and self._abrir_evento_se_houver():
             return None
         return acao
+
+    def _abrir_modal(self, tipo):
+        if tipo == "pessoas":
+            self.modal = {"tipo": "pessoas"}
+        else:
+            self.modal = {"tipo": tipo}
+        self._hover = -1
+        som.ui("mover")
+
+    def _acoes_pessoas(self):
+        """Lista (pessoa, ação, possível) para a janela das pessoas."""
+        from vida import ACOES_PESSOA
+        dinheiro = self.cj.vida.estado["dinheiro"]
+        lista = []
+        for p in self.cj.vida.pessoas():
+            for ac, info in ACOES_PESSOA.items():
+                lista.append((p, ac, info, not p["interagiu"] and dinheiro >= info.get("custo", 0)))
+        return lista
 
     def _abrir_atividades(self):
         if self.terminado:
@@ -534,7 +578,7 @@ class EcraCarreiraJogador:
         for b in self._todos_botoes:
             b.draw(s)
         dica = "ENTER  escolher     ← →  mudar" if self.terminado else "ENTER  jogar     ← →  jogar / simular"
-        texto(s, dica + "     V  atividades     L  diário     ESC  menu principal", 12, (120, 145, 195),
+        texto(s, dica + "     V  atividades     P  pessoas     L  diário     C  conquistas     ESC  menu", 12, (120, 145, 195),
               (WIDTH // 2, 710), negrito=False)
         if self._aviso_visivel:
             self._mostrar_aviso()
@@ -630,10 +674,16 @@ class EcraCarreiraJogador:
         texto(s, "A MINHA VIDA", 15, (255, 140, 190), (r.left + 20, r.top + 22), ancora="midleft")
         dinheiro = f"{v['dinheiro']:,} €".replace(",", " ")
         texto(s, dinheiro, 15, (130, 230, 150), (r.left + 210, r.top + 22), ancora="midleft")
-        pygame.draw.rect(s, (60, 40, 70), self.r_diario, border_radius=11)
-        texto(s, "DIÁRIO", 11, (255, 190, 220), self.r_diario.center)
+        texto(s, f"{v['idade']} anos", 13, COR_TEXTO_SUAVE, (r.right - 20, r.top + 22), ancora="midright")
+        mpos = pygame.mouse.get_pos()
+        for k, rr in self.r_pilulas.items():
+            hover = rr.collidepoint(mpos)
+            pygame.draw.rect(s, (110, 50, 85) if hover else (60, 40, 70), rr, border_radius=13)
+            pygame.draw.rect(s, (255, 140, 190), rr, 1, border_radius=13)
+            nome = {"pessoas": "PESSOAS (P)", "diario": "DIÁRIO (L)", "conquistas": "CONQUISTAS (C)"}[k]
+            texto(s, nome, 11, (255, 210, 230), rr.center)
         for i, k in enumerate(("forma", "moral", "treinador", "fama", "estudos")):
-            y = r.top + 52 + i * 26
+            y = r.top + 48 + i * 24
             texto(s, {"treinador": "Treinador"}.get(k, k.capitalize()), 13, COR_TEXTO_SUAVE,
                   (r.left + 20, y), ancora="midleft")
             barra = pygame.Rect(r.left + 110, y - 5, 210, 10)
@@ -642,7 +692,7 @@ class EcraCarreiraJogador:
             cor = misturar((230, 80, 70), (90, 215, 120), t) if k != "fama" else misturar((90, 120, 200), (255, 205, 60), t)
             pygame.draw.rect(s, cor, (barra.x, barra.y, max(6, round(barra.w * t)), 10), border_radius=5)
             texto(s, str(v[k]), 13, COR_TEXTO, (r.right - 20, y), ancora="midright")
-        y = r.top + 190
+        y = r.top + 174
         if not self.pode_jogar:
             texto(s, self.motivo, 13, (255, 120, 100), (r.left + 20, y), ancora="midleft")
         elif v["atividade_feita"]:
@@ -651,12 +701,6 @@ class EcraCarreiraJogador:
         else:
             texto(s, "Ainda podes fazer uma atividade esta semana", 12, (255, 170, 210), (r.left + 20, y),
                   ancora="midleft", negrito=False)
-        if self.ultimo_diario:
-            linha = self.ultimo_diario[0]["texto"]
-            f = fonte(11, False)
-            while f.size(linha)[0] > r.width - 40 and len(linha) > 10:
-                linha = linha[:-4] + "…"
-            texto(s, linha, 11, (150, 165, 200), (r.left + 20, y + 24), ancora="midleft", negrito=False)
 
     def _classificacao(self, caixa):
         s = self.screen
@@ -750,10 +794,19 @@ class EcraCarreiraJogador:
         if m["tipo"] == "evento":
             ev = m["evento"]
             n = len(ev["opcoes"])
-            caixa = self._fundo_modal(640, 170 + n * 62)
-            texto(s, "ACONTECEU UMA COISA...", 12, (255, 170, 210), (caixa.left + 30, caixa.top + 28), ancora="midleft")
-            texto(s, ev["titulo"], 26, (255, 255, 255), (caixa.left + 30, caixa.top + 62), ancora="midleft")
-            y = self._texto_quebrado(ev["texto"], 15, COR_TEXTO, caixa.left + 30, caixa.top + 102, caixa.width - 60)
+            caixa = self._fundo_modal(660, 176 + n * 62)
+            cor, nome_icone, nome_cat = CATEGORIA.get(ev.get("categoria"), CATEGORIA["hoquei"])
+            pygame.draw.rect(s, cor, (caixa.left + 18, caixa.top + 10, caixa.width - 36, 4), border_radius=2)
+            centro = (caixa.left + 58, caixa.top + 58)
+            halo = luz(120, 120, cor, 90)
+            s.blit(halo, halo.get_rect(center=centro), special_flags=pygame.BLEND_RGB_ADD)
+            pygame.draw.circle(s, cor, centro, 28)
+            ic = icone(nome_icone, 30, (20, 20, 30))
+            s.blit(ic, ic.get_rect(center=centro))
+            texto(s, nome_cat + ("  •  CONSEQUÊNCIA" if ev.get("seguimento") else ""), 12, cor,
+                  (caixa.left + 100, caixa.top + 38), ancora="midleft")
+            texto(s, ev["titulo"], 25, (255, 255, 255), (caixa.left + 100, caixa.top + 70), ancora="midleft")
+            y = self._texto_quebrado(ev["texto"], 15, COR_TEXTO, caixa.left + 30, caixa.top + 112, caixa.width - 60)
             y += 6
             for i, op in enumerate(ev["opcoes"]):
                 r = pygame.Rect(caixa.left + 30, y + i * 62, caixa.width - 60, 52)
@@ -791,8 +844,14 @@ class EcraCarreiraJogador:
             texto(s, res["escolha"], 22, (255, 255, 255), (caixa.left + 30, caixa.top + 66), ancora="midleft")
             y = self._texto_quebrado(res["texto"], 15, COR_TEXTO, caixa.left + 30, caixa.top + 110, caixa.width - 60)
             self._chips(res["efeitos"], caixa.left + 30, max(y + 10, caixa.top + 190))
+            for k, nome in enumerate(res.get("conquistas", [])[:2]):
+                self._selo_conquista(caixa.left + 30, caixa.top + 228 + k * 30, nome)
             texto(s, "Carrega numa tecla para continuar", 12, (120, 145, 195), (caixa.centerx, caixa.bottom - 22),
                   negrito=False)
+        elif m["tipo"] == "pessoas":
+            self._desenhar_pessoas()
+        elif m["tipo"] == "conquistas":
+            self._desenhar_conquistas()
         elif m["tipo"] == "diario":
             linhas = self.cj.vida.diario(10)
             caixa = self._fundo_modal(760, 560)
@@ -809,6 +868,94 @@ class EcraCarreiraJogador:
             texto(s, "Carrega numa tecla para fechar", 12, (120, 145, 195), (caixa.centerx, caixa.bottom - 22),
                   negrito=False)
 
+    def _selo_conquista(self, x, y, nome):
+        """Etiqueta dourada "CONQUISTA: ..." (com uma estrela)."""
+        s = self.screen
+        txt = f"CONQUISTA: {nome.upper()}"
+        w = fonte(13).size(txt)[0] + 52
+        r = pygame.Rect(x, y, w, 26)
+        pygame.draw.rect(s, (70, 55, 10), r, border_radius=13)
+        pygame.draw.rect(s, COR_DESTAQUE, r, 2, border_radius=13)
+        ic = icone("estrela", 16, COR_DESTAQUE)
+        s.blit(ic, ic.get_rect(center=(r.left + 18, r.centery)))
+        texto(s, txt, 13, COR_DESTAQUE, (r.left + 34, r.centery), ancora="midleft")
+
+    def _desenhar_pessoas(self):
+        """As pessoas da vida do jogador: relação e o que se pode fazer com cada uma esta semana."""
+        from vida import NOME_PAPEL
+        s = self.screen
+        acoes = self._acoes_pessoas()
+        pessoas = []
+        for p, *_r in acoes:
+            if p["id"] not in [q["id"] for q in pessoas]:
+                pessoas.append(p)
+        caixa = self._fundo_modal(860, 120 + len(pessoas) * 112)
+        texto(s, "AS PESSOAS DA TUA VIDA", 24, (255, 255, 255), (caixa.left + 30, caixa.top + 36), ancora="midleft")
+        texto(s, "Uma vez por semana podes estar com cada pessoa. Boas relações dão moral.   ESC fecha.", 13,
+              COR_TEXTO_SUAVE, (caixa.left + 30, caixa.top + 64), ancora="midleft", negrito=False)
+        mpos = pygame.mouse.get_pos()
+        for j, p in enumerate(pessoas):
+            linha = pygame.Rect(caixa.left + 24, caixa.top + 90 + j * 112, caixa.width - 48, 100)
+            pygame.draw.rect(s, (24, 28, 52), linha, border_radius=14)
+            cor = COR_PAPEL[p["papel"]]
+            centro = (linha.left + 46, linha.top + 50)
+            pygame.draw.circle(s, cor, centro, 30)
+            letra = p["nome"][0].upper()
+            texto(s, letra, 26, (20, 20, 30), centro)
+            nome = NOME_PAPEL[p["papel"]] if p["papel"] in ("mae", "pai") else p["nome"]
+            texto(s, nome, 18, (255, 255, 255), (linha.left + 92, linha.top + 24), ancora="midleft")
+            papel = "" if p["papel"] in ("mae", "pai") else NOME_PAPEL[p["papel"]]
+            if papel:
+                texto(s, papel, 12, cor, (linha.left + 92 + fonte(18).size(nome)[0] + 12, linha.top + 25),
+                      ancora="midleft")
+            barra = pygame.Rect(linha.left + 92, linha.top + 46, 170, 10)
+            pygame.draw.rect(s, (40, 45, 75), barra, border_radius=5)
+            t = p["relacao"] / 100
+            pygame.draw.rect(s, misturar((230, 80, 70), (90, 215, 120), t),
+                             (barra.x, barra.y, max(6, round(barra.w * t)), 10), border_radius=5)
+            texto(s, f"Relação {p['relacao']}", 12, COR_TEXTO_SUAVE, (barra.right + 12, barra.centery),
+                  ancora="midleft")
+            if p["interagiu"]:
+                texto(s, "Já estiveste com esta pessoa esta semana", 12, (150, 160, 190),
+                      (linha.left + 92, linha.top + 76), ancora="midleft", negrito=False)
+            # Botões das ações
+            x = linha.left + 360
+            for i, (q, ac, info, ok) in enumerate(acoes):
+                if q["id"] != p["id"]:
+                    continue
+                w = fonte(12).size(info["nome"])[0] + 20
+                r = pygame.Rect(x, linha.top + 32, w, 36)
+                while len(self._opcoes) < i:
+                    self._opcoes.append(pygame.Rect(0, 0, 0, 0))
+                self._opcoes.append(r)
+                hover = (r.collidepoint(mpos) or i == self._hover) and ok
+                pygame.draw.rect(s, (90, 45, 80) if hover else (34, 38, 66), r, border_radius=10)
+                pygame.draw.rect(s, cor if ok else (60, 65, 90), r, 2 if hover else 1, border_radius=10)
+                texto(s, info["nome"], 12, (255, 255, 255) if ok else (100, 105, 130), r.center)
+                x += w + 8
+
+    def _desenhar_conquistas(self):
+        s = self.screen
+        lista = self.cj.vida.conquistas()
+        feitas = sum(c["feita"] for c in lista)
+        caixa = self._fundo_modal(860, 520)
+        texto(s, "CONQUISTAS", 24, (255, 255, 255), (caixa.left + 30, caixa.top + 36), ancora="midleft")
+        texto(s, f"{feitas} de {len(lista)}", 15, COR_DESTAQUE, (caixa.right - 30, caixa.top + 36), ancora="midright")
+        for i, c in enumerate(lista):
+            col, lin = i % 2, i // 2
+            r = pygame.Rect(caixa.left + 24 + col * 410, caixa.top + 70 + lin * 60, 398, 52)
+            pygame.draw.rect(s, (60, 48, 14) if c["feita"] else (26, 30, 52), r, border_radius=12)
+            pygame.draw.rect(s, COR_DESTAQUE if c["feita"] else (55, 60, 90), r, 2 if c["feita"] else 1,
+                             border_radius=12)
+            ic = icone("trofeu" if c["feita"] else "estrela", 26, COR_DESTAQUE if c["feita"] else (80, 85, 115))
+            s.blit(ic, ic.get_rect(center=(r.left + 30, r.centery)))
+            texto(s, c["nome"], 15, (255, 255, 255) if c["feita"] else (130, 135, 160), (r.left + 56, r.top + 17),
+                  ancora="midleft")
+            texto(s, c["descricao"], 11, COR_TEXTO_SUAVE if c["feita"] else (100, 105, 130),
+                  (r.left + 56, r.top + 36), ancora="midleft", negrito=False)
+        texto(s, "Carrega numa tecla para fechar", 12, (120, 145, 195), (caixa.centerx, caixa.bottom - 20),
+              negrito=False)
+
     def _mostrar_aviso(self):
         """Cartão do último jogo: resultado, nota, evolução e o que mudou na vida."""
         s = self.screen
@@ -817,7 +964,7 @@ class EcraCarreiraJogador:
         escuro = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
         escuro.fill((5, 8, 20, int(170 * k)))
         s.blit(escuro, (0, 0))
-        caixa = pygame.Rect(0, 0, 580, 380)
+        caixa = pygame.Rect(0, 0, 580, 410)
         caixa.center = (WIDTH // 2, HEIGHT // 2 + round(30 * (1 - k)))
         _vidro(s, caixa, 18, 245, COR_DESTAQUE)
         g_eu, g_adv = av["g_eu"], av["g_adv"]
@@ -850,8 +997,13 @@ class EcraCarreiraJogador:
             if int(av["geral_depois"]) > int(av["geral_antes"]):
                 texto(s, "SUBISTE DE NÍVEL!", 15, COR_DESTAQUE, (x, caixa.top + 222), ancora="midleft")
         y = caixa.top + 262
-        for frase in av.get("vida", [])[:3]:
-            cor_f = (255, 130, 110) if ("Lesion" in frase or "banco" in frase) else (130, 230, 150)
+        for frase in av.get("vida", [])[:4]:
+            if frase.startswith("Conquista: "):
+                w = fonte(13).size("CONQUISTA: " + frase[11:].upper())[0] + 52
+                self._selo_conquista(caixa.centerx - w // 2, y - 13, frase[11:])
+                y += 30
+                continue
+            cor_f = (255, 130, 110) if ("Lesion" in frase or "banco" in frase or "acabou" in frase) else (130, 230, 150)
             texto(s, frase, 14, cor_f, (caixa.centerx, y))
             y += 24
         texto(s, "Carrega numa tecla para continuar", 12, (120, 145, 195), (caixa.centerx, caixa.bottom - 20),

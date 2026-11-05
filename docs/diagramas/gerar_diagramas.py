@@ -290,7 +290,7 @@ def classes():
 # 7. Modelo de dados (base de dados SQLite do modo carreira)
 # ═══════════════════════════════════════════════════════════════════════
 def modelo_dados():
-    d = Diagrama("07_modelo_dados", 1120, 950, "Modelo de dados (SQLite)")
+    d = Diagrama("07_modelo_dados", 1120, 1150, "Modelo de dados (SQLite)")
     T = lambda id, x, y, w, h, t, campos, cor="roxo", tr=False: d.caixa(
         id, x, y, w, h, tipo="classe", cor=cor, tam=12, linhas=(t, [campos]), tracejado=tr)
     T("equipa", 20, 20, 240, 100, "Equipa",
@@ -328,6 +328,16 @@ def modelo_dados():
            pontos=[(200, 700), (200, 755), (980, 755), (980, 715)], pos_texto=0.7)
     d.seta("atleta", "diario", "1 : N", ponta=False, exato=True,
            pontos=[(80, 700), (80, 860), (440, 860)], pos_texto=0.75)
+    # Pessoas da vida, consequências à espera e marcas (bens e conquistas)
+    T("pessoa", 20, 970, 240, 160, "Pessoa",
+      ["PK id", "FK atleta_id", "papel", "nome", "relacao", "interagiu", "ativa"], cor="laranja")
+    T("seguimento", 440, 970, 240, 100, "Seguimento",
+      ["PK id", "FK atleta_id", "evento", "jornadas"], cor="laranja")
+    T("marca", 860, 970, 240, 100, "Marca",
+      ["PK, FK atleta_id", "PK chave", "epoca"], cor="laranja")
+    for alvo, x in (("pessoa", 200), ("seguimento", 560), ("marca", 980)):
+        d.seta("atleta", alvo, "1 : N", ponta=False, exato=True,
+               pontos=[(140, 700), (140, 945), (x, 945), (x, 970)], pos_texto=0.97)
 
     d.seta("equipa", "torneio", "1 : N\n(equipa do jogador)", ponta=False, exato=True,
            pontos=[(260, 70), (440, 70)])

@@ -174,6 +174,29 @@ def icone(nome: str, tamanho: int, cor=(255, 255, 255)) -> pygame.Surface:
             pygame.draw.polygon(s, c, [(T * 0.5, T * 0.1), (T * 0.92, T * 0.5), (T * 0.08, T * 0.5)])
             pygame.draw.rect(s, c, (T * 0.2, T * 0.46, T * 0.6, T * 0.42))
             pygame.draw.rect(s, (0, 0, 0, 0), (T * 0.42, T * 0.62, T * 0.16, T * 0.26))
+        elif nome == "coracao":
+            pygame.draw.circle(s, c, (T * 0.32, T * 0.36), T * 0.2)
+            pygame.draw.circle(s, c, (T * 0.68, T * 0.36), T * 0.2)
+            pygame.draw.polygon(s, c, [(T * 0.13, T * 0.42), (T * 0.87, T * 0.42), (T * 0.5, T * 0.88)])
+        elif nome == "livro":
+            pygame.draw.polygon(s, c, [(T * 0.08, T * 0.2), (T * 0.47, T * 0.26), (T * 0.47, T * 0.86),
+                                       (T * 0.08, T * 0.78)])
+            pygame.draw.polygon(s, c, [(T * 0.92, T * 0.2), (T * 0.53, T * 0.26), (T * 0.53, T * 0.86),
+                                       (T * 0.92, T * 0.78)])
+        elif nome == "moeda":
+            pygame.draw.circle(s, c, (m, m), T * 0.44)
+            pygame.draw.circle(s, (0, 0, 0, 0), (m, m), T * 0.32)
+            pygame.draw.rect(s, c, (T * 0.44, T * 0.28, T * 0.12, T * 0.44), border_radius=int(T * 0.04))
+        elif nome == "estrela":
+            pts = []
+            for i in range(10):
+                ang = -math.pi / 2 + i * math.pi / 5
+                r = T * (0.48 if i % 2 == 0 else 0.2)
+                pts.append((m + r * math.cos(ang), m + r * math.sin(ang)))
+            pygame.draw.polygon(s, c, pts)
+        elif nome == "cruz":
+            pygame.draw.rect(s, c, (T * 0.38, T * 0.1, T * 0.24, T * 0.8), border_radius=int(T * 0.05))
+            pygame.draw.rect(s, c, (T * 0.1, T * 0.38, T * 0.8, T * 0.24), border_radius=int(T * 0.05))
         elif nome == "jogador":
             # Um jogador: cabeça e tronco (carreira de jogador)
             pygame.draw.circle(s, c, (m, T * 0.26), T * 0.17)
