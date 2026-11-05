@@ -2,6 +2,11 @@
 
 Projeto PAP Rafael 2026/2027 — **StickMania**, um jogo de hóquei em patins 2D feito em Python com `pygame-ce`.
 
+## Planeamento
+
+O diagrama de Gantt do projeto está em **[docs/GANTT.md](docs/GANTT.md)** — o GitHub desenha-o a partir de
+código Mermaid. É gerado pelo mesmo script da imagem do relatório (`docs/diagramas/gerar_gantt.py`).
+
 ## Como jogar
 
 Requisitos: **Python 3.10 ou superior**.
