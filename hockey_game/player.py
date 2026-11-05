@@ -72,6 +72,12 @@ _ANIMACOES_JOGADOR = [
 ]
 
 
+# Os frames têm 128x128, mas o boneco só ocupa a zona x 28-101, y 35-126 (já alinhado pelos patins).
+# Cortamos este quadrado de 94 px (centrado nos patins, com os pés em baixo) antes de reduzir para
+# PLAYER_SIZE: o jogador fica ~36% maior no ecrã sem mudar o tamanho da imagem nem as colisões.
+_RECORTE_SPRITE = pygame.Rect(17, 34, 94, 94)
+
+
 def _carregar_animacoes(equipa: str, kit: dict | None = None) -> dict:
     """
     Carrega as animações do jogador.
@@ -83,7 +89,8 @@ def _carregar_animacoes(equipa: str, kit: dict | None = None) -> dict:
     s = PLAYER_SIZE
     anims = {}
     for estado, nomes, fps, loop in _ANIMACOES_JOGADOR:
-        anim = load_animation_from_names(pasta, nomes, fps=fps, loop=loop, scale=s)
+        anim = load_animation_from_names(pasta, nomes, fps=fps, loop=loop, scale=s,
+                                         recorte=_RECORTE_SPRITE)
         anim.frames = escurecer_stick(("jogador", estado, s), anim.frames)
         if kit:
             anim.frames = recolorir_frames((estado, s, "v2"), anim.frames, kit)

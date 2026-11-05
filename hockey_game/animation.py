@@ -83,11 +83,17 @@ def alinhar_pelos_pes(img: pygame.Surface, altura_pes: int = 24) -> pygame.Surfa
 
 
 def _load_image(path: str, scale: tuple[int, int] | None = None,
-                alinhar: bool = False) -> pygame.Surface:
-    """Carrega uma imagem com transparência; alinha pelos pés e faz scale se pedido."""
+                alinhar: bool = False, recorte: pygame.Rect | None = None) -> pygame.Surface:
+    """
+    Carrega uma imagem com transparência; alinha pelos pés e faz scale se pedido.
+    'recorte' corta a margem vazia à volta do boneco antes do scale,
+    para ele ocupar mais espaço (e ficar maior) na imagem final.
+    """
     img = pygame.image.load(path).convert_alpha()
     if alinhar:
         img = alinhar_pelos_pes(img)
+    if recorte:
+        img = img.subsurface(recorte).copy()
     if scale:
         img = redimensionar(img, scale)
     return img
@@ -96,12 +102,13 @@ def _load_image(path: str, scale: tuple[int, int] | None = None,
 def load_animation_from_names(folder: str, nomes: list[str], fps: float = 8.0,
                               loop: bool = True,
                               scale: tuple[int, int] | None = None,
-                              alinhar: bool = True) -> Animation:
+                              alinhar: bool = True,
+                              recorte: pygame.Rect | None = None) -> Animation:
     """
     Cria uma animação a partir de uma lista de nomes de ficheiros (sem .png).
     Útil para montar um ciclo com os melhores frames, mesmo que tenham nomes diferentes.
     """
-    frames = [_load_image(os.path.join(folder, n + ".png"), scale, alinhar) for n in nomes]
+    frames = [_load_image(os.path.join(folder, n + ".png"), scale, alinhar, recorte) for n in nomes]
     return Animation(frames, fps=fps, loop=loop)
 
 
