@@ -33,8 +33,9 @@ For Each c In candidatos
 Next
 
 If py <> "" Then
-    ' 0 = sem janela; o jogo abre a sua propria janela
-    sh.Run """" & py & """ main.py", 0, False
+    ' 1 = janela normal. O pythonw nunca abre a consola, por isso nao aparece o cmd.
+    ' (Com 0 o Windows escondia tambem a janela do proprio jogo: o jogo corria, mas invisivel.)
+    sh.Run """" & py & """ main.py", 1, False
 Else
     ' Falta o Python ou o pygame-ce: a versao com consola mostra o que se passa e instala o que falta
     sh.Run """" & pasta & "\jogar_com_consola.bat""", 1, False
