@@ -278,7 +278,7 @@ class ListaBotoes:
 # ====================================================================== #
 
 _PASTA_AZUL = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                           "..", "sprites_v2", "hd", "frames", "azul")
+                           "..", "sprites_v2", "hd", "frames", "novo")
 _cache_preview = {}
 
 

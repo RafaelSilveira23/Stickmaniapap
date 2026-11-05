@@ -116,7 +116,7 @@ def _frames_defesa(jogador) -> dict:
     chave = ("defesa_pov", chave_kit(kit) if kit else equipa)
     if chave in _cache:
         return _cache[chave]
-    pasta = os.path.join(os.path.dirname(_PASTA_GR), "azul" if kit else equipa)
+    pasta = os.path.join(os.path.dirname(_PASTA_GR), "novo" if kit or equipa == "azul" else equipa)
     poses = {}
     for pose, nomes in _POSES_DEFESA.items():
         frames = load_animation_from_names(pasta, nomes, alinhar=True).frames

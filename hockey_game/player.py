@@ -76,7 +76,8 @@ def _carregar_animacoes(equipa: str, kit: dict | None = None) -> dict:
     Se for dado um 'kit' (cores do equipamento), usa os sprites base azuis
     e pinta-os com as cores da equipa.
     """
-    pasta = _pasta_sprites("azul" if kit else equipa)
+    # "novo" = sprites azuis com o cabelo igual em todos os frames
+    pasta = _pasta_sprites("novo" if kit or equipa == "azul" else equipa)
     s = PLAYER_SIZE
     anims = {}
     for estado, nomes, fps, loop in _ANIMACOES_JOGADOR:
