@@ -59,7 +59,9 @@ def _pasta_sprites(equipa: str) -> str:
 # e usamo-lo em todas as direções.
 _ANIMACOES_JOGADOR = [
     # (estado, ficheiros, fps, loop)
-    ("parado",   ["parado_01", "parado_02", "parado_03"],                       2.0, True),
+    # Os ficheiros parado_0X estão de frente e sem stick (o stick desaparecia).
+    # Usamos a pose de lado com o stick no chão (sem bola desenhada), lenta como uma respiração.
+    ("parado",   ["com_bola_02", "com_bola_03"],                                 2.0, True),
     ("correr",   ["correr_esquerda_01", "correr_esquerda_02",
                   "correr_esquerda_03", "correr_cima_02"],                      9.0, True),
     # com_bola_04 não entra: esse frame já tem uma bola desenhada (ficavam duas bolas)
