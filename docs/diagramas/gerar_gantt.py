@@ -1,9 +1,13 @@
 # -*- coding: utf-8 -*-
-"""gerar_gantt.py - gera o diagrama de Gantt do relatório da PAP (09_gantt.png).
+"""gerar_gantt.py - gera o diagrama de Gantt do projeto em dois formatos:
+
+  • 09_gantt.png      - imagem para o relatório da PAP (desenhada com pygame);
+  • ../GANTT.md       - o mesmo diagrama em Mermaid, que o site do GitHub desenha sozinho
+                        (abre docs/GANTT.md no GitHub para o ver).
 
 Executar:  python gerar_gantt.py
 As tarefas são as da Tabela 10 (Cronograma do projeto). Para mudar uma data,
-basta alterar a lista TAREFAS em baixo e voltar a correr o script.
+basta alterar a lista TAREFAS em baixo e voltar a correr o script (os dois ficam iguais).
 """
 import os
 from datetime import date
@@ -163,5 +167,59 @@ def gerar():
     return caminho
 
 
+ESTADO_MERMAID = {"Concluído": "done", "Em curso": "active", "Planeado": ""}
+
+
+def gerar_mermaid() -> str:
+    """Escreve docs/GANTT.md com o diagrama em Mermaid (o GitHub mostra-o como um Gantt)."""
+    linhas = ["gantt",
+              "    title StickMania - Diagrama de Gantt (set. 2026 a jun. 2027)",
+              "    dateFormat YYYY-MM-DD",
+              "    axisFormat %m/%Y",
+              "    tickInterval 1month",
+              "    todayMarker off"]
+    n = 0
+    tabela = []
+    fase_atual = ""
+    for fase, tarefa, d1, d2, estado in TAREFAS:
+        if tarefa is None:
+            fase_atual = fase
+            linhas.append(f"    section {fase}")
+            continue
+        n += 1
+        nome = tarefa.replace(":", " -").replace("#", "")      # ":" e "#" têm significado no Mermaid
+        etiqueta = ESTADO_MERMAID[estado]
+        prefixo = f"{etiqueta}, " if etiqueta else ""
+        linhas.append(f"    {nome} :{prefixo}t{n}, {d1.isoformat()}, {d2.isoformat()}")
+        tabela.append(f"| {n} | {fase_atual} | {tarefa} | {d1.strftime('%d/%m/%Y')} | {d2.strftime('%d/%m/%Y')} | {estado} |")
+    texto = "\n".join([
+        "# Diagrama de Gantt — StickMania",
+        "",
+        "Planeamento do projeto da PAP, de setembro de 2026 a junho de 2027. O GitHub desenha o diagrama",
+        "a partir do código Mermaid abaixo. As barras escuras são tarefas concluídas, as realçadas estão",
+        "em curso e as claras estão planeadas.",
+        "",
+        "> Este ficheiro é gerado pelo script [`docs/diagramas/gerar_gantt.py`](diagramas/gerar_gantt.py),",
+        "> o mesmo que faz a imagem do relatório ([`09_gantt.png`](diagramas/09_gantt.png)): os dois têm",
+        "> sempre as mesmas datas.",
+        "",
+        "```mermaid",
+        *linhas,
+        "```",
+        "",
+        "## Tarefas",
+        "",
+        "| N.º | Fase | Tarefa | Início | Fim | Estado |",
+        "|---|---|---|---|---|---|",
+        *tabela,
+        "",
+    ])
+    caminho = os.path.join(PASTA, "..", "GANTT.md")
+    with open(caminho, "w", encoding="utf-8", newline="\n") as f:
+        f.write(texto)
+    return os.path.normpath(caminho)
+
+
 if __name__ == "__main__":
     print("Gerado:", gerar())
+    print("Gerado:", gerar_mermaid())
