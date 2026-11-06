@@ -18,6 +18,21 @@ pygame a correr no browser (WebAssembly): `python ferramentas/construir_web.py` 
 (`hockey_game/rede_web.py`); no computador usa TCP (`hockey_game/rede.py`). As duas versões não jogam
 uma contra a outra.
 
+## Relatório e divisão de tarefas
+
+O projeto é feito em dupla por **Rafael da Hora Silveira** e **Vasco Andreia**. Na pasta `docs/relatorio` há
+um relatório individual de cada um (`Relatorio_PAP_StickMania_Rafael_Silveira` e
+`Relatorio_PAP_StickMania_Vasco_Andreia`, em .docx e .pdf), com a divisão de tarefas na secção 5.4:
+
+| Parte | Quem fez |
+|---|---|
+| Inteligência artificial e guarda-redes, menus e interface, sons, base de dados, carreira de jogador e vida do jogador, remate na primeira pessoa e modo teste | Vasco Andreia |
+| Física da bola e dos jogadores, gráficos, sprites e câmara, jogo online e versão para o browser | Rafael da Hora Silveira |
+| Ciclo principal, modo carreira, estilo arcade, análise, diagramas, testes e relatório | Os dois |
+
+Os relatórios individuais são gerados a partir do relatório conjunto (`Relatorio_PAP_StickMania.docx`, o
+único que se edita à mão) com `python docs/relatorio/gerar_individuais.py --pdf` (o `--pdf` precisa do Word).
+
 ## Planeamento
 
 O diagrama de Gantt do projeto está em **[docs/GANTT.md](docs/GANTT.md)** — o GitHub desenha-o a partir de
