@@ -337,7 +337,8 @@ def gerar(aluno):
         "O projeto foi feito em dupla. O trabalho foi dividido por partes do jogo, cada uma com os seus "
         "módulos, para cada elemento poder trabalhar sem estragar o trabalho do outro (Tabela 99). A base do "
         "jogo, o modo carreira, o estilo arcade, a análise, os diagramas, os testes e o relatório foram feitos "
-        "pelos dois. As alterações de cada um foram juntadas no repositório do GitHub."])
+        "pelos dois. As alterações de cada um foram juntadas no repositório do GitHub. O diagrama de Gantt "
+        "(Figura 33, na secção 5.1) também mostra quem fez cada tarefa e quando."])
     leg_modelo = procurar(d, "Tabela 10 – Cronograma", True)
     cur.par(leg_modelo, ["Tabela 99 – Divisão de tarefas entre os dois elementos do grupo"])
     tab_modelo = [t for t in d.tables if t.rows[0].cells[0].text == "Período"][0]
