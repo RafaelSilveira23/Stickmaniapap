@@ -36,6 +36,36 @@ aparece uma janela com a mensagem, que também fica gravada em `hockey_game/save
 | F11 | Ecrã inteiro |
 | F3 | Modo de depuração |
 
+No **jogo online** os controlos são os mesmos, mas o `X` faz um remate direto à baliza (o ecrã do remate na
+primeira pessoa pararia o jogo do outro jogador): carrega numa seta para cima ou para baixo ao mesmo tempo
+para apontar a esse lado da baliza.
+
+## Jogar online (contra um amigo noutro computador)
+
+1. Os dois abrem o jogo e escolhem **JOGAR ONLINE** no menu principal.
+2. Um escolhe **CRIAR JOGO** (é o *anfitrião* e joga com a equipa da casa). Aparece no ecrã o endereço do
+   computador dele (por exemplo `192.168.1.20` ou `26.12.34.56`).
+3. O outro escolhe **ENTRAR NUM JOGO**, escreve esse endereço e carrega em **LIGAR** (joga com a equipa de fora).
+4. O anfitrião escolhe as duas equipas e começa a partida.
+
+Na primeira vez o **Firewall do Windows** pergunta se o Python pode usar a rede: carrega em **Permitir**
+(no computador do anfitrião). O jogo usa a porta **50555** (TCP).
+
+**Na mesma rede** (casa, escola): funciona logo com o endereço que aparece ao anfitrião.
+
+**Pela internet** os dois computadores têm de "se ver". A forma mais simples:
+
+- **Radmin VPN** (grátis, feito para jogos): instalem os dois o [Radmin VPN](https://www.radmin-vpn.com/),
+  um cria uma rede (*Network → Create network*, com nome e palavra-passe) e o outro entra nela
+  (*Network → Join network*). O endereço a usar no jogo é o que começa por **26.** (o jogo mostra-o primeiro).
+- Alternativas iguais: **ZeroTier** ou **Tailscale** (endereços `100.x.x.x`).
+- Sem VPN: o anfitrião pode abrir a porta 50555 no router (*port forwarding*) ou usar um túnel como o
+  **playit.gg**; nesse caso o amigo escreve `endereço:porta` (por exemplo `exemplo.playit.gg:12345`).
+
+Como funciona: só o computador do anfitrião corre o jogo (física, IA, golos). O convidado envia as teclas que
+carrega e recebe 30 vezes por segundo o estado do jogo (posições, bola, resultado, sons e efeitos), que desenha
+com suavização para não se ver aos saltos (`hockey_game/rede.py` e `hockey_game/online.py`).
+
 ## Funcionalidades
 
 - Menu principal com o pavilhão desfocado ao fundo e uma **engrenagem no canto** que abre as
@@ -97,6 +127,7 @@ aparece uma janela com a mensagem, que também fica gravada em `hockey_game/save
 - **Balizas desenhadas no código** (vista 3/4, rede em malha, sombra), em duas camadas:
   a bola fica por baixo da rede quando entra e o guarda-redes fica à frente da baliza
 - Jogadores desenhados por ordem de profundidade (quem está mais abaixo no ecrã fica à frente)
+- **Jogar online**: dois jogadores em computadores diferentes, um em cada equipa (ver em cima)
 - **Câmara em perspetiva (vista de TV)**: o campo aparece em trapézio, os jogadores do fundo
   ficam mais pequenos, as tabelas têm altura e publicidade, e há bancadas com público
   nas cores da equipa da casa. A física e a IA continuam num campo plano; só o desenho
@@ -128,6 +159,9 @@ aparece uma janela com a mensagem, que também fica gravada em `hockey_game/save
 | `hockey_game/animation.py` | Carregamento de animações (redução suave e alinhamento pelos patins) |
 | `hockey_game/ui.py` | HUD (marcador, mini-mapa, cartão do jogador) |
 | `hockey_game/fontes.py` | Fontes do sistema com cache (cada fonte é criada uma só vez) |
+| `hockey_game/rede.py` | Ligação TCP entre os dois computadores (anfitrião e convidado), em threads |
+| `hockey_game/online.py` | Jogo online: o anfitrião corre o jogo e envia o estado; o convidado envia as teclas |
+| `hockey_game/online_menu.py` | Ecrã "Jogar online" (criar jogo, escrever o endereço, à espera) |
 | `jogar.vbs` / `jogar_com_consola.bat` | Arrancar o jogo sem consola / com consola (e instalar o pygame-ce) |
 | `sprites_v2/` | Sprites usados pelo jogo (jogadores, guarda-redes, bola e público) |
 

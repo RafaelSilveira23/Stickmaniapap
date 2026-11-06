@@ -204,6 +204,16 @@ def icone(nome: str, tamanho: int, cor=(255, 255, 255)) -> pygame.Surface:
             pygame.draw.circle(s, c, (m, T * 0.26), T * 0.17)
             pygame.draw.ellipse(s, c, (T * 0.18, T * 0.48, T * 0.64, T * 0.56))
             pygame.draw.rect(s, (0, 0, 0, 0), (0, T * 0.86, T, T * 0.14))
+        elif nome == "globo":
+            # Globo (jogar online): círculo com o equador, dois paralelos e um meridiano
+            w = int(T * 0.07)
+            pygame.draw.circle(s, c, (m, m), T * 0.44, w)
+            pygame.draw.ellipse(s, c, (T * 0.30, T * 0.06, T * 0.40, T * 0.88), w)
+            pygame.draw.line(s, c, (T * 0.06, m), (T * 0.94, m), w)
+            for y in (0.28, 0.72):
+                meia = math.sqrt(max(0.0, 0.44 ** 2 - (y - 0.5) ** 2)) * T
+                pygame.draw.line(s, c, (m - meia, T * y), (m + meia, T * y), w)
+            pygame.draw.line(s, c, (m, T * 0.06), (m, T * 0.94), w)
         elif nome == "sair":
             # Símbolo de "desligar"
             w = int(T * 0.11)

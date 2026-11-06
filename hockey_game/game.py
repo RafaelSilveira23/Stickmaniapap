@@ -25,6 +25,7 @@ from carreira import Campeonato, CAMINHO_BD, PASTA_SAVES, FORCA_EQUIPAS
 from carreira_menu import EcraCarreiraEscolha, EcraCampeonato
 from carreira_jogador import CarreiraJogador, CAMINHO_BD_JOGADOR, atributos as atributos_jogador, calcular_nota
 from carreira_jogador_menu import EcraCriarJogador, EcraCarreiraJogador
+from online import OnlineMixin
 
 DURACAO_PARTE = 60 * 5   # 5 minutos por parte
 DIFICULDADE_EQUIPA_HUMANA = "normal"   # nível dos colegas e do GR do jogador humano
@@ -42,7 +43,7 @@ FORMACAO = [
 CAMINHO_DEFINICOES = os.path.join(PASTA_SAVES, "definicoes.json")
 
 
-class Game:
+class Game(OnlineMixin):
     def __init__(self):
         pygame.init()
         definicoes = self._ler_definicoes()
@@ -158,6 +159,9 @@ class Game:
         self._mira_vel          = 1.2       # velocidade de oscilação da barra (ciclos/s)
         self._mira_direcao      = pygame.math.Vector2(1, 0)  # direção apontada
         self._mira_confirmada   = False
+
+        # ── Jogo online (ver online.py) ─────────────────────────────────
+        self._online_iniciar(definicoes)
 
         self.running    = True
         self.show_debug = False
@@ -332,7 +336,8 @@ class Game:
             os.makedirs(os.path.dirname(CAMINHO_DEFINICOES), exist_ok=True)
             with open(CAMINHO_DEFINICOES, "w", encoding="utf-8") as f:
                 json.dump({"ecra_inteiro": self.ecra_inteiro, "estilo_arcade": self.estilo_arcade,
-                           "vol_efeitos": som.vol_efeitos, "vol_publico": som.vol_publico}, f)
+                           "vol_efeitos": som.vol_efeitos, "vol_publico": som.vol_publico,
+                           "online_endereco": getattr(self, "_online_endereco", "")}, f)
         except OSError:
             pass          # não conseguir gravar não impede de jogar
 
@@ -452,6 +457,8 @@ class Game:
                 self._som_acao(acao)
                 if acao == "jogar":
                     self.abrir_selecao_equipas()
+                elif acao == "online":
+                    self.abrir_online()
                 elif acao == "carreira":
                     self.abrir_escolha_carreira()
                 elif acao == "carreira_jogador":
@@ -462,6 +469,10 @@ class Game:
                     self._abrir_definicoes("menu_principal")
                 elif acao == "sair":
                     self.running = False
+            return
+
+        if self.estado == "online":
+            self._online_eventos_ecra()
             return
 
         if self.estado == "controlos":
@@ -564,15 +575,24 @@ class Game:
             for event in pygame.event.get():
                 res = self.menu.handle_event(event)
                 self._som_acao(res)
-                if res == "iniciar":
+                if res == "iniciar" and self.online == "anfitriao":
+                    self._online_comecar(*self.menu.get_equipas())
+                elif res == "iniciar":
                     c_id, f_id = self.menu.get_equipas()
                     self.iniciar_partida(c_id, f_id, dificuldade=self.menu.get_dificuldade())
+                elif res == "voltar" and self.online:
+                    self.abrir_online()             # sai do jogo online
                 elif res == "voltar":
                     c_id, f_id = self.menu.get_equipas()
                     self.dificuldade = self.menu.get_dificuldade()
                     self.ir_para_menu_principal(c_id, f_id)
                 elif res == "sair":
                     self.running = False
+            return
+
+        # ── Jogo online: teclas próprias (o jogo não pára na pausa) ──────
+        if self.online and self.estado == "jogo":
+            self._online_eventos_jogo()
             return
 
         # ── Jogo em pausa ────────────────────────────────────────────────
@@ -715,18 +735,20 @@ class Game:
         mapa = {"direita":(1,0),"esquerda":(-1,0),"cima":(0,-1),"baixo":(0,1)}
         return pygame.math.Vector2(mapa.get(jogador.direcao, (-1, 0)))
 
-    def _acao_passe(self):
-        if self.jogador_humano.tem_bola and self.jogo_ativo:
-            direcao = self._direcao_vec(self.jogador_humano)
+    def _acao_passe(self, jogador=None):
+        """Passe do jogador controlado (no jogo online também do jogador do convidado)."""
+        eu = jogador or self.jogador_humano
+        if eu.tem_bola and self.jogo_ativo:
+            direcao = self._direcao_vec(eu)
             melhor_colega = None
             melhor_score = -1.0
 
-            # Procura o colega azul mais bem posicionado na direção apontada
-            for j in self.equipa_azul:
-                if j == self.jogador_humano:
+            # Procura o colega mais bem posicionado na direção apontada
+            for j in (self.equipa_azul if eu.equipa == "azul" else self.equipa_vermelha):
+                if j == eu:
                     continue
-                to_j = pygame.math.Vector2(j.pos_x - self.jogador_humano.pos_x,
-                                           j.pos_y - self.jogador_humano.pos_y)
+                to_j = pygame.math.Vector2(j.pos_x - eu.pos_x,
+                                           j.pos_y - eu.pos_y)
                 dist = to_j.length()
                 if 30 < dist < 500:
                     dot = direcao.dot(to_j.normalize())
@@ -737,12 +759,12 @@ class Game:
                             melhor_colega = j
 
             if melhor_colega:
-                dir_passe = pygame.math.Vector2(melhor_colega.pos_x - self.jogador_humano.pos_x,
-                                                melhor_colega.pos_y - self.jogador_humano.pos_y).normalize()
-                self.jogador_humano.fazer_passe(self.bola, dir_passe)
+                dir_passe = pygame.math.Vector2(melhor_colega.pos_x - eu.pos_x,
+                                                melhor_colega.pos_y - eu.pos_y).normalize()
+                eu.fazer_passe(self.bola, dir_passe)
                 self.bola.marcar_recetor(melhor_colega)
             else:
-                self.jogador_humano.fazer_passe(self.bola, direcao)
+                eu.fazer_passe(self.bola, direcao)
 
     def _acao_remate(self):
         """Ao premir X com a bola: abre o remate na primeira pessoa (apontar e escolher a força)."""
@@ -948,6 +970,13 @@ class Game:
 
     def update(self, dt: float):
         self._atualizar_publico()
+        self._online_tick(dt)                  # mensagens da rede (só no jogo online)
+        if self.estado == "online":
+            self.ecra_online.update(dt)
+            return
+        if self.online == "convidado" and self.estado == "jogo":
+            self._update_convidado(dt)         # o convidado só mostra o que o anfitrião envia
+            return
         if self.estado == "menu_principal":
             self.menu_principal.update(dt)
             return
@@ -971,7 +1000,8 @@ class Game:
             return
         if self.pausado:
             self.menu_pausa.update(dt)
-            return
+            if not self.online:                # online o jogo continua (o outro está a jogar)
+                return
         if self.fim_jogo:
             self.ecra_fim.update(dt)
             return
@@ -1033,6 +1063,8 @@ class Game:
 
         # Auto-seleção inteligente
         self._auto_selecionar()
+        if self.online == "anfitriao":
+            self._online_controlar_remoto()    # o jogador do convidado
 
         # IA Vermelha
         lista_verm = list(self.equipa_vermelha)
@@ -1048,7 +1080,14 @@ class Game:
 
         # Atualizar todos os jogadores (com colisão contra as balizas do campo)
         for j in self.todos_jogadores:
-            j.update(dt, self.rink.rect, self.bola, self.rink)
+            if self.pausado and j is self.jogador_humano:
+                # Jogo online com o menu de pausa aberto: as setas são do menu, o jogador pára
+                j.humano = False
+                j.set_target(0.0, 0.0)
+                j.update(dt, self.rink.rect, self.bola, self.rink)
+                j.humano = True
+            else:
+                j.update(dt, self.rink.rect, self.bola, self.rink)
 
         # Gestão de timers de falta
         if self._falta_cooldown > 0:
@@ -1083,6 +1122,8 @@ class Game:
         resultado = self.bola.update(dt, self.rink, todos_jogadores=todos,
                                      guarda_redes=(self.gr_azul, self.gr_vermelho))
 
+        if self.online == "anfitriao":
+            self._rede_eventos_bola.extend(self.bola.eventos)   # para o convidado ver os efeitos
         self._tocar_sons_bola()
 
         self._efeitos_posse()
@@ -1142,6 +1183,7 @@ class Game:
             self.dificuldade = dificuldade
         self.modo_jogador = False          # a carreira de jogador liga-o depois (iniciar_jogo_cj)
         self._cj_jogador = None
+        self.jogador_remoto = None         # o jogo online liga-o depois (online._online_comecar)
 
         # Repor estados da partida anterior (mira aberta, pausa, ...)
         self._cancelar_mira()
@@ -1606,6 +1648,7 @@ class Game:
         s.blit(f.render(linha, True, cor), (caixa.left + 60, caixa.top + 29))
 
     def ir_para_menu_principal(self, casa_id: str = None, fora_id: str = None):
+        self._online_fechar_rede()
         self._cancelar_mira()
         self.modo_teste = False
         self.remate_pov = None
@@ -1700,24 +1743,31 @@ class Game:
         self._msg_timer = 2.5
         self._msg_equipa = equipa
         som.tocar("golo")
+        if self.online == "anfitriao":
+            self._rede_x.append(["golo", equipa, nome])      # o convidado também faz a festa
         # Recomeça com a bola a equipa que sofreu o golo
         saida = "vermelho" if equipa == "azul" else "azul"
         if self.efeitos.ativo:
-            # Festa: câmara lenta, ecrã a tremer, confetes e "GOLO!" gigante; só depois se repõe
-            kit = self.kit_casa if equipa == "azul" else self.kit_fora
-            info = info_casa if equipa == "azul" else info_fora
-            cam = self.rink.camera
-            gx = self.rink.linha_golo_esq_x if equipa == "azul" else self.rink.linha_golo_dir_x
-            sx, sy = cam.projetar(gx, self.rink.rect.centery)
-            self.efeitos.golo(info["nome"], nome, kit["principal"])
-            self.efeitos.confetis(sx, sy, [kit["principal"], kit.get("secundaria", (255, 255, 255)),
-                                           (255, 220, 60), (255, 255, 255)], 90)
-            self.efeitos.tremer(11, 0.5)
-            self.efeitos.flash(0.9)
-            self.efeitos.camara_lenta(1.5, 0.25)
+            # Festa e só depois se repõe
+            self._festa_golo(equipa, nome)
             self._reposicao_pendente = (saida, 2.0)
         else:
             self._repor_posicoes(saida=saida)
+
+    def _festa_golo(self, equipa: str, nome):
+        """Festa: câmara lenta, ecrã a tremer, confetes e "GOLO!" gigante (estilo arcade)."""
+        if not self.efeitos.ativo:
+            return
+        kit = self.kit_casa if equipa == "azul" else self.kit_fora
+        info = obter_info_equipa(self.equipa_casa_id if equipa == "azul" else self.equipa_fora_id)
+        gx = self.rink.linha_golo_esq_x if equipa == "azul" else self.rink.linha_golo_dir_x
+        sx, sy = self.rink.camera.projetar(gx, self.rink.rect.centery)
+        self.efeitos.golo(info["nome"], nome, kit["principal"])
+        self.efeitos.confetis(sx, sy, [kit["principal"], kit.get("secundaria", (255, 255, 255)),
+                                       (255, 220, 60), (255, 255, 255)], 90)
+        self.efeitos.tremer(11, 0.5)
+        self.efeitos.flash(0.9)
+        self.efeitos.camara_lenta(1.5, 0.25)
 
     def _repor_posicoes(self, saida: str = "azul"):
         """Volta a pôr todos nas posições iniciais. 'saida' = equipa que fica com a bola."""
@@ -1778,7 +1828,8 @@ class Game:
             som.tocar("apito_final")
             self.ecra_fim   = EcraFimJogo(self.screen, modo_carreira=self.modo_carreira,
                                           jornada=self._jornada_carreira,
-                                          jogador=self._resumo_jogo_cj() if self.modo_jogador else None)
+                                          jogador=self._resumo_jogo_cj() if self.modo_jogador else None,
+                                          online=self.online)
 
     # ================================================================== #
     # Desenho Principal                                                    #
@@ -1789,6 +1840,8 @@ class Game:
             self.menu_principal.draw()
         elif self.estado == "menu_selecao":
             self.menu.draw()
+        elif self.estado == "online":
+            self.ecra_online.draw()
         elif self.estado == "carreira_escolha":
             self.ecra_carreira.draw()
         elif self.estado == "carreira":
@@ -1821,7 +1874,7 @@ class Game:
         """Identifica o ecrã que está à vista; quando muda, faz-se uma transição."""
         ecras = {"menu_principal": "menu_principal", "menu_selecao": "menu", "carreira_escolha": "ecra_carreira",
                  "carreira": "ecra_campeonato", "cj_criar": "ecra_cj_criar", "cj": "ecra_cj",
-                 "controlos": "ecra_controlos"}
+                 "controlos": "ecra_controlos", "online": "ecra_online"}
         obj = getattr(self, ecras.get(self.estado, ""), None)
         return (self.estado, id(obj), self.pausado, self.fim_jogo, self.remate_pov is not None)
 

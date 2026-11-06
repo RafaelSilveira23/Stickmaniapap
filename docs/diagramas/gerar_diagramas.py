@@ -14,8 +14,8 @@ PASTA = os.path.dirname(os.path.abspath(__file__))
 # 1. Casos de uso
 # ═══════════════════════════════════════════════════════════════════════
 def casos_de_uso():
-    d = Diagrama("01_casos_de_uso", 1010, 800, "Casos de uso")
-    d.caixa("sis", 190, 10, 630, 780, "Sistema: StickMania", "grupo", "cinza", tam=15)
+    d = Diagrama("01_casos_de_uso", 1010, 880, "Casos de uso")
+    d.caixa("sis", 190, 10, 630, 860, "Sistema: StickMania", "grupo", "cinza", tam=15)
     d.caixa("jog", 60, 290, 50, 90, "Jogador", "ator", "azul")
     d.caixa("ia", 905, 290, 50, 90, "Computador (IA)", "ator", "vermelho")
 
@@ -23,7 +23,8 @@ def casos_de_uso():
            ("uc4", "Jogar partida"), ("uc5", "Pausar / continuar"), ("uc6", "Ver resultado final"),
            ("uc7", "Jogar o modo carreira\n(campeonato)"), ("uc8", "Consultar classificação,\ncalendário e marcadores"),
            ("uc15", "Treinar remates\n(modo teste)"),
-           ("uc16", "Jogar a carreira de jogador\n(só o meu jogador)")]
+           ("uc16", "Jogar a carreira de jogador\n(só o meu jogador)"),
+           ("uc17", "Jogar online contra\num amigo")]
     for i, (id, txt) in enumerate(esq):
         planeado = "implementar" in txt
         d.caixa(id, 215, 50 + i * 74, 225, 54, txt, "elipse", "amarelo" if planeado else "azul",
@@ -41,6 +42,10 @@ def casos_de_uso():
     d.seta("ia", "uc13", ponta=False, exato=True, pontos=[(905, 335), (765, 507)])
     d.seta("ia", "uc14", ponta=False, exato=True, pontos=[(905, 335), (765, 587)])
     d.seta("uc4", "uc13", "«include»", tracejado=True, pos_texto=0.6)
+
+    # Jogo online: o amigo joga noutro computador, com a equipa de fora
+    d.caixa("amigo", 905, 700, 50, 90, "Amigo\n(noutro PC)", "ator", "verde")
+    d.seta("amigo", "uc17", ponta=False, exato=True, pontos=[(905, 745), (440, 817)])
     return d
 
 
@@ -76,6 +81,10 @@ def arquitetura():
     d.seta("gE", "gC", "eventos")
     d.seta("gC", "gS", "desenho")
     d.seta("gD", "gC", "carrega")
+    d.caixa("net", 10, 440, 200, 90, "Rede (jogo online)\nrede.py · online.py\nTCP, porta 50555", "arredondado",
+            "laranja")
+    d.seta("net", "gC", "comandos e\nestado do jogo", exato=True, ambos=True,
+           pontos=[(210, 485), (240, 485), (240, 330), (270, 330)])
     d.seta("gC", "bd", "grava e lê\no campeonato", exato=True, ambos=True,
            pontos=[(790, 330), (820, 330), (820, 485), (850, 485)])
     return d

@@ -133,6 +133,7 @@ class Player(pygame.sprite.Sprite):
         self.numero  = numero
         self.nome    = nome
         self.humano  = humano
+        self.remoto  = False    # jogo online: controlado pelo outro computador (não lê o teclado)
         self.teclas  = teclas   # esquema de teclas para este jogador
 
         self.stat_velocidade = 80
@@ -215,7 +216,7 @@ class Player(pygame.sprite.Sprite):
             self._bloqueio_desarme = max(0.0, self._bloqueio_desarme - dt)
         self._rink_rect, self._rink = rink_rect, rink
 
-        if self.humano:
+        if self.humano and not self.remoto:
             self._input_humano()
 
         self._aplicar_inercia(dt)
@@ -243,7 +244,13 @@ class Player(pygame.sprite.Sprite):
             if keys[pygame.K_i]: vy -= 1
             if keys[pygame.K_k]: vy += 1
             sprint = keys[pygame.K_RSHIFT]
+        self.aplicar_controlo(vx, vy, sprint)
 
+    def aplicar_controlo(self, vx: float, vy: float, sprint: bool):
+        """
+        Movimento pedido pelo jogador (-1, 0 ou 1 em cada eixo). Usado pelo teclado e, no jogo
+        online, pelos comandos que chegam do outro computador.
+        """
         self._sprint_ativo = bool(sprint)
         spd = PLAYER_SPRINT if sprint else PLAYER_SPEED
 

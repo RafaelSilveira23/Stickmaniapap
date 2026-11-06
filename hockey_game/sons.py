@@ -304,6 +304,7 @@ class Sons:
         self.vol_publico = 0.5
         self._sons = {}
         self._ultimo = {}
+        self.gravacao = None        # lista onde se guardam os sons (só no anfitrião de um jogo online)
         self._canal_publico = None
         self._nivel_publico = 0.0      # 0 = desligado, 1 = jogo, valores intermédios nos menus
 
@@ -327,6 +328,10 @@ class Sons:
     # ------------------------------------------------------------------ #
     def tocar(self, nome: str, volume: float = 1.0, x: float | None = None):
         """Toca um efeito. 'x' (posição no ecrã) põe o som mais à esquerda ou à direita."""
+        # Jogo online: o anfitrião guarda os sons do jogo para o convidado os tocar também
+        if self.gravacao is not None and not nome.startswith("ui_"):
+            self.gravacao.append([nome, round(volume, 2), None if x is None else round(x)])
+            del self.gravacao[:-40]
         if not self.ativo or nome not in self._sons:
             return
         agora = pygame.time.get_ticks() / 1000

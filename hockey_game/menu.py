@@ -212,15 +212,17 @@ class MenuPrincipal:
         bw, x = 460, WIDTH // 2 - 230
         self.engrenagem = BotaoEngrenagem((WIDTH - 50, 48))
         self.lista = ListaBotoes([
-            BotaoMenu((x, 280, bw, 62), "JOGO RÁPIDO", "Escolhe dois clubes e joga uma partida",
+            BotaoMenu((x, 258, bw, 52), "JOGO RÁPIDO", "Escolhe dois clubes e joga uma partida",
                       "jogar", (40, 190, 100), "jogar"),
-            BotaoMenu((x, 348, bw, 62), "MODO CARREIRA", "Leva o teu clube ao título do campeonato",
+            BotaoMenu((x, 316, bw, 52), "JOGAR ONLINE", "Joga contra um amigo noutro computador",
+                      "online", (40, 200, 210), "globo"),
+            BotaoMenu((x, 374, bw, 52), "MODO CARREIRA", "Leva o teu clube ao título do campeonato",
                       "carreira", (255, 175, 40), "trofeu"),
-            BotaoMenu((x, 416, bw, 62), "CARREIRA DE JOGADOR", "Cria o teu jogador e joga só com ele",
+            BotaoMenu((x, 432, bw, 52), "CARREIRA DE JOGADOR", "Cria o teu jogador e joga só com ele",
                       "carreira_jogador", (255, 110, 160), "jogador"),
-            BotaoMenu((x, 484, bw, 62), "MODO TESTE", "Treina remates contra o guarda-redes",
+            BotaoMenu((x, 490, bw, 52), "MODO TESTE", "Treina remates contra o guarda-redes",
                       "teste", (80, 170, 255), "alvo"),
-            BotaoMenu((x + 80, 552, bw - 160, 46), "SAIR", "", "sair", (230, 70, 70), "sair"),
+            BotaoMenu((x + 80, 550, bw - 160, 42), "SAIR", "", "sair", (230, 70, 70), "sair"),
             self.engrenagem,
         ])
         self._cone = cone_luz(360, 470)
@@ -269,10 +271,10 @@ class MenuPrincipal:
         emb = emblema_sticks(140)
         flutuar = 3 * math.sin(self.t * 1.8)
         brilho = luz(300, 200, (255, 210, 150), 70)
-        s.blit(brilho, brilho.get_rect(center=(cx, 84)), special_flags=pygame.BLEND_RGB_ADD)
-        s.blit(emb, emb.get_rect(center=(cx, 76 + flutuar)))
+        s.blit(brilho, brilho.get_rect(center=(cx, 78)), special_flags=pygame.BLEND_RGB_ADD)
+        s.blit(emb, emb.get_rect(center=(cx, 70 + flutuar)))
 
-        tr = self._titulo.get_rect(center=(cx, 182))
+        tr = self._titulo.get_rect(center=(cx, 174))
         s.blit(self._titulo, tr)
         # Reflexo de luz que atravessa o título de vez em quando
         ciclo = (self.t % 5.0) / 1.2
@@ -284,10 +286,10 @@ class MenuPrincipal:
                                 [(x, 0), (x + 50, 0), (x + 10, m.get_height()), (x - 40, m.get_height())])
             brilho_txt = m.copy()
             brilho_txt.blit(faixa, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
-            s.blit(brilho_txt, brilho_txt.get_rect(center=(cx, 182)))
+            s.blit(brilho_txt, brilho_txt.get_rect(center=(cx, 174)))
 
         # Subtítulo dourado com riscas dos lados
-        y = 250
+        y = 236
         r = texto(s, "H Ó Q U E I   E M   P A T I N S", 17, COR_DESTAQUE, (cx, y))
         for sinal in (-1, 1):
             xa = cx + sinal * (r.width // 2 + 18)
@@ -341,7 +343,7 @@ class MenuPrincipal:
         pygame.draw.line(s, (40, 60, 105), (WIDTH // 2 - 220, HEIGHT - 44), (WIDTH // 2 + 220, HEIGHT - 44), 1)
         texto(s, "Projeto PAP  •  Rafael Silveira  •  2026/2027", 13, (110, 130, 175),
               (WIDTH // 2, HEIGHT - 26), negrito=False)
-        texto(s, "v16", 12, (80, 100, 145), (18, HEIGHT - 24), ancora="midleft")
+        texto(s, "v17", 12, (80, 100, 145), (18, HEIGHT - 24), ancora="midleft")
 
 
 # ====================================================================== #
@@ -917,13 +919,20 @@ class MenuPausa:
     num marcador pequeno e botões grandes com ícones (os mesmos do menu principal).
     """
 
-    def __init__(self, screen: pygame.Surface, modo_carreira: bool = False, modo_teste: bool = False):
+    def __init__(self, screen: pygame.Surface, modo_carreira: bool = False, modo_teste: bool = False,
+                 modo_online: bool = False):
         self.screen = screen
         self.t = 0.0
         self.modo_carreira = modo_carreira
         self.modo_teste = modo_teste
+        self.modo_online = modo_online
         self._fundo = None                     # imagem desfocada do jogo (feita no primeiro desenho)
-        if modo_teste:
+        if modo_online:
+            # Online o jogo não pára (o outro jogador continua a jogar): só se pode voltar ou sair
+            itens = [("CONTINUAR", "continuar", (40, 190, 100), "jogar"),
+                     ("ABANDONAR O JOGO", "menu", (150, 110, 255), "casa"),
+                     ("SAIR DO JOGO", "sair", (230, 70, 70), "sair")]
+        elif modo_teste:
             itens = [("CONTINUAR", "continuar", (40, 190, 100), "jogar"),
                      ("DEFINIÇÕES", "controlos", (50, 140, 255), "engrenagem"),
                      ("MENU PRINCIPAL", "menu", (150, 110, 255), "casa"),
@@ -965,9 +974,13 @@ class MenuPausa:
 
     def draw(self, game):
         s = self.screen
-        if self._fundo is None:
-            self._fundo = fundo_desfocado(s)
-        s.blit(self._fundo, (0, 0))
+        if self.modo_online:
+            # O jogo continua por trás: desfoca-se o frame atual (não uma imagem parada)
+            escurecer_ecra(s, 150)
+        else:
+            if self._fundo is None:
+                self._fundo = fundo_desfocado(s)
+            s.blit(self._fundo, (0, 0))
         caixa = self.caixa
         painel_vidro(s, caixa, 20, 238, (90, 130, 210))
         s.blit(self._titulo, self._titulo.get_rect(center=(WIDTH // 2, caixa.top + 46)))
@@ -1000,6 +1013,9 @@ class MenuPausa:
         if self.modo_carreira:
             texto(s, "Se desistires, o jogo não conta e podes jogá-lo outra vez.", 12, COR_TEXTO_SUAVE,
                   (WIDTH // 2, caixa.bottom + 18), negrito=False)
+        elif self.modo_online:
+            texto(s, "Jogo online: o jogo não pára enquanto estás neste menu.", 12, COR_TEXTO_SUAVE,
+                  (WIDTH // 2, caixa.bottom + 18), negrito=False)
         texto(s, "↑ ↓  escolher     ENTER  confirmar     ESC  continuar", 12, (120, 145, 195),
               (WIDTH // 2, HEIGHT - 22), negrito=False)
 
@@ -1015,18 +1031,24 @@ class EcraFimJogo:
     """
 
     def __init__(self, screen: pygame.Surface, modo_carreira: bool = False, jornada: int | None = None,
-                 jogador: dict | None = None):
+                 jogador: dict | None = None, online: str | None = None):
         self.screen = screen
         self.t = 0.0
         self.modo_carreira = modo_carreira
         self.jornada = jornada
         self.jogador = jogador          # carreira de jogador: {"nome", "nota", "golos", "assistencias", ...}
+        self.online = online            # None, "anfitriao" ou "convidado"
         self._fundo = None
         self._confetes = None
         self.caixa = pygame.Rect(WIDTH // 2 - 460, 62, 920, 586)
         y, bh = self.caixa.bottom - 84, 58
         cx = WIDTH // 2
-        if modo_carreira:
+        if online == "convidado":
+            # Quem decide se se joga outra vez é o anfitrião; o convidado só pode sair
+            self.lista = ListaBotoes([
+                BotaoMenu((cx - 210, y, 420, bh), "SAIR DO JOGO ONLINE", "", "menu", (150, 110, 255), "casa",
+                          seta=False, tamanho=19)])
+        elif modo_carreira:
             # O resultado conta para o campeonato: só se pode continuar
             self.lista = ListaBotoes([
                 BotaoMenu((cx - 210, y, 420, bh), "CONTINUAR", f"O resultado conta para a jornada {jornada}",
@@ -1047,6 +1069,10 @@ class EcraFimJogo:
     def handle_event(self, event) -> str | None:
         if event.type == pygame.QUIT:
             return "sair"
+        if event.type == pygame.KEYDOWN and self.online == "convidado":
+            if event.key in (pygame.K_RETURN, pygame.K_KP_ENTER, pygame.K_ESCAPE):
+                return "menu"
+            return None
         if event.type == pygame.KEYDOWN and self.modo_carreira:
             if event.key in (pygame.K_RETURN, pygame.K_KP_ENTER, pygame.K_SPACE, pygame.K_ESCAPE):
                 return "continuar"
@@ -1122,9 +1148,13 @@ class EcraFimJogo:
         s = self.screen
         if self._fundo is None:
             self._fundo = fundo_desfocado(s, 120)
-            if game.golos_azul > game.golos_vermelho:
-                self._criar_confetes([game.kit_casa["principal"], game.kit_casa["secundaria"], COR_DESTAQUE,
-                                      (255, 255, 255)])
+            # Confetes quando ganhas (online, o convidado joga com a equipa de fora)
+            if self.online == "convidado":
+                ganhei, kit = game.golos_vermelho > game.golos_azul, game.kit_fora
+            else:
+                ganhei, kit = game.golos_azul > game.golos_vermelho, game.kit_casa
+            if ganhei:
+                self._criar_confetes([kit["principal"], kit["secundaria"], COR_DESTAQUE, (255, 255, 255)])
         s.blit(self._fundo, (0, 0))
         caixa = self.caixa
         painel_vidro(s, caixa, 22, 236, (90, 130, 210))
@@ -1167,9 +1197,19 @@ class EcraFimJogo:
             texto(s, linha, 15, cor_nota(j["nota"]), pil.center)
         elif self.modo_carreira:
             texto(s, f"MODO CARREIRA  •  jornada {self.jornada}", 14, COR_DESTAQUE, (WIDTH // 2, caixa.top + 96))
+        elif self.online:
+            pontos = "." * (1 + int(self.t * 2) % 3)
+            msg = (f"JOGO ONLINE  •  à espera que o anfitrião recomece{pontos}" if self.online == "convidado"
+                   else "JOGO ONLINE  •  escolhe se jogam outra vez")
+            texto(s, msg, 14, COR_DESTAQUE, (WIDTH // 2, caixa.top + 96))
 
         self.lista.draw(s)
-        dica = "ENTER  continuar" if self.modo_carreira else "← →  escolher     ENTER  confirmar     R  jogar de novo     ESC  menu principal"
+        if self.online == "convidado":
+            dica = "ENTER  sair do jogo online"
+        elif self.modo_carreira:
+            dica = "ENTER  continuar"
+        else:
+            dica = "← →  escolher     ENTER  confirmar     R  jogar de novo     ESC  menu principal"
         texto(s, dica, 12, (120, 145, 195), (WIDTH // 2, HEIGHT - 22), negrito=False)
         if self._confetes:
             for x, y, _v, cor, fase, tam in self._confetes:
