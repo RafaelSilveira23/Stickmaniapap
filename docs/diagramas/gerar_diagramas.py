@@ -81,7 +81,7 @@ def arquitetura():
     d.seta("gE", "gC", "eventos")
     d.seta("gC", "gS", "desenho")
     d.seta("gD", "gC", "carrega")
-    d.caixa("net", 10, 440, 200, 90, "Rede (jogo online)\nrede.py · online.py\nTCP, porta 50555", "arredondado",
+    d.caixa("net", 10, 440, 200, 90, "Rede (jogo online)\nrede.py: TCP (computador)\nrede_web.py: WebRTC (browser)", "arredondado",
             "laranja")
     d.seta("net", "gC", "comandos e\nestado do jogo", exato=True, ambos=True,
            pontos=[(210, 485), (240, 485), (240, 330), (270, 330)])

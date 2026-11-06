@@ -15,6 +15,7 @@ O Game herda desta classe (class Game(OnlineMixin)).
 """
 import math
 import random
+import sys
 import time
 
 import pygame
@@ -30,6 +31,7 @@ from remate_pov import MEIA_BOCA
 from sons import som
 
 ESTADOS_POR_SEGUNDO = 30
+WEB = sys.platform == "emscripten"   # versão do browser: liga-se com um código (WebRTC), não com o IP
 DIFICULDADE_ONLINE = "normal"   # colegas e guarda-redes das duas equipas jogam ao mesmo nível
 
 
@@ -61,8 +63,8 @@ class OnlineMixin:
         self.jogo_ativo = False
         self.fim_jogo = False
         self.estado = "online"
-        self.ecra_online = EcraOnline(self.screen, arena=self.rink._surf, endereco=self._online_endereco,
-                                      erro=erro)
+        self.ecra_online = EcraOnline(self.screen, arena=self.rink._surf,
+                                      endereco="" if WEB else self._online_endereco, erro=erro, web=WEB)
 
     def _online_eventos_ecra(self):
         ecra = self.ecra_online
@@ -70,12 +72,17 @@ class OnlineMixin:
             acao = ecra.handle_event(event)
             self._som_acao(acao)
             if acao == "criar":
-                anf = Anfitriao()
+                if WEB:
+                    from rede_web import AnfitriaoWeb
+                    anf = AnfitriaoWeb()
+                else:
+                    anf = Anfitriao()
                 if anf.erro:
                     ecra.erro = anf.erro
                     continue
                 self._rede, self.online = anf, "anfitriao"
-                ecra.enderecos = enderecos_locais()
+                ecra.rede = anf
+                ecra.enderecos = [] if WEB else enderecos_locais()
                 ecra.erro = ""
                 ecra.mudar_fase("criar")
             elif acao == "entrar":
@@ -83,12 +90,17 @@ class OnlineMixin:
                 ecra.mudar_fase("entrar")
             elif isinstance(acao, tuple) and acao[0] == "ligar":
                 endereco = acao[1]
-                conv = Convidado(endereco)
+                if WEB:
+                    from rede_web import ConvidadoWeb
+                    conv = ConvidadoWeb(endereco)
+                else:
+                    conv = Convidado(endereco)
                 if conv.estado == "erro":
                     ecra.erro = conv.erro
                     continue
-                self._online_endereco = endereco
-                self._gravar_definicoes()
+                if not WEB:
+                    self._online_endereco = endereco
+                    self._gravar_definicoes()
                 self._rede, self.online = conv, "convidado"
                 ecra.erro = ""
                 ecra.mudar_fase("a_ligar")
@@ -125,6 +137,13 @@ class OnlineMixin:
 
     def _online_esperar_ligacao(self):
         r = self._rede
+        if self.online == "anfitriao" and getattr(r, "erro", ""):
+            erro = r.erro                            # ex.: sem internet no browser
+            self._online_fechar_rede()
+            if self.ecra_online is not None:
+                self.ecra_online.erro = erro
+                self.ecra_online.mudar_fase("inicio")
+            return
         if self.online == "anfitriao" and r.ligacao is not None:
             self.ligacao = r.ligacao
             self.ligacao.enviar({"t": "ola", "versao": VERSAO})
@@ -164,7 +183,7 @@ class OnlineMixin:
                 # O anfitrião voltou à escolha das equipas: o convidado fica à espera
                 self.pausado = self.fim_jogo = self.jogo_ativo = False
                 self.estado = "online"
-                self.ecra_online = EcraOnline(self.screen, arena=self.rink._surf, endereco=self._online_endereco)
+                self.ecra_online = EcraOnline(self.screen, arena=self.rink._surf, web=WEB)
                 self.ecra_online.mudar_fase("espera")
             elif t == "e" and self.estado == "jogo":
                 self._online_aplicar_estado(msg)

@@ -286,6 +286,22 @@ class Game(OnlineMixin):
             self.draw()
         pygame.quit()
 
+    async def run_async(self):
+        """
+        O mesmo ciclo, para a versão do browser (pygbag): no browser o Python não pode ficar
+        preso num ciclo infinito, por isso em cada frame devolve o controlo à página (await).
+        """
+        import asyncio
+        while self.running:
+            dt = min(self.clock.tick(FPS) / 1000.0, 0.05)
+            self.handle_events()
+            self.update(dt)
+            self.draw()
+            await asyncio.sleep(0)
+        # No browser não há janela para fechar: "Sair" volta a abrir a página (menu principal)
+        import platform
+        platform.window.location.reload()
+
     # ================================================================== #
     # Eventos                                                              #
     # ================================================================== #

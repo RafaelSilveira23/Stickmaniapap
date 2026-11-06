@@ -16,7 +16,6 @@ import math
 import os
 import random
 import struct
-import wave
 
 import pygame
 
@@ -266,6 +265,7 @@ def _receitas():
 
 
 def gravar_wav(caminho: str, amostras):
+    import wave          # só é preciso para criar os .wav (no browser já vêm feitos)
     with wave.open(caminho, "wb") as f:
         f.setnchannels(1)
         f.setsampwidth(2)

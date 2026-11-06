@@ -2,6 +2,22 @@
 
 Projeto PAP Rafael 2026/2027 — **StickMania**, um jogo de hóquei em patins 2D feito em Python com `pygame-ce`.
 
+## Jogar no browser (sem instalar nada)
+
+**https://rafaelsilveira23.github.io/Stickmaniapap/**
+
+Abre o link no Chrome, no Edge ou no Firefox (no computador) e espera uns segundos enquanto carrega.
+Para jogar **online contra um amigo**: um escolhe **JOGAR ONLINE → CRIAR JOGO** e aparece um código de
+4 letras (ex.: `BZK3`); o outro abre o mesmo link, escolhe **JOGAR ONLINE → ENTRAR NUM JOGO** e escreve
+o código. Funciona pela internet, sem instalar nada nem abrir portas.
+
+A versão do browser é criada com o [pygbag](https://github.com/pygame-web/pygbag), que põe o Python e o
+pygame a correr no browser (WebAssembly): `python ferramentas/construir_web.py` gera o site em
+`build_web/site`, que é publicado no GitHub Pages (ramo `gh-pages`). No browser o online usa WebRTC
+(ligação direta entre os dois browsers), com o servidor gratuito do PeerJS só para se encontrarem
+(`hockey_game/rede_web.py`); no computador usa TCP (`hockey_game/rede.py`). As duas versões não jogam
+uma contra a outra.
+
 ## Planeamento
 
 O diagrama de Gantt do projeto está em **[docs/GANTT.md](docs/GANTT.md)** — o GitHub desenha-o a partir de
@@ -161,7 +177,10 @@ com suavização para não se ver aos saltos (`hockey_game/rede.py` e `hockey_ga
 | `hockey_game/fontes.py` | Fontes do sistema com cache (cada fonte é criada uma só vez) |
 | `hockey_game/rede.py` | Ligação TCP entre os dois computadores (anfitrião e convidado), em threads |
 | `hockey_game/online.py` | Jogo online: o anfitrião corre o jogo e envia o estado; o convidado envia as teclas |
-| `hockey_game/online_menu.py` | Ecrã "Jogar online" (criar jogo, escrever o endereço, à espera) |
+| `hockey_game/online_menu.py` | Ecrã "Jogar online" (criar jogo, escrever o endereço ou o código, à espera) |
+| `hockey_game/rede_web.py` | Online na versão do browser: WebRTC com o PeerJS e código de 4 letras |
+| `hockey_game/navegador.py` | Ajustes da versão do browser (posição do rato em ecrãs com zoom, números aleatórios) |
+| `ferramentas/construir_web.py` | Cria a versão do browser com o pygbag (`--testar` abre-a em http://localhost:8000) |
 | `jogar.vbs` / `jogar_com_consola.bat` | Arrancar o jogo sem consola / com consola (e instalar o pygame-ce) |
 | `sprites_v2/` | Sprites usados pelo jogo (jogadores, guarda-redes, bola e público) |
 

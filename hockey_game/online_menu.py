@@ -19,13 +19,17 @@ from graficos import luz, icone
 from menu import BotaoMenu, _fundo_arena
 from rede import PORTA
 
+SITE = "rafaelsilveira23.github.io/Stickmaniapap"
+
 COR_ONLINE = (40, 200, 210)
 
 
 class EcraOnline:
-    def __init__(self, screen: pygame.Surface, arena=None, endereco: str = "", erro: str = ""):
+    def __init__(self, screen: pygame.Surface, arena=None, endereco: str = "", erro: str = "", web: bool = False):
         self.screen = screen
         self.arena = arena
+        self.web = web                    # versão do browser: código de 4 letras em vez do IP
+        self.rede = None                  # o AnfitriaoWeb (para mostrar o código quando está pronto)
         self.t = 0.0
         self.endereco = endereco          # o último endereço escrito (fica guardado)
         self.enderecos = []               # endereços deste PC (fase "criar")
@@ -44,6 +48,7 @@ class EcraOnline:
                 BotaoMenu((x, self.caixa.top + 120, bw, 64), "CRIAR JOGO",
                           "Ficas à espera e o teu amigo liga-se a ti", "criar", (40, 190, 100), "casa"),
                 BotaoMenu((x, self.caixa.top + 200, bw, 64), "ENTRAR NUM JOGO",
+                          "Escreve o código do jogo do teu amigo" if self.web else
                           "Escreve o endereço do computador do teu amigo", "entrar", COR_ONLINE, "globo"),
                 BotaoMenu((cx - 140, base, 280, 50), "VOLTAR", "", "voltar", (150, 110, 255), "casa",
                           seta=False, tamanho=18),
@@ -74,7 +79,12 @@ class EcraOnline:
             return "sair"
         if self.fase == "entrar":
             if event.type == pygame.TEXTINPUT:
-                if len(self.endereco) < 60:
+                if self.web:
+                    # Código: 4 letras/números, sempre em maiúsculas
+                    novo = "".join(c for c in event.text.upper() if c.isalnum())
+                    self.endereco = (self.endereco + novo)[:4]
+                    self.erro = ""
+                elif len(self.endereco) < 60:
                     self.endereco += "".join(c for c in event.text if c.isprintable() and c != " ")
                     self.erro = ""
                 return None
@@ -136,7 +146,8 @@ class EcraOnline:
 
         if self.erro:
             texto(s, self.erro, 15, (255, 110, 100), (WIDTH // 2, caixa.bottom + 24))
-        dicas = {"entrar": "Escreve o endereço     CTRL+V  colar     ENTER  ligar     ESC  voltar",
+        dicas = {"entrar": ("Escreve o código     ENTER  ligar     ESC  voltar" if self.web else
+                            "Escreve o endereço     CTRL+V  colar     ENTER  ligar     ESC  voltar"),
                  "inicio": "↑ ↓  escolher     ENTER  confirmar     ESC  voltar"}
         texto(s, dicas.get(self.fase, "ESC  cancelar"), 12, (120, 145, 195), (WIDTH // 2, HEIGHT - 22),
               negrito=False)
@@ -157,12 +168,19 @@ class EcraOnline:
         texto(s, "Joga contra um amigo noutro computador", 20, COR_DESTAQUE, (WIDTH // 2, caixa.top + 40))
         texto(s, "Um cria o jogo (joga com a equipa da casa) e o outro entra (joga com a equipa de fora).",
               14, COR_TEXTO_SUAVE, (WIDTH // 2, caixa.top + 74), negrito=False)
-        linhas = ["Na mesma rede (casa, escola): basta o endereço que aparece a quem cria o jogo.",
-                  "Pela internet: instalem os dois o Radmin VPN e entrem na mesma rede (ver o README)."]
+        if self.web:
+            linhas = ["Quem cria o jogo recebe um código de 4 letras; o amigo abre este site e escreve-o.",
+                      f"Funciona pela internet, no Chrome, no Edge ou no Firefox  •  {SITE}"]
+        else:
+            linhas = ["Na mesma rede (casa, escola): basta o endereço que aparece a quem cria o jogo.",
+                      "Pela internet: instalem os dois o Radmin VPN e entrem na mesma rede (ver o README)."]
         for i, l in enumerate(linhas):
             texto(s, l, 13, (150, 175, 215), (WIDTH // 2, caixa.top + 300 + i * 22), negrito=False)
 
     def _desenhar_criar(self, s, caixa):
+        if self.web:
+            self._desenhar_criar_web(s, caixa)
+            return
         texto(s, "À espera do adversário" + self._pontos(), 24, COR_DESTAQUE, (WIDTH // 2, caixa.top + 42))
         self._roda(s, (WIDTH // 2, caixa.top + 92))
         texto(s, "Diz ao teu amigo para escrever este endereço em «ENTRAR NUM JOGO»:", 14, COR_TEXTO_SUAVE,
@@ -186,7 +204,33 @@ class EcraOnline:
         texto(s, f"Porta {PORTA}  •  se o firewall do Windows perguntar, carrega em «Permitir».", 13,
               (150, 175, 215), (WIDTH // 2, caixa.bottom - 108), negrito=False)
 
+    def _desenhar_criar_web(self, s, caixa):
+        pronto = self.rede is not None and self.rede.pronto
+        if not pronto:
+            texto(s, "A preparar o jogo" + self._pontos(), 24, COR_DESTAQUE, (WIDTH // 2, caixa.top + 60))
+            self._roda(s, (WIDTH // 2, caixa.top + 150))
+            texto(s, "A registar o código no servidor de ligações.", 14, COR_TEXTO_SUAVE,
+                  (WIDTH // 2, caixa.top + 220), negrito=False)
+            return
+        texto(s, "À espera do adversário" + self._pontos(), 24, COR_DESTAQUE, (WIDTH // 2, caixa.top + 40))
+        texto(s, "O teu amigo abre o site, escolhe JOGAR ONLINE  →  ENTRAR NUM JOGO e escreve este código:", 14,
+              COR_TEXTO_SUAVE, (WIDTH // 2, caixa.top + 80), negrito=False)
+        # O código, letra a letra, em caixas grandes
+        codigo = self.rede.codigo
+        larg, esp = 86, 18
+        x0 = WIDTH // 2 - (4 * larg + 3 * esp) // 2
+        for i, letra in enumerate(codigo):
+            r = pygame.Rect(x0 + i * (larg + esp), caixa.top + 108, larg, 100)
+            pygame.draw.rect(s, (8, 14, 30), r, border_radius=16)
+            pygame.draw.rect(s, COR_ONLINE, r, 3, border_radius=16)
+            texto(s, letra, 64, (255, 255, 255), r.center)
+        self._roda(s, (WIDTH // 2, caixa.top + 250), (120, 140, 180))
+        texto(s, SITE, 18, COR_ONLINE, (WIDTH // 2, caixa.bottom - 112))
+
     def _desenhar_entrar(self, s, caixa):
+        if self.web:
+            self._desenhar_entrar_web(s, caixa)
+            return
         texto(s, "Endereço do anfitrião", 20, COR_DESTAQUE, (WIDTH // 2, caixa.top + 42))
         texto(s, "É o número que aparece no ecrã de quem criou o jogo (por exemplo 26.12.34.56).", 14,
               COR_TEXTO_SUAVE, (WIDTH // 2, caixa.top + 76), negrito=False)
@@ -201,6 +245,24 @@ class EcraOnline:
         else:
             texto(s, "ex.: 26.12.34.56" + cursor, 24, (100, 120, 165), (r.left + 22, r.centery),
                   ancora="midleft", negrito=False)
+
+    def _desenhar_entrar_web(self, s, caixa):
+        texto(s, "Código do jogo", 22, COR_DESTAQUE, (WIDTH // 2, caixa.top + 42))
+        texto(s, "São as 4 letras que aparecem no ecrã de quem criou o jogo (por exemplo K7QZ).", 14,
+              COR_TEXTO_SUAVE, (WIDTH // 2, caixa.top + 78), negrito=False)
+        larg, esp = 86, 18
+        x0 = WIDTH // 2 - (4 * larg + 3 * esp) // 2
+        cursor = int(self.t * 2) % 2 == 0
+        for i in range(4):
+            r = pygame.Rect(x0 + i * (larg + esp), caixa.top + 120, larg, 100)
+            ativa = i == len(self.endereco)
+            pygame.draw.rect(s, (8, 14, 30), r, border_radius=16)
+            pygame.draw.rect(s, COR_ONLINE if (ativa or i < len(self.endereco)) else (60, 80, 120), r,
+                             3, border_radius=16)
+            if i < len(self.endereco):
+                texto(s, self.endereco[i], 64, (255, 255, 255), r.center)
+            elif ativa and cursor:
+                pygame.draw.rect(s, COR_ONLINE, (r.centerx - 18, r.bottom - 26, 36, 5), border_radius=2)
 
     def _desenhar_a_ligar(self, s, caixa):
         texto(s, "A ligar" + self._pontos(), 26, COR_DESTAQUE, (WIDTH // 2, caixa.top + 60))
