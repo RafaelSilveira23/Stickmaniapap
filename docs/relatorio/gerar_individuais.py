@@ -64,7 +64,8 @@ DONO_32 = {
     "Menus com o mesmo estilo": V, "Transições entre ecrãs": V,
     "Otimização": C, "Arranque sem consola": C, "Limpeza do repositório": C,
     "Jogo online": R, "Anfitrião com autoridade": R, "Comunicação": R, "Diferenças no jogo online": R,
-    "Versão para o browser": R, "Online no browser": R, "Problemas encontrados no browser": R,
+    "Servidor do jogo": R, "Emparelhamento aleatório e salas privadas": R,
+    "Aplicação para Windows e instalador": R, "Da versão do browser à aplicação": R,
 }
 # Figuras da secção 3.2 (número no relatório conjunto)
 DONO_FIG = {10: C, 11: C, 12: C, 13: C, 14: V, 15: V, 16: V, 17: C, 18: V,
@@ -77,7 +78,7 @@ DONO_34 = {
     "Colisões e IA com comportamentos estranhos": C, "Bola e guarda-redes": C,
     "Porquê SQLite": V, "Regras do modo carreira": C, "Porquê sons sintetizados": V,
     "Quatro jogadores de campo": C, "Afinar a simulação com dados": C,
-    "Porquê um anfitrião com autoridade": R, "Porquê o pygbag e o WebRTC": R,
+    "Porquê um anfitrião com autoridade": R, "Porquê uma aplicação com um servidor próprio": R,
 }
 
 # Tabela da divisão de tarefas (secção 5.4)
@@ -90,7 +91,8 @@ DIVISAO = [
     ("Remate na primeira pessoa e modo teste", "remate_pov.py, pavilhao_pov.py", V),
     ("Física da bola e dos jogadores, regras", "ball.py, player.py, baliza.py", R),
     ("Gráficos, sprites e câmara em perspetiva", "camera.py, rink.py, animation.py", R),
-    ("Jogo online e versão para o browser", "rede.py, online.py, online_menu.py, rede_web.py, navegador.py", R),
+    ("Jogo online, servidor e aplicação para Windows",
+     "rede.py, online.py, online_menu.py, servidor/servidor.py, construir_app.py, instalador.py", R),
     ("Ciclo principal do jogo", "game.py, settings.py", C),
     ("Modo carreira", "carreira.py, carreira_menu.py, team.py", C),
     ("Estilo arcade", "efeitos.py", C),
@@ -103,8 +105,8 @@ LISTA = {
     V: "a inteligência artificial dos jogadores e dos guarda-redes, a base de dados, os menus e a "
        "interface, os sons, o remate na primeira pessoa com o modo teste e a carreira de jogador com a "
        "vida do jogador",
-    R: "a física da bola e dos jogadores, os gráficos com a câmara em perspetiva e o jogo online, no "
-       "computador e no browser",
+    R: "a física da bola e dos jogadores, os gráficos com a câmara em perspetiva, o jogo online com o "
+       "servidor do jogo (jogo aleatório e salas privadas) e a aplicação para Windows com o instalador",
 }
 
 # Resumo do trabalho de cada um, para o relatório do colega (secção 3.2.3)
@@ -121,11 +123,14 @@ RESUMO = {
          "trocadas nos sprites ao carregar a partida e as animações acompanham a velocidade de cada "
          "jogador. O rinque, as tabelas e as bancadas são desenhados uma só vez e guardados em cache, "
          "para o jogo não ficar mais lento."),
-        ("Jogo online e site.", "Desde a versão 20 pode jogar-se contra um amigo noutro computador: só o "
-         "anfitrião simula o jogo e envia o estado ao convidado 30 vezes por segundo, por TCP (rede.py e "
-         "online.py). Na versão 21 o jogo passou a correr no browser, com o pygbag, e foi publicado no "
-         "GitHub Pages (rafaelsilveira23.github.io/Stickmaniapap); no browser o online usa WebRTC e o "
-         "amigo entra com um código de 4 letras (rede_web.py)."),
+        ("Jogo online e servidor.", "Só o anfitrião simula o jogo e envia o estado ao outro jogador 30 "
+         "vezes por segundo (online.py). Os dois jogos ligam-se a um servidor próprio, em Python, alojado no "
+         "Render (servidor/servidor.py), que mostra quantos jogadores estão online, junta duas pessoas no "
+         "jogo aleatório e cria salas privadas com um código de 4 letras."),
+        ("Aplicação para Windows.", "Com o PyInstaller o jogo passou a ser um programa (StickMania.exe), "
+         "que não precisa do Python, e o instalador (StickMania-Instalar.exe) instala-o, cria os atalhos e "
+         "regista-o nas aplicações do Windows. Antes disso, na versão 21, o jogo esteve num site, a correr "
+         "no browser, mas o grupo preferiu uma aplicação instalada."),
     ],
     V: [
         ("Inteligência artificial e guarda-redes.", "Cada jogador da IA tem um papel (avançado, médio ou "
@@ -162,11 +167,11 @@ CONTRIBUTO = {
        "matemática. O modo carreira, o estilo arcade, a análise, os testes e o relatório foram feitos em "
        "conjunto com o Rafael da Hora Silveira.",
     R: "No StickMania, o Rafael da Hora Silveira programou a física da bola e dos jogadores (atrito, "
-       "ressaltos, colisões e desarmes), os gráficos, os sprites e a câmara em perspetiva, e o jogo "
-       "online, no computador e no browser, com a publicação do site. Nestas partes, as maiores "
-       "dificuldades foram as colisões (a bola a atravessar as tabelas e os jogadores colados uns aos "
-       "outros), a câmara em perspetiva sem mudar a física e pôr o jogo a correr e a jogar online no "
-       "browser. O modo carreira, o estilo arcade, a análise, os testes e o relatório foram feitos em "
+       "ressaltos, colisões e desarmes), os gráficos, os sprites e a câmara em perspetiva, o jogo online "
+       "com o servidor do jogo (jogo aleatório, jogadores online e salas privadas) e a aplicação para "
+       "Windows com o instalador. Nestas partes, as maiores dificuldades foram as colisões (a bola a "
+       "atravessar as tabelas e os jogadores colados uns aos outros), a câmara em perspetiva sem mudar a "
+       "física e pôr dois computadores a ver o mesmo jogo pela internet. O modo carreira, o estilo arcade, a análise, os testes e o relatório foram feitos em "
        "conjunto com o Vasco Andreia.",
 }
 

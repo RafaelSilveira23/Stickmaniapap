@@ -286,22 +286,6 @@ class Game(OnlineMixin):
             self.draw()
         pygame.quit()
 
-    async def run_async(self):
-        """
-        O mesmo ciclo, para a versão do browser (pygbag): no browser o Python não pode ficar
-        preso num ciclo infinito, por isso em cada frame devolve o controlo à página (await).
-        """
-        import asyncio
-        while self.running:
-            dt = min(self.clock.tick(FPS) / 1000.0, 0.05)
-            self.handle_events()
-            self.update(dt)
-            self.draw()
-            await asyncio.sleep(0)
-        # No browser não há janela para fechar: "Sair" volta a abrir a página (menu principal)
-        import platform
-        platform.window.location.reload()
-
     # ================================================================== #
     # Eventos                                                              #
     # ================================================================== #
@@ -352,8 +336,7 @@ class Game(OnlineMixin):
             os.makedirs(os.path.dirname(CAMINHO_DEFINICOES), exist_ok=True)
             with open(CAMINHO_DEFINICOES, "w", encoding="utf-8") as f:
                 json.dump({"ecra_inteiro": self.ecra_inteiro, "estilo_arcade": self.estilo_arcade,
-                           "vol_efeitos": som.vol_efeitos, "vol_publico": som.vol_publico,
-                           "online_endereco": getattr(self, "_online_endereco", "")}, f)
+                           "vol_efeitos": som.vol_efeitos, "vol_publico": som.vol_publico}, f)
         except OSError:
             pass          # não conseguir gravar não impede de jogar
 

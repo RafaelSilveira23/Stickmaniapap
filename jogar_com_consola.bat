@@ -21,7 +21,7 @@ if not defined PYBASE call :base python3
 if not defined PYBASE goto sem_python
 
 echo O pygame-ce nao esta instalado. A instalar com: %PYBASE%
-"%PYBASE%" -m pip install pygame-ce
+"%PYBASE%" -m pip install pygame-ce websockets
 call :testar "%PYBASE%"
 if not defined PYEXE goto sem_pygame
 

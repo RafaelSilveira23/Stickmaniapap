@@ -6,7 +6,7 @@ Algumas partes do jogo criavam a mesma fonte em todos os frames; com esta funç�
 é criada uma só vez e depois reaproveitada.
 """
 import pygame
-import pygame.font     # no browser (pygbag) o submódulo tem de ser importado à parte
+import pygame.font     # o submódulo das fontes importado explicitamente
 
 _cache = {}
 

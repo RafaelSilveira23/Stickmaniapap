@@ -1,66 +1,67 @@
 # -*- coding: utf-8 -*-
-"""online_menu.py - ecrã "Jogar online": criar um jogo (anfitrião) ou entrar num (convidado).
+"""online_menu.py - ecrã "Jogar online": jogo aleatório, criar uma sala privada ou entrar numa.
 
-O ecrã só mostra e devolve ações; quem abre a ligação é o Game (ver online.py).
+O ecrã só mostra e devolve ações; quem fala com o servidor é o Game (ver online.py).
+Em cima mostra sempre quantas pessoas estão online e a jogar (o servidor envia de 2 em 2 s).
 Fases do ecrã:
-  "inicio"   escolher entre criar e entrar
-  "criar"    anfitrião à espera do adversário (mostra o endereço deste PC)
-  "entrar"   escrever o endereço do anfitrião
-  "a_ligar"  convidado a ligar-se
-  "espera"   convidado ligado, à espera que o anfitrião escolha as equipas
+  "inicio"    escolher: JOGO ALEATÓRIO, CRIAR SALA PRIVADA ou ENTRAR NUMA SALA
+  "procurar"  à procura de um adversário aleatório
+  "criar"     sala privada criada: mostra o código para dar ao amigo
+  "entrar"    escrever o código da sala do amigo
+  "a_ligar"   a entrar na sala
+  "espera"    emparelhado, à espera que o anfitrião comece o jogo
 """
 import math
 
 import pygame
 
 from settings import WIDTH, HEIGHT
-from componentes import texto, ListaBotoes, painel_vidro, COR_DESTAQUE, COR_TEXTO, COR_TEXTO_SUAVE
+from componentes import texto, fonte, ListaBotoes, painel_vidro, COR_DESTAQUE, COR_TEXTO, COR_TEXTO_SUAVE
 from graficos import luz, icone
 from menu import BotaoMenu, _fundo_arena
-from rede import PORTA
-
-SITE = "rafaelsilveira23.github.io/Stickmaniapap"
 
 COR_ONLINE = (40, 200, 210)
+VERDE = (60, 220, 120)
 
 
 class EcraOnline:
-    def __init__(self, screen: pygame.Surface, arena=None, endereco: str = "", erro: str = "", web: bool = False):
+    def __init__(self, screen: pygame.Surface, arena=None, servidor=None, erro: str = ""):
         self.screen = screen
         self.arena = arena
-        self.web = web                    # versão do browser: código de 4 letras em vez do IP
-        self.rede = None                  # o AnfitriaoWeb (para mostrar o código quando está pronto)
+        self.servidor = servidor          # rede.Servidor: contagens, estado e código da sala
+        self.modo = None                  # "aleatorio" ou "privado" (fase "espera")
         self.t = 0.0
-        self.endereco = endereco          # o último endereço escrito (fica guardado)
-        self.enderecos = []               # endereços deste PC (fase "criar")
+        self.codigo = ""                  # o código que se está a escrever (fase "entrar")
         self.erro = erro
-        self.caixa = pygame.Rect(WIDTH // 2 - 380, 150, 760, 440)
-        self.r_campo = pygame.Rect(self.caixa.left + 50, self.caixa.top + 150, self.caixa.width - 100, 64)
+        self.caixa = pygame.Rect(WIDTH // 2 - 380, 168, 760, 440)
         self.mudar_fase("inicio")
 
     # ------------------------------------------------------------------ #
     def mudar_fase(self, fase: str):
         self.fase = fase
-        cx, base = WIDTH // 2, self.caixa.bottom - 80
+        self.t_fase = 0.0
+        cx, base = WIDTH // 2, self.caixa.bottom - 76
         if fase == "inicio":
-            x, bw = cx - 260, 520
+            x, bw = cx - 270, 540
             self.lista = ListaBotoes([
-                BotaoMenu((x, self.caixa.top + 120, bw, 64), "CRIAR JOGO",
-                          "Ficas à espera e o teu amigo liga-se a ti", "criar", (40, 190, 100), "casa"),
-                BotaoMenu((x, self.caixa.top + 200, bw, 64), "ENTRAR NUM JOGO",
-                          "Escreve o código do jogo do teu amigo" if self.web else
-                          "Escreve o endereço do computador do teu amigo", "entrar", COR_ONLINE, "globo"),
+                BotaoMenu((x, self.caixa.top + 40, bw, 70), "JOGO ALEATÓRIO",
+                          "Joga contra outra pessoa que esteja à procura de jogo", "aleatorio", VERDE, "globo"),
+                BotaoMenu((x, self.caixa.top + 126, bw, 70), "CRIAR SALA PRIVADA",
+                          "Recebes um código para dar ao teu amigo", "criar", (240, 170, 40), "casa"),
+                BotaoMenu((x, self.caixa.top + 212, bw, 70), "ENTRAR NUMA SALA",
+                          "Escreve o código da sala do teu amigo", "entrar", COR_ONLINE, "avancar"),
                 BotaoMenu((cx - 140, base, 280, 50), "VOLTAR", "", "voltar", (150, 110, 255), "casa",
                           seta=False, tamanho=18),
             ])
         elif fase == "entrar":
+            self.codigo = ""
             self.lista = ListaBotoes([
-                BotaoMenu((cx - 290, base, 280, 54), "LIGAR", "", "ligar", (40, 190, 100), "jogar",
+                BotaoMenu((cx - 290, base, 280, 54), "ENTRAR", "", "ligar", (40, 190, 100), "jogar",
                           seta=False, tamanho=20),
                 BotaoMenu((cx + 10, base, 280, 54), "VOLTAR", "", "cancelar", (150, 110, 255), "casa",
                           seta=False, tamanho=18),
             ])
-        else:   # criar, a_ligar, espera: só se pode cancelar
+        else:   # procurar, criar, a_ligar, espera: só se pode cancelar
             self.lista = ListaBotoes([
                 BotaoMenu((cx - 140, base, 280, 52), "CANCELAR", "", "cancelar", (230, 70, 70), "sair",
                           seta=False, tamanho=18),
@@ -79,52 +80,48 @@ class EcraOnline:
             return "sair"
         if self.fase == "entrar":
             if event.type == pygame.TEXTINPUT:
-                if self.web:
-                    # Código: 4 letras/números, sempre em maiúsculas
-                    novo = "".join(c for c in event.text.upper() if c.isalnum())
-                    self.endereco = (self.endereco + novo)[:4]
-                    self.erro = ""
-                elif len(self.endereco) < 60:
-                    self.endereco += "".join(c for c in event.text if c.isprintable() and c != " ")
-                    self.erro = ""
+                # Código: 4 letras/números, sempre em maiúsculas
+                novo = "".join(c for c in event.text.upper() if c.isalnum())
+                self.codigo = (self.codigo + novo)[:4]
+                self.erro = ""
                 return None
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_BACKSPACE:
-                    self.endereco = self.endereco[:-1]
+                    self.codigo = self.codigo[:-1]
                     return None
                 if event.key == pygame.K_v and event.mod & pygame.KMOD_CTRL:
                     self._colar()
                     return None
                 if event.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
-                    return ("ligar", self.endereco.strip())
+                    return ("ligar", self.codigo)
                 if event.key == pygame.K_ESCAPE:
                     return "cancelar"
                 if event.key in (pygame.K_LEFT, pygame.K_RIGHT, pygame.K_UP, pygame.K_DOWN):
                     self.lista.foco = 1 - self.lista.foco
                     return None
-                # As outras teclas (letras, números) são para o campo de texto, não para os botões
+                # As outras teclas (letras, números) são para o código, não para os botões
                 if event.key not in (pygame.K_TAB,):
                     return None
         elif event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
             return "voltar" if self.fase == "inicio" else "cancelar"
         acao = self.lista.handle_event(event)
         if acao == "ligar":
-            return ("ligar", self.endereco.strip())
+            return ("ligar", self.codigo)
         return acao
 
     def _colar(self):
-        """CTRL+V: cola o endereço que o amigo mandou (por exemplo pelo WhatsApp/Discord)."""
+        """CTRL+V: cola o código que o amigo mandou (por exemplo pelo WhatsApp ou pelo Discord)."""
         try:
             if not pygame.scrap.get_init():
                 pygame.scrap.init()
             dados = pygame.scrap.get_text() or ""
         except (pygame.error, AttributeError, NotImplementedError):
             return
-        dados = "".join(c for c in dados.strip() if c.isprintable() and c != " ")
-        self.endereco = (self.endereco + dados)[:60]
+        self.codigo = "".join(c for c in dados.upper() if c.isalnum())[:4]
 
     def update(self, dt: float):
         self.t += dt
+        self.t_fase += dt
         for i, b in enumerate(self.lista.botoes):
             b.animar(dt, i == self.lista.foco)
 
@@ -135,9 +132,10 @@ class EcraOnline:
         brilho = luz(900, 520, COR_ONLINE, 45)
         s.blit(brilho, brilho.get_rect(center=(WIDTH // 2, 360)), special_flags=pygame.BLEND_RGB_ADD)
 
-        ic = icone("globo", 46, COR_ONLINE)
-        s.blit(ic, ic.get_rect(center=(WIDTH // 2, 58)))
-        texto(s, "JOGAR ONLINE", 36, COR_TEXTO, (WIDTH // 2, 108), sombra=True)
+        ic = icone("globo", 42, COR_ONLINE)
+        s.blit(ic, ic.get_rect(center=(WIDTH // 2, 46)))
+        texto(s, "JOGAR ONLINE", 34, COR_TEXTO, (WIDTH // 2, 92), sombra=True)
+        self._desenhar_contagem(s, (WIDTH // 2, 136))
 
         caixa = self.caixa
         painel_vidro(s, caixa, 20, 230, (60, 130, 160))
@@ -146,11 +144,32 @@ class EcraOnline:
 
         if self.erro:
             texto(s, self.erro, 15, (255, 110, 100), (WIDTH // 2, caixa.bottom + 24))
-        dicas = {"entrar": ("Escreve o código     ENTER  ligar     ESC  voltar" if self.web else
-                            "Escreve o endereço     CTRL+V  colar     ENTER  ligar     ESC  voltar"),
+        dicas = {"entrar": "Escreve o código     CTRL+V  colar     ENTER  entrar     ESC  voltar",
                  "inicio": "↑ ↓  escolher     ENTER  confirmar     ESC  voltar"}
         texto(s, dicas.get(self.fase, "ESC  cancelar"), 12, (120, 145, 195), (WIDTH // 2, HEIGHT - 22),
               negrito=False)
+
+    def _desenhar_contagem(self, s, centro):
+        """«● 12 jogadores online  •  4 a jogar», ou o estado da ligação ao servidor."""
+        srv = self.servidor
+        if srv is None or srv.estado == "erro":
+            cor, txt = (255, 110, 100), "Sem ligação ao servidor do jogo"
+        elif srv.estado == "a_ligar" or srv.online is None:
+            cor = (240, 200, 90)
+            txt = ("A acordar o servidor do jogo (pode demorar até 1 minuto)" + self._pontos()
+                   if srv.a_acordar() else "A ligar ao servidor" + self._pontos())
+        else:
+            cor = VERDE
+            n = srv.online
+            txt = f"{n} jogador{'es' if n != 1 else ''} online  •  {srv.a_jogar} a jogar"
+        r = pygame.Rect(0, 0, fonte(15).size(txt)[0] + 56, 34)
+        r.center = centro
+        pygame.draw.rect(s, (8, 14, 30), r, border_radius=17)
+        pygame.draw.rect(s, cor, r, 1, border_radius=17)
+        # Ponto a "pulsar" quando há ligação
+        k = 0.6 + 0.4 * math.sin(self.t * 4) if cor == VERDE else 1.0
+        pygame.draw.circle(s, tuple(int(c * k) for c in cor), (r.left + 20, r.centery), 6)
+        texto(s, txt, 15, cor if cor != VERDE else (220, 240, 230), (r.left + 36, r.centery), ancora="midleft")
 
     def _pontos(self) -> str:
         return "." * (1 + int(self.t * 2.5) % 3)
@@ -164,118 +183,76 @@ class EcraOnline:
             c = tuple(int(v * (0.3 + 0.7 * (1 - k))) for v in cor)
             pygame.draw.circle(s, c, (round(x), round(y)), 5)
 
-    def _desenhar_inicio(self, s, caixa):
-        texto(s, "Joga contra um amigo noutro computador", 20, COR_DESTAQUE, (WIDTH // 2, caixa.top + 40))
-        texto(s, "Um cria o jogo (joga com a equipa da casa) e o outro entra (joga com a equipa de fora).",
-              14, COR_TEXTO_SUAVE, (WIDTH // 2, caixa.top + 74), negrito=False)
-        if self.web:
-            linhas = ["Quem cria o jogo recebe um código de 4 letras; o amigo abre este site e escreve-o.",
-                      f"Funciona pela internet, no Chrome, no Edge ou no Firefox  •  {SITE}"]
-        else:
-            linhas = ["Na mesma rede (casa, escola): basta o endereço que aparece a quem cria o jogo.",
-                      "Pela internet: instalem os dois o Radmin VPN e entrem na mesma rede (ver o README)."]
-        for i, l in enumerate(linhas):
-            texto(s, l, 13, (150, 175, 215), (WIDTH // 2, caixa.top + 300 + i * 22), negrito=False)
-
-    def _desenhar_criar(self, s, caixa):
-        if self.web:
-            self._desenhar_criar_web(s, caixa)
-            return
-        texto(s, "À espera do adversário" + self._pontos(), 24, COR_DESTAQUE, (WIDTH // 2, caixa.top + 42))
-        self._roda(s, (WIDTH // 2, caixa.top + 92))
-        texto(s, "Diz ao teu amigo para escrever este endereço em «ENTRAR NUM JOGO»:", 14, COR_TEXTO_SUAVE,
-              (WIDTH // 2, caixa.top + 142), negrito=False)
-        y = caixa.top + 186
-        for i, ip in enumerate(self.enderecos[:3]):
-            vpn = ip.startswith(("26.", "100."))
-            if i == 0:
-                r = pygame.Rect(0, 0, 420, 54)
-                r.center = (WIDTH // 2, y)
-                pygame.draw.rect(s, (8, 14, 30), r, border_radius=14)
-                pygame.draw.rect(s, COR_ONLINE, r, 2, border_radius=14)
-                texto(s, ip, 30, (255, 255, 255), r.center)
-                nota = "rede VPN (internet)" if vpn else "rede local"
-                texto(s, nota, 12, COR_ONLINE, (r.right + 12, r.centery), ancora="midleft", negrito=False)
-                y += 50
-            else:
-                nota = "  (VPN)" if vpn else ""
-                texto(s, f"ou  {ip}{nota}", 16, (200, 215, 240), (WIDTH // 2, y))
-                y += 26
-        texto(s, f"Porta {PORTA}  •  se o firewall do Windows perguntar, carrega em «Permitir».", 13,
-              (150, 175, 215), (WIDTH // 2, caixa.bottom - 108), negrito=False)
-
-    def _desenhar_criar_web(self, s, caixa):
-        pronto = self.rede is not None and self.rede.pronto
-        if not pronto:
-            texto(s, "A preparar o jogo" + self._pontos(), 24, COR_DESTAQUE, (WIDTH // 2, caixa.top + 60))
-            self._roda(s, (WIDTH // 2, caixa.top + 150))
-            texto(s, "A registar o código no servidor de ligações.", 14, COR_TEXTO_SUAVE,
-                  (WIDTH // 2, caixa.top + 220), negrito=False)
-            return
-        texto(s, "À espera do adversário" + self._pontos(), 24, COR_DESTAQUE, (WIDTH // 2, caixa.top + 40))
-        texto(s, "O teu amigo abre o site, escolhe JOGAR ONLINE  →  ENTRAR NUM JOGO e escreve este código:", 14,
-              COR_TEXTO_SUAVE, (WIDTH // 2, caixa.top + 80), negrito=False)
-        # O código, letra a letra, em caixas grandes
-        codigo = self.rede.codigo
+    def _caixas_codigo(self, s, y, letras: str, cursor: bool = False):
+        """As 4 letras do código em caixas grandes."""
         larg, esp = 86, 18
         x0 = WIDTH // 2 - (4 * larg + 3 * esp) // 2
-        for i, letra in enumerate(codigo):
-            r = pygame.Rect(x0 + i * (larg + esp), caixa.top + 108, larg, 100)
-            pygame.draw.rect(s, (8, 14, 30), r, border_radius=16)
-            pygame.draw.rect(s, COR_ONLINE, r, 3, border_radius=16)
-            texto(s, letra, 64, (255, 255, 255), r.center)
-        self._roda(s, (WIDTH // 2, caixa.top + 250), (120, 140, 180))
-        texto(s, SITE, 18, COR_ONLINE, (WIDTH // 2, caixa.bottom - 112))
-
-    def _desenhar_entrar(self, s, caixa):
-        if self.web:
-            self._desenhar_entrar_web(s, caixa)
-            return
-        texto(s, "Endereço do anfitrião", 20, COR_DESTAQUE, (WIDTH // 2, caixa.top + 42))
-        texto(s, "É o número que aparece no ecrã de quem criou o jogo (por exemplo 26.12.34.56).", 14,
-              COR_TEXTO_SUAVE, (WIDTH // 2, caixa.top + 76), negrito=False)
-        texto(s, "Se usarem um túnel (ex.: playit.gg), escreve endereço:porta.", 13, (150, 175, 215),
-              (WIDTH // 2, caixa.top + 102), negrito=False)
-        r = self.r_campo
-        pygame.draw.rect(s, (8, 14, 30), r, border_radius=14)
-        pygame.draw.rect(s, COR_ONLINE, r, 2, border_radius=14)
-        cursor = "|" if int(self.t * 2) % 2 == 0 else " "
-        if self.endereco:
-            texto(s, self.endereco + cursor, 28, (255, 255, 255), (r.left + 22, r.centery), ancora="midleft")
-        else:
-            texto(s, "ex.: 26.12.34.56" + cursor, 24, (100, 120, 165), (r.left + 22, r.centery),
-                  ancora="midleft", negrito=False)
-
-    def _desenhar_entrar_web(self, s, caixa):
-        texto(s, "Código do jogo", 22, COR_DESTAQUE, (WIDTH // 2, caixa.top + 42))
-        texto(s, "São as 4 letras que aparecem no ecrã de quem criou o jogo (por exemplo K7QZ).", 14,
-              COR_TEXTO_SUAVE, (WIDTH // 2, caixa.top + 78), negrito=False)
-        larg, esp = 86, 18
-        x0 = WIDTH // 2 - (4 * larg + 3 * esp) // 2
-        cursor = int(self.t * 2) % 2 == 0
         for i in range(4):
-            r = pygame.Rect(x0 + i * (larg + esp), caixa.top + 120, larg, 100)
-            ativa = i == len(self.endereco)
+            r = pygame.Rect(x0 + i * (larg + esp), y, larg, 100)
+            ativa = cursor and i == len(letras)
             pygame.draw.rect(s, (8, 14, 30), r, border_radius=16)
-            pygame.draw.rect(s, COR_ONLINE if (ativa or i < len(self.endereco)) else (60, 80, 120), r,
-                             3, border_radius=16)
-            if i < len(self.endereco):
-                texto(s, self.endereco[i], 64, (255, 255, 255), r.center)
-            elif ativa and cursor:
+            pygame.draw.rect(s, COR_ONLINE if (ativa or i < len(letras)) else (60, 80, 120), r, 3,
+                             border_radius=16)
+            if i < len(letras):
+                texto(s, letras[i], 64, (255, 255, 255), r.center)
+            elif ativa and int(self.t * 2) % 2 == 0:
                 pygame.draw.rect(s, COR_ONLINE, (r.centerx - 18, r.bottom - 26, 36, 5), border_radius=2)
 
+    # ------------------------------------------------------------------ fases
+    def _desenhar_inicio(self, s, caixa):
+        texto(s, "Quem cria a sala (ou estava há mais tempo à procura) joga com a equipa da casa.", 13,
+              (150, 175, 215), (WIDTH // 2, caixa.top + 316), negrito=False)
+
+    def _desenhar_procurar(self, s, caixa):
+        texto(s, "À procura de adversário" + self._pontos(), 26, COR_DESTAQUE, (WIDTH // 2, caixa.top + 60))
+        self._roda(s, (WIDTH // 2, caixa.top + 140), VERDE)
+        srv = self.servidor
+        segundos = int(self.t_fase)
+        texto(s, f"{segundos // 60}:{segundos % 60:02d}", 20, (220, 230, 250), (WIDTH // 2, caixa.top + 200))
+        if srv is not None and srv.online is not None:
+            outros = max(0, srv.online - 1)
+            if outros == 0:
+                linha = "Ainda não há mais ninguém online. Convida um amigo ou cria uma sala privada."
+            else:
+                linha = f"Há mais {outros} pessoa{'s' if outros != 1 else ''} online. Quando alguém procurar jogo, começa logo."
+            texto(s, linha, 14, COR_TEXTO_SUAVE, (WIDTH // 2, caixa.top + 250), negrito=False)
+        texto(s, "As equipas são sorteadas.", 13, (150, 175, 215), (WIDTH // 2, caixa.top + 280), negrito=False)
+
+    def _desenhar_criar(self, s, caixa):
+        codigo = self.servidor.codigo if self.servidor is not None else None
+        if not codigo:
+            texto(s, "A criar a sala" + self._pontos(), 24, COR_DESTAQUE, (WIDTH // 2, caixa.top + 60))
+            self._roda(s, (WIDTH // 2, caixa.top + 150))
+            return
+        texto(s, "Sala privada criada", 24, COR_DESTAQUE, (WIDTH // 2, caixa.top + 40))
+        texto(s, "O teu amigo escolhe JOGAR ONLINE  →  ENTRAR NUMA SALA e escreve este código:", 14,
+              COR_TEXTO_SUAVE, (WIDTH // 2, caixa.top + 80), negrito=False)
+        self._caixas_codigo(s, caixa.top + 108, codigo)
+        self._roda(s, (WIDTH // 2, caixa.top + 258), (120, 140, 180))
+        texto(s, "À espera do teu amigo" + self._pontos(), 16, (200, 215, 240), (WIDTH // 2, caixa.top + 300))
+
+    def _desenhar_entrar(self, s, caixa):
+        texto(s, "Código da sala", 22, COR_DESTAQUE, (WIDTH // 2, caixa.top + 42))
+        texto(s, "São as 4 letras que aparecem no ecrã de quem criou a sala (por exemplo K7QZ).", 14,
+              COR_TEXTO_SUAVE, (WIDTH // 2, caixa.top + 78), negrito=False)
+        self._caixas_codigo(s, caixa.top + 120, self.codigo, cursor=True)
+
     def _desenhar_a_ligar(self, s, caixa):
-        texto(s, "A ligar" + self._pontos(), 26, COR_DESTAQUE, (WIDTH // 2, caixa.top + 60))
+        texto(s, "A entrar na sala" + self._pontos(), 26, COR_DESTAQUE, (WIDTH // 2, caixa.top + 60))
         self._roda(s, (WIDTH // 2, caixa.top + 150))
-        texto(s, self.endereco, 18, (220, 230, 250), (WIDTH // 2, caixa.top + 220))
+        texto(s, self.codigo, 30, (220, 230, 250), (WIDTH // 2, caixa.top + 220))
 
     def _desenhar_espera(self, s, caixa):
         ok = icone("jogar", 40, (40, 210, 110))
         pygame.draw.circle(s, (12, 40, 30), (WIDTH // 2, caixa.top + 90), 40)
         pygame.draw.circle(s, (40, 210, 110), (WIDTH // 2, caixa.top + 90), 40, 3)
         s.blit(ok, ok.get_rect(center=(WIDTH // 2 + 3, caixa.top + 90)))
-        texto(s, "Ligado!", 30, (90, 230, 140), (WIDTH // 2, caixa.top + 168))
-        texto(s, "O anfitrião está a escolher as equipas" + self._pontos(), 18, COR_TEXTO,
-              (WIDTH // 2, caixa.top + 214))
+        if self.modo == "aleatorio":
+            texto(s, "Adversário encontrado!", 30, (90, 230, 140), (WIDTH // 2, caixa.top + 168))
+            texto(s, "O jogo vai começar" + self._pontos(), 18, COR_TEXTO, (WIDTH // 2, caixa.top + 214))
+        else:
+            texto(s, "Entraste na sala!", 30, (90, 230, 140), (WIDTH // 2, caixa.top + 168))
+            texto(s, "O teu amigo está a escolher as equipas" + self._pontos(), 18, COR_TEXTO,
+                  (WIDTH // 2, caixa.top + 214))
         texto(s, "Vais jogar com a equipa de fora, que começa do lado esquerdo do campo.", 14, COR_TEXTO_SUAVE,
               (WIDTH // 2, caixa.top + 250), negrito=False)

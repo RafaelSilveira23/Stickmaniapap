@@ -2,21 +2,21 @@
 
 Projeto PAP Rafael 2026/2027 — **StickMania**, um jogo de hóquei em patins 2D feito em Python com `pygame-ce`.
 
-## Jogar no browser (sem instalar nada)
+## Instalar o jogo (Windows)
 
-**https://rafaelsilveira23.github.io/Stickmaniapap/**
+**[⬇ Descarregar o StickMania-Instalar.exe](https://github.com/RafaelSilveira23/Stickmaniapap/raw/main/download/StickMania-Instalar.exe)** (34 MB)
 
-Abre o link no Chrome, no Edge ou no Firefox (no computador) e espera uns segundos enquanto carrega.
-Para jogar **online contra um amigo**: um escolhe **JOGAR ONLINE → CRIAR JOGO** e aparece um código de
-4 letras (ex.: `BZK3`); o outro abre o mesmo link, escolhe **JOGAR ONLINE → ENTRAR NUM JOGO** e escreve
-o código. Funciona pela internet, sem instalar nada nem abrir portas.
+1. Abre o `StickMania-Instalar.exe`. Como o programa não tem assinatura digital, o Windows pode mostrar
+   **«O Windows protegeu o computador»**: carrega em **Mais informações** e depois em **Executar mesmo assim**.
+2. Carrega em **INSTALAR** e depois em **JOGAR AGORA**.
 
-A versão do browser é criada com o [pygbag](https://github.com/pygame-web/pygbag), que põe o Python e o
-pygame a correr no browser (WebAssembly): `python ferramentas/construir_web.py` gera o site em
-`build_web/site`, que é publicado no GitHub Pages (ramo `gh-pages`). No browser o online usa WebRTC
-(ligação direta entre os dois browsers), com o servidor gratuito do PeerJS só para se encontrarem
-(`hockey_game/rede_web.py`); no computador usa TCP (`hockey_game/rede.py`). As duas versões não jogam
-uma contra a outra.
+Não é preciso o Python nem permissões de administrador. O jogo fica em `%LOCALAPPDATA%\Programs\StickMania`,
+com atalhos no menu Iniciar e no ambiente de trabalho, e aparece em *Definições → Aplicações instaladas*, onde
+se pode desinstalar. Os jogos gravados ficam em `%APPDATA%\StickMania` (não se perdem ao instalar uma versão nova).
+
+Para criar o instalador: `python ferramentas/construir_app.py` (precisa do PyInstaller). O PyInstaller junta o
+jogo, o Python e o pygame-ce num programa (`StickMania.exe`) e o `ferramentas/instalador.py` faz a janela do
+instalador; o resultado é copiado para `download/`.
 
 ## Relatório e divisão de tarefas
 
@@ -27,7 +27,7 @@ um relatório individual de cada um (`Relatorio_PAP_StickMania_Rafael_Silveira` 
 | Parte | Quem fez |
 |---|---|
 | Inteligência artificial e guarda-redes, menus e interface, sons, base de dados, carreira de jogador e vida do jogador, remate na primeira pessoa e modo teste | Vasco Andreia |
-| Física da bola e dos jogadores, gráficos, sprites e câmara, jogo online e versão para o browser | Rafael da Hora Silveira |
+| Física da bola e dos jogadores, gráficos, sprites e câmara, jogo online com o servidor e aplicação para Windows | Rafael da Hora Silveira |
 | Ciclo principal, modo carreira, estilo arcade, análise, diagramas, testes e relatório | Os dois |
 
 Os relatórios individuais são gerados a partir do relatório conjunto (`Relatorio_PAP_StickMania.docx`, o
@@ -38,9 +38,9 @@ Os relatórios individuais são gerados a partir do relatório conjunto (`Relato
 O diagrama de Gantt do projeto está em **[docs/GANTT.md](docs/GANTT.md)** — o GitHub desenha-o a partir de
 código Mermaid. É gerado pelo mesmo script da imagem do relatório (`docs/diagramas/gerar_gantt.py`).
 
-## Como jogar
+## Correr a partir do código
 
-Requisitos: **Python 3.10 ou superior**.
+Requisitos: **Python 3.10 ou superior** (com o instalador não é preciso).
 
 ```bash
 pip install -r hockey_game/requirements.txt
@@ -71,31 +71,37 @@ No **jogo online** os controlos são os mesmos, mas o `X` faz um remate direto �
 primeira pessoa pararia o jogo do outro jogador): carrega numa seta para cima ou para baixo ao mesmo tempo
 para apontar a esse lado da baliza.
 
-## Jogar online (contra um amigo noutro computador)
+## Jogar online
 
-1. Os dois abrem o jogo e escolhem **JOGAR ONLINE** no menu principal.
-2. Um escolhe **CRIAR JOGO** (é o *anfitrião* e joga com a equipa da casa). Aparece no ecrã o endereço do
-   computador dele (por exemplo `192.168.1.20` ou `26.12.34.56`).
-3. O outro escolhe **ENTRAR NUM JOGO**, escreve esse endereço e carrega em **LIGAR** (joga com a equipa de fora).
-4. O anfitrião escolhe as duas equipas e começa a partida.
+No menu principal escolhe **JOGAR ONLINE**. Em cima aparece quantos jogadores estão online e quantos estão a jogar.
 
-Na primeira vez o **Firewall do Windows** pergunta se o Python pode usar a rede: carrega em **Permitir**
-(no computador do anfitrião). O jogo usa a porta **50555** (TCP).
+- **JOGO ALEATÓRIO**: joga contra outra pessoa que também esteja à procura de jogo. As equipas são sorteadas.
+- **CRIAR SALA PRIVADA**: aparece um código de 4 letras (ex.: `K7QZ`). Dá-o ao teu amigo.
+- **ENTRAR NUMA SALA**: escreve o código da sala do teu amigo (também se pode colar com CTRL+V).
 
-**Na mesma rede** (casa, escola): funciona logo com o endereço que aparece ao anfitrião.
+Quem cria a sala (ou estava há mais tempo à procura) é o *anfitrião* e joga com a equipa da casa; na sala
+privada é ele que escolhe as equipas. Não é preciso VPN nem abrir portas.
 
-**Pela internet** os dois computadores têm de "se ver". A forma mais simples:
+Como funciona: os jogos ligam-se ao **servidor do jogo** (`servidor/servidor.py`) por WebSocket
+(`hockey_game/rede.py`). O servidor conta os jogadores, faz o emparelhamento e as salas, e passa as mensagens
+de um jogador para o outro. Só o computador do anfitrião corre o jogo (física, IA, golos); o outro envia as
+teclas que carrega e recebe 30 vezes por segundo o estado do jogo, que desenha com suavização
+(`hockey_game/online.py`).
 
-- **Radmin VPN** (grátis, feito para jogos): instalem os dois o [Radmin VPN](https://www.radmin-vpn.com/),
-  um cria uma rede (*Network → Create network*, com nome e palavra-passe) e o outro entra nela
-  (*Network → Join network*). O endereço a usar no jogo é o que começa por **26.** (o jogo mostra-o primeiro).
-- Alternativas iguais: **ZeroTier** ou **Tailscale** (endereços `100.x.x.x`).
-- Sem VPN: o anfitrião pode abrir a porta 50555 no router (*port forwarding*) ou usar um túnel como o
-  **playit.gg**; nesse caso o amigo escreve `endereço:porta` (por exemplo `exemplo.playit.gg:12345`).
+### Servidor do jogo online (Render.com, grátis)
 
-Como funciona: só o computador do anfitrião corre o jogo (física, IA, golos). O convidado envia as teclas que
-carrega e recebe 30 vezes por segundo o estado do jogo (posições, bola, resultado, sons e efeitos), que desenha
-com suavização para não se ver aos saltos (`hockey_game/rede.py` e `hockey_game/online.py`).
+O servidor corre no [Render](https://render.com), no plano gratuito, com a configuração do `render.yaml`:
+
+1. Entrar em [dashboard.render.com](https://dashboard.render.com) com a conta do GitHub.
+2. **New → Blueprint**, escolher o repositório `Stickmaniapap` e carregar em **Apply**.
+3. O Render cria o serviço `stickmania-servidor` em `https://stickmania-servidor.onrender.com`
+   (se o endereço for outro, muda a constante `SERVIDOR` em `hockey_game/rede.py`).
+
+O plano gratuito adormece o servidor ao fim de 15 minutos sem jogadores; o primeiro a entrar espera até
+1 minuto e o jogo mostra «A acordar o servidor do jogo».
+
+Para testar no próprio PC: `python servidor/servidor.py` (porta 8765) e, antes de abrir o jogo,
+`set STICKMANIA_SERVIDOR=ws://localhost:8765`.
 
 ## Funcionalidades
 
@@ -190,12 +196,14 @@ com suavização para não se ver aos saltos (`hockey_game/rede.py` e `hockey_ga
 | `hockey_game/animation.py` | Carregamento de animações (redução suave e alinhamento pelos patins) |
 | `hockey_game/ui.py` | HUD (marcador, mini-mapa, cartão do jogador) |
 | `hockey_game/fontes.py` | Fontes do sistema com cache (cada fonte é criada uma só vez) |
-| `hockey_game/rede.py` | Ligação TCP entre os dois computadores (anfitrião e convidado), em threads |
+| `hockey_game/rede.py` | Ligação ao servidor do jogo (WebSocket, em threads): contagens, emparelhamento e mensagens |
 | `hockey_game/online.py` | Jogo online: o anfitrião corre o jogo e envia o estado; o convidado envia as teclas |
-| `hockey_game/online_menu.py` | Ecrã "Jogar online" (criar jogo, escrever o endereço ou o código, à espera) |
-| `hockey_game/rede_web.py` | Online na versão do browser: WebRTC com o PeerJS e código de 4 letras |
-| `hockey_game/navegador.py` | Ajustes da versão do browser (posição do rato em ecrãs com zoom, números aleatórios) |
-| `ferramentas/construir_web.py` | Cria a versão do browser com o pygbag (`--testar` abre-a em http://localhost:8000) |
+| `hockey_game/online_menu.py` | Ecrã "Jogar online" (jogadores online, jogo aleatório, criar e entrar numa sala) |
+| `servidor/servidor.py` | Servidor do jogo online (Render): contagens, jogo aleatório, salas privadas |
+| `render.yaml` | Configuração do servidor no Render.com |
+| `ferramentas/construir_app.py` | Cria o `StickMania.exe` (PyInstaller) e o instalador |
+| `ferramentas/instalador.py` | Janela do instalador (instala, cria atalhos e desinstala) |
+| `download/StickMania-Instalar.exe` | O instalador do jogo, pronto a descarregar |
 | `jogar.vbs` / `jogar_com_consola.bat` | Arrancar o jogo sem consola / com consola (e instalar o pygame-ce) |
 | `sprites_v2/` | Sprites usados pelo jogo (jogadores, guarda-redes, bola e público) |
 

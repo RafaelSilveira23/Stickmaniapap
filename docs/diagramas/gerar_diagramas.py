@@ -24,7 +24,7 @@ def casos_de_uso():
            ("uc7", "Jogar o modo carreira\n(campeonato)"), ("uc8", "Consultar classificação,\ncalendário e marcadores"),
            ("uc15", "Treinar remates\n(modo teste)"),
            ("uc16", "Jogar a carreira de jogador\n(só o meu jogador)"),
-           ("uc17", "Jogar online contra\num amigo")]
+           ("uc17", "Jogar online (aleatório\nou sala privada)")]
     for i, (id, txt) in enumerate(esq):
         planeado = "implementar" in txt
         d.caixa(id, 215, 50 + i * 74, 225, 54, txt, "elipse", "amarelo" if planeado else "azul",
@@ -81,7 +81,7 @@ def arquitetura():
     d.seta("gE", "gC", "eventos")
     d.seta("gC", "gS", "desenho")
     d.seta("gD", "gC", "carrega")
-    d.caixa("net", 10, 440, 200, 90, "Rede (jogo online)\nrede.py: TCP (computador)\nrede_web.py: WebRTC (browser)", "arredondado",
+    d.caixa("net", 10, 440, 200, 90, "Rede (jogo online)\nrede.py ↔ servidor do jogo\n(WebSocket, no Render)", "arredondado",
             "laranja")
     d.seta("net", "gC", "comandos e\nestado do jogo", exato=True, ambos=True,
            pontos=[(210, 485), (240, 485), (240, 330), (270, 330)])

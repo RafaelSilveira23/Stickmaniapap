@@ -1,56 +1,51 @@
-"""rede.py - ligação entre dois computadores para o modo online (TCP).
+"""rede.py - ligação ao servidor do jogo online (WebSocket).
 
-Quem cria o jogo é o ANFITRIÃO: abre uma porta e fica à espera. O CONVIDADO liga-se ao
-endereço do anfitrião. Depois de ligados, os dois trocam mensagens (dicionários do Python
-convertidos em JSON). Cada mensagem vai com 4 bytes à frente a dizer o tamanho, porque o
-TCP é um "tubo" de bytes e não separa as mensagens sozinho.
+Todos os jogos StickMania ligam-se ao mesmo servidor (servidor/servidor.py, alojado no Render).
+O servidor conta quantas pessoas estão online, faz o emparelhamento aleatório e as salas
+privadas, e depois passa as mensagens de um jogador para o outro.
 
-A rede corre em threads à parte: o jogo nunca fica à espera da internet.
-  - uma thread lê as mensagens que chegam e põe-nas numa fila;
-  - outra envia as mensagens que o jogo deixa noutra fila.
-O jogo, em cada frame, só tira o que estiver nas filas.
+A rede corre em threads à parte, para o jogo nunca ficar à espera da internet:
+  - uma thread liga-se ao servidor e lê as mensagens que chegam;
+  - outra envia as mensagens que o jogo deixa numa fila.
+O jogo, em cada frame, só lê os valores que as threads foram atualizando.
+
+Classes:
+  Servidor  - a ligação ao servidor (fica aberta enquanto se está no ecrã JOGAR ONLINE);
+  Ligacao   - a "ligação" ao outro jogador depois de emparelhados. Tem os mesmos métodos que
+              a ligação direta antiga (enviar, mensagens, ativa, terminar), por isso o resto do
+              modo online (online.py) não precisou de mudar.
 """
 import json
+import os
 import queue
-import socket
-import struct
 import threading
+import time
 
-PORTA = 50555
-VERSAO = 1                  # os dois jogos têm de ter a mesma versão do modo online
-TEMPO_LIGAR = 8.0           # segundos até desistir de ligar
+# Endereço do servidor. Para testar com o servidor no próprio PC:
+#   set STICKMANIA_SERVIDOR=ws://localhost:8765
+SERVIDOR = os.environ.get("STICKMANIA_SERVIDOR", "wss://stickmania-servidor.onrender.com")
+VERSAO = 2                  # tem de ser igual à do servidor e à do outro jogo
+TEMPO_LIGAR = 90.0          # o servidor gratuito do Render "adormece" e pode demorar ~1 min a acordar
 
 
 class Ligacao:
-    """Uma ligação TCP já aberta, com filas de entrada e de saída."""
+    """O outro jogador (as mensagens passam pelo servidor)."""
 
-    def __init__(self, sock: socket.socket):
-        sock.settimeout(None)
-        try:
-            # Sem o algoritmo de Nagle: as mensagens pequenas saem logo (menos atraso)
-            sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-        except OSError:
-            pass
-        self.sock = sock
+    def __init__(self, servidor: "Servidor"):
+        self._srv = servidor
         self.ativa = True
         self.erro = ""
         self._entrada = queue.Queue()
-        self._saida = queue.Queue()
-        threading.Thread(target=self._ler, daemon=True).start()
-        threading.Thread(target=self._escrever, daemon=True).start()
 
-    # ------------------------------------------------------------------ #
     def enviar(self, msg: dict):
-        """Põe a mensagem na fila de saída (não espera pela rede)."""
         if not self.ativa:
             return
         # Se a internet estiver lenta e a fila crescer, os estados antigos já não interessam
-        if msg.get("t") == "e" and self._saida.qsize() > 6:
+        if msg.get("t") == "e" and self._srv._saida.qsize() > 6:
             return
-        self._saida.put(msg)
+        self._srv._enviar({"t": "jogo", "m": msg})
 
     def mensagens(self) -> list:
-        """Todas as mensagens que chegaram desde a última vez."""
         lista = []
         while True:
             try:
@@ -59,174 +54,164 @@ class Ligacao:
                 return lista
 
     def terminar(self):
-        """Despede-se do outro jogador e fecha a ligação logo a seguir (sem o jogo esperar)."""
+        """Despede-se do outro jogador e volta ao "átrio" do servidor (a ligação ao servidor continua)."""
         if self.ativa:
-            self._saida.put({"t": "adeus"})
-            self._saida.put("fechar")
+            self._srv._enviar({"t": "jogo", "m": {"t": "adeus"}})
+            self._srv._enviar({"t": "sair_jogo"})
+            self.ativa = False
 
     def fechar(self, erro: str = ""):
         if self.ativa and erro:
             self.erro = erro
         self.ativa = False
-        self._saida.put(None)               # acorda a thread de envio para ela acabar
+
+
+class Servidor:
+    """
+    Liga-se ao servidor numa thread. 'estado' passa de 'a_ligar' para 'ligado' ou 'erro'.
+    online / a_jogar / a_procurar: contagens que o servidor envia de 2 em 2 segundos.
+    """
+
+    def __init__(self, endereco: str = None):
+        self.endereco = endereco or SERVIDOR
+        self.estado = "a_ligar"
+        self.erro = ""
+        self.aviso = ""              # ex.: código de sala errado (o ecrã mostra e apaga)
+        self.online = self.a_jogar = self.a_procurar = None
+        self.codigo = None           # código da sala privada que criámos
+        self.ligacao = None          # Ligacao ao outro jogador, depois de emparelhados
+        self._emparelhado = None     # (papel, modo) até o jogo o ir buscar
+        self.t_inicio = time.perf_counter()
+        self._ws = None
+        self._fechado = False
+        self._saida = queue.Queue()
+        self._enviar({"t": "ola", "versao": VERSAO})
+        threading.Thread(target=self._correr, daemon=True).start()
+
+    # ------------------------------------------------------------------ pedidos do jogo
+    def procurar(self):
+        """Entra na fila do jogo aleatório."""
+        self._largar()
+        self._enviar({"t": "procurar"})
+
+    def criar_sala(self):
+        self._largar()
+        self._enviar({"t": "criar_sala"})
+
+    def entrar_sala(self, codigo: str):
+        self._largar()
+        self._enviar({"t": "entrar_sala", "codigo": codigo.upper()})
+
+    def cancelar(self):
+        """Sai da fila ou fecha a sala que estava à espera do amigo."""
+        self._largar()
+        self._enviar({"t": "cancelar"})
+
+    def tomar_emparelhamento(self):
+        """(papel, modo) quando se encontrou adversário; senão None. Só devolve uma vez."""
+        par, self._emparelhado = self._emparelhado, None
+        return par
+
+    def a_acordar(self) -> bool:
+        """Está a demorar a ligar: o servidor gratuito estava a dormir."""
+        return self.estado == "a_ligar" and time.perf_counter() - self.t_inicio > 4
+
+    def fechar(self):
+        self._fechado = True
+        if self.ligacao is not None:
+            self.ligacao.terminar()
+        self._saida.put(None)
+        if self._ws is not None:
+            threading.Thread(target=self._fechar_ws, daemon=True).start()
+
+    # ------------------------------------------------------------------ interno
+    def _largar(self):
+        self.codigo = None
+        self._emparelhado = None
+        self.aviso = ""
+        if self.ligacao is not None:
+            self.ligacao.terminar()
+            self.ligacao = None
+
+    def _enviar(self, msg: dict):
+        self._saida.put(msg)
+
+    def _fechar_ws(self):
         try:
-            self.sock.shutdown(socket.SHUT_RDWR)
-        except OSError:
-            pass
-        try:
-            self.sock.close()
-        except OSError:
+            self._ws.close()
+        except Exception:
             pass
 
-    # ------------------------------------------------------------------ #
-    def _receber_exato(self, n: int) -> bytes:
-        dados = b""
-        while len(dados) < n:
-            parte = self.sock.recv(n - len(dados))
-            if not parte:
-                raise ConnectionError("ligação fechada")
-            dados += parte
-        return dados
-
-    def _ler(self):
+    def _correr(self):
         try:
-            while self.ativa:
-                (n,) = struct.unpack("!I", self._receber_exato(4))
-                if n > 1_000_000:
-                    raise ValueError("mensagem demasiado grande")
-                self._entrada.put(json.loads(self._receber_exato(n).decode("utf-8")))
-        except (OSError, ConnectionError, ValueError):
-            self.fechar("A ligação ao outro jogador caiu.")
+            # Só aqui, para o resto do jogo funcionar mesmo sem o módulo websockets instalado
+            from websockets.exceptions import ConnectionClosed, InvalidHandshake, InvalidURI
+            from websockets.sync.client import connect
+        except ImportError:
+            self.estado = "erro"
+            self.erro = "Falta o módulo websockets: pip install websockets"
+            return
+        try:
+            self._ws = connect(self.endereco, open_timeout=TEMPO_LIGAR, close_timeout=2,
+                               compression=None, max_size=2 ** 20)
+        except (OSError, InvalidHandshake, InvalidURI, TimeoutError) as e:
+            if not self._fechado:
+                self.estado = "erro"
+                self.erro = ("Não foi possível ligar ao servidor do jogo. Confirma a ligação à internet."
+                             if not isinstance(e, InvalidHandshake) else
+                             "O servidor do jogo não está disponível. Tenta daqui a pouco.")
+            return
+        if self._fechado:
+            self._fechar_ws()
+            return
+        self.estado = "ligado"
+        threading.Thread(target=self._escrever, daemon=True).start()
+        try:
+            for texto in self._ws:
+                try:
+                    self._receber(json.loads(texto))
+                except (ValueError, KeyError, TypeError):
+                    continue
+        except (ConnectionClosed, OSError):
+            pass
+        if not self._fechado:
+            if self.estado != "erro":
+                self.estado = "erro"
+                self.erro = "Perdeu-se a ligação ao servidor do jogo."
+            if self.ligacao is not None:
+                self.ligacao.fechar("A ligação à internet caiu.")
+        self._saida.put(None)
 
     def _escrever(self):
+        from websockets.exceptions import ConnectionClosed
         try:
-            while self.ativa:
+            while True:
                 msg = self._saida.get()
                 if msg is None:
                     break
-                if msg == "fechar":
-                    self.fechar()
-                    break
-                dados = json.dumps(msg, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
-                self.sock.sendall(struct.pack("!I", len(dados)) + dados)
-        except OSError:
-            self.fechar("A ligação ao outro jogador caiu.")
-
-
-class Anfitriao:
-    """Abre a porta e espera que um convidado se ligue (numa thread, sem bloquear o jogo)."""
-
-    def __init__(self, porta: int = PORTA):
-        self.porta = porta
-        self.ligacao = None
-        self.erro = ""
-        self._servidor = None
-        try:
-            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            s.bind(("", porta))
-            s.listen(1)
-            self._servidor = s
-            threading.Thread(target=self._esperar, daemon=True).start()
-        except OSError:
-            self.erro = f"Não foi possível abrir a porta {porta} (já está a ser usada?)."
-
-    def _esperar(self):
-        try:
-            sock, _ = self._servidor.accept()
-        except OSError:
-            return                          # cancelado (o servidor foi fechado)
-        self.ligacao = Ligacao(sock)
-        try:
-            self._servidor.close()          # só aceitamos um convidado
-        except OSError:
+                self._ws.send(json.dumps(msg, separators=(",", ":"), ensure_ascii=False))
+        except (ConnectionClosed, OSError):
             pass
 
-    def fechar(self):
-        if self._servidor is not None:
-            try:
-                self._servidor.close()
-            except OSError:
-                pass
-        if self.ligacao is not None:
-            self.ligacao.fechar()
-
-
-class Convidado:
-    """Liga-se ao anfitrião numa thread. 'estado' passa de 'a_ligar' para 'ligado' ou 'erro'."""
-
-    def __init__(self, endereco: str):
-        self.estado = "a_ligar"
-        self.erro = ""
-        self.ligacao = None
-        self._cancelado = False
-        try:
-            self.host, self.porta = separar_endereco(endereco)
-        except ValueError as e:
-            self.estado, self.erro = "erro", str(e)
-            return
-        threading.Thread(target=self._ligar, daemon=True).start()
-
-    def _ligar(self):
-        try:
-            sock = socket.create_connection((self.host, self.porta), timeout=TEMPO_LIGAR)
-        except socket.gaierror:
-            self.estado, self.erro = "erro", "Endereço desconhecido. Confirma o que escreveste."
-            return
-        except (socket.timeout, TimeoutError):
-            self.estado, self.erro = "erro", "O anfitrião não respondeu. A porta pode estar fechada (ver o README)."
-            return
-        except OSError:
-            self.estado, self.erro = "erro", "Não foi possível ligar. O anfitrião já criou o jogo?"
-            return
-        if self._cancelado:
-            sock.close()
-            return
-        self.ligacao = Ligacao(sock)
-        self.estado = "ligado"
-
-    def fechar(self):
-        self._cancelado = True
-        if self.ligacao is not None:
-            self.ligacao.fechar()
-
-
-def separar_endereco(texto: str) -> tuple[str, int]:
-    """'192.168.1.5' ou '192.168.1.5:50555' ou 'xyz.joinmc.link:12345' -> (host, porta)."""
-    texto = texto.strip()
-    if not texto:
-        raise ValueError("Escreve o endereço do anfitrião.")
-    host, porta = texto, PORTA
-    if texto.count(":") == 1:
-        host, p = texto.split(":")
-        if not p.isdigit() or not 0 < int(p) < 65536:
-            raise ValueError("A porta (depois dos dois pontos) tem de ser um número.")
-        porta = int(p)
-    if not host:
-        raise ValueError("Escreve o endereço do anfitrião.")
-    return host, porta
-
-
-def enderecos_locais() -> list[str]:
-    """Os endereços IPv4 deste computador (rede de casa/escola, VPN como o Radmin, ...)."""
-    ips = []
-    try:
-        for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
-            ip = info[4][0]
-            if not ip.startswith("127.") and ip not in ips:
-                ips.append(ip)
-    except OSError:
-        pass
-    # O endereço que o PC usa para sair para a internet (não envia nada, só escolhe a rota)
-    try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.connect(("8.8.8.8", 80))
-        ip = s.getsockname()[0]
-        s.close()
-        if ip in ips:
-            ips.remove(ip)
-        ips.insert(0, ip)
-    except OSError:
-        pass
-    # As VPN de jogos (Radmin 26.x, ZeroTier, Tailscale 100.x) primeiro: são as que servem pela internet
-    ips.sort(key=lambda ip: 0 if ip.startswith(("26.", "100.")) else 1)
-    return ips or ["127.0.0.1"]
+    def _receber(self, msg: dict):
+        t = msg.get("t")
+        if t == "jogo":
+            if self.ligacao is not None and isinstance(msg.get("m"), dict):
+                self.ligacao._entrada.put(msg["m"])
+        elif t == "contagem":
+            self.online, self.a_jogar, self.a_procurar = msg["online"], msg["a_jogar"], msg["a_procurar"]
+        elif t == "sala":
+            self.codigo = msg["codigo"]
+        elif t == "emparelhado":
+            self.codigo = None
+            self.ligacao = Ligacao(self)
+            self._emparelhado = (msg["papel"], msg["modo"])
+        elif t == "saiu":
+            if self.ligacao is not None:
+                self.ligacao.fechar("O outro jogador saiu do jogo.")
+        elif t == "erro":
+            if msg.get("erro") == "sala":
+                self.aviso = "Não existe nenhuma sala com esse código. Confirma as letras."
+            elif msg.get("erro") == "versao":
+                self.estado = "erro"
+                self.erro = "Há uma versão nova do StickMania. Instala a última versão para jogar online."

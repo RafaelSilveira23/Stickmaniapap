@@ -1,6 +1,11 @@
 # -*- coding: utf-8 -*-
 """online.py - modo online (dois jogadores em computadores diferentes).
 
+Os dois jogos encontram-se através do servidor do jogo (rede.py / servidor/servidor.py):
+  - JOGO ALEATÓRIO: o servidor junta duas pessoas que estejam à procura (as equipas são sorteadas);
+  - SALA PRIVADA: um cria a sala e recebe um código de 4 letras; o amigo entra com esse código.
+Quem criou a sala (ou estava há mais tempo na fila) é o anfitrião.
+
 Como funciona (modelo "anfitrião com autoridade"):
   - O ANFITRIÃO corre o jogo inteiro (física, IA, golos, faltas), como num jogo normal.
     Ele controla a equipa da casa; um jogador da equipa de fora é controlado à distância.
@@ -15,7 +20,6 @@ O Game herda desta classe (class Game(OnlineMixin)).
 """
 import math
 import random
-import sys
 import time
 
 import pygame
@@ -26,12 +30,12 @@ from ball import REMATE_FORCA, SPIN_RATE
 from carreira import FORCA_EQUIPAS
 from menu import MenuPausa, EcraFimJogo
 from online_menu import EcraOnline
-from rede import Anfitriao, Convidado, VERSAO, enderecos_locais
+from rede import Servidor, VERSAO
 from remate_pov import MEIA_BOCA
 from sons import som
+from team import EQUIPAS_LISTA
 
 ESTADOS_POR_SEGUNDO = 30
-WEB = sys.platform == "emscripten"   # versão do browser: liga-se com um código (WebRTC), não com o IP
 DIFICULDADE_ONLINE = "normal"   # colegas e guarda-redes das duas equipas jogam ao mesmo nível
 
 
@@ -39,10 +43,10 @@ class OnlineMixin:
 
     def _online_iniciar(self, definicoes: dict):
         self.online = None               # None, "anfitriao" ou "convidado"
-        self._rede = None                # Anfitriao ou Convidado (enquanto se liga)
-        self.ligacao = None              # rede.Ligacao, depois de ligados
+        self._servidor = None            # rede.Servidor (enquanto se está no ecrã JOGAR ONLINE ou a jogar)
+        self.ligacao = None              # rede.Ligacao ao outro jogador, depois de emparelhados
+        self._online_modo = None         # "aleatorio" ou "privado"
         self.ecra_online = None
-        self._online_endereco = str(definicoes.get("online_endereco", ""))
         self.jogador_remoto = None       # anfitrião: o jogador da equipa de fora que o convidado controla
         self._input_remoto = (0, 0, False)
         self._acoes_remotas = []
@@ -58,59 +62,58 @@ class OnlineMixin:
     # ================================================================== #
 
     def abrir_online(self, erro: str = ""):
-        self._online_fechar_rede()
+        self._online_largar_jogo()
         self.pausado = False
         self.jogo_ativo = False
         self.fim_jogo = False
         self.estado = "online"
-        self.ecra_online = EcraOnline(self.screen, arena=self.rink._surf,
-                                      endereco="" if WEB else self._online_endereco, erro=erro, web=WEB)
+        self.ecra_online = EcraOnline(self.screen, arena=self.rink._surf, servidor=self._online_servidor(),
+                                      erro=erro)
+
+    def _online_servidor(self) -> Servidor:
+        """A ligação ao servidor do jogo (abre outra se ainda não há ou se caiu)."""
+        if self._servidor is None or self._servidor.estado == "erro":
+            if self._servidor is not None:
+                self._servidor.fechar()
+            self._servidor = Servidor()
+            if self.ecra_online is not None:
+                self.ecra_online.servidor = self._servidor
+        return self._servidor
 
     def _online_eventos_ecra(self):
         ecra = self.ecra_online
         for event in pygame.event.get():
             acao = ecra.handle_event(event)
             self._som_acao(acao)
-            if acao == "criar":
-                if WEB:
-                    from rede_web import AnfitriaoWeb
-                    anf = AnfitriaoWeb()
+            if acao in ("aleatorio", "criar"):
+                srv = self._online_servidor()
+                if acao == "aleatorio":
+                    srv.procurar()
+                    ecra.mudar_fase("procurar")
                 else:
-                    anf = Anfitriao()
-                if anf.erro:
-                    ecra.erro = anf.erro
-                    continue
-                self._rede, self.online = anf, "anfitriao"
-                ecra.rede = anf
-                ecra.enderecos = [] if WEB else enderecos_locais()
+                    srv.criar_sala()
+                    ecra.mudar_fase("criar")
                 ecra.erro = ""
-                ecra.mudar_fase("criar")
             elif acao == "entrar":
                 ecra.erro = ""
                 ecra.mudar_fase("entrar")
             elif isinstance(acao, tuple) and acao[0] == "ligar":
-                endereco = acao[1]
-                if WEB:
-                    from rede_web import ConvidadoWeb
-                    conv = ConvidadoWeb(endereco)
-                else:
-                    conv = Convidado(endereco)
-                if conv.estado == "erro":
-                    ecra.erro = conv.erro
+                codigo = acao[1]
+                if len(codigo) != 4:
+                    ecra.erro = "O código tem 4 letras."
                     continue
-                if not WEB:
-                    self._online_endereco = endereco
-                    self._gravar_definicoes()
-                self._rede, self.online = conv, "convidado"
+                self._online_servidor().entrar_sala(codigo)
                 ecra.erro = ""
                 ecra.mudar_fase("a_ligar")
             elif acao == "cancelar":
-                self._online_fechar_rede()
+                if self._servidor is not None:
+                    self._servidor.cancelar()
                 ecra.mudar_fase("inicio")
             elif acao == "voltar":
                 self.ir_para_menu_principal()
                 return
             elif acao == "sair":
+                self._online_fechar_rede()
                 self.running = False
 
     # ================================================================== #
@@ -118,16 +121,15 @@ class OnlineMixin:
     # ================================================================== #
 
     def _online_tick(self, dt: float):
-        if self.online is None:
-            return
         if self.ligacao is None:
-            self._online_esperar_ligacao()
+            if self._servidor is not None and self.estado == "online":
+                self._online_esperar_adversario()
             return
         # Primeiro as mensagens que já chegaram (a última pode ser o "adeus" do outro jogador)
         ligacao = self.ligacao
         for msg in ligacao.mensagens():
             self._online_mensagem(msg)
-            if self.online is None:          # a ligação acabou a meio (ex.: "adeus")
+            if self.ligacao is not ligacao:      # a ligação acabou a meio (ex.: "adeus")
                 return
         if not ligacao.ativa:
             self._online_terminar(ligacao.erro or "O outro jogador saiu do jogo.")
@@ -135,32 +137,33 @@ class OnlineMixin:
         if self.online == "anfitriao" and self.estado == "jogo":
             self._online_enviar_estado(dt)
 
-    def _online_esperar_ligacao(self):
-        r = self._rede
-        if self.online == "anfitriao" and getattr(r, "erro", ""):
-            erro = r.erro                            # ex.: sem internet no browser
-            self._online_fechar_rede()
-            if self.ecra_online is not None:
-                self.ecra_online.erro = erro
-                self.ecra_online.mudar_fase("inicio")
+    def _online_esperar_adversario(self):
+        """No ecrã JOGAR ONLINE: vê se o servidor já encontrou adversário (ou se deu erro)."""
+        srv, ecra = self._servidor, self.ecra_online
+        if srv.aviso:                                # ex.: não existe sala com esse código
+            ecra.erro, srv.aviso = srv.aviso, ""
+            ecra.mudar_fase("entrar")
             return
-        if self.online == "anfitriao" and r.ligacao is not None:
-            self.ligacao = r.ligacao
-            self.ligacao.enviar({"t": "ola", "versao": VERSAO})
-            som.ui("confirmar")
-            self._online_abrir_sala()
-        elif self.online == "convidado":
-            if r.estado == "erro":
-                erro = r.erro
-                self._online_fechar_rede()
-                if self.ecra_online is not None:
-                    self.ecra_online.erro = erro
-                    self.ecra_online.mudar_fase("entrar")
-            elif r.estado == "ligado":
-                self.ligacao = r.ligacao
-                self.ligacao.enviar({"t": "ola", "versao": VERSAO})
-                som.ui("confirmar")
-                self.ecra_online.mudar_fase("espera")
+        if srv.estado == "erro":
+            if ecra.fase != "inicio":
+                ecra.erro = srv.erro
+                ecra.mudar_fase("inicio")
+            return
+        par = srv.tomar_emparelhamento()
+        if par is None:
+            return
+        papel, self._online_modo = par
+        self.online, self.ligacao = papel, srv.ligacao
+        self.ligacao.enviar({"t": "ola", "versao": VERSAO})
+        som.ui("confirmar")
+        if papel == "convidado":
+            ecra.modo = self._online_modo
+            ecra.mudar_fase("espera")
+        elif self._online_modo == "aleatorio":
+            casa, fora = random.sample(EQUIPAS_LISTA, 2)     # jogo aleatório: equipas sorteadas
+            self._online_comecar(casa, fora)
+        else:
+            self._online_abrir_sala()                # sala privada: o anfitrião escolhe as equipas
 
     def _online_mensagem(self, msg: dict):
         t = msg.get("t")
@@ -183,21 +186,30 @@ class OnlineMixin:
                 # O anfitrião voltou à escolha das equipas: o convidado fica à espera
                 self.pausado = self.fim_jogo = self.jogo_ativo = False
                 self.estado = "online"
-                self.ecra_online = EcraOnline(self.screen, arena=self.rink._surf, web=WEB)
+                self.ecra_online = EcraOnline(self.screen, arena=self.rink._surf, servidor=self._servidor)
+                self.ecra_online.modo = "privado"
                 self.ecra_online.mudar_fase("espera")
             elif t == "e" and self.estado == "jogo":
                 self._online_aplicar_estado(msg)
 
-    def _online_fechar_rede(self):
-        """Fecha a ligação (despedindo-se do outro jogador) e sai do modo online."""
+    def _online_largar_jogo(self):
+        """Sai do jogo com o outro jogador (despedindo-se dele), mas fica ligado ao servidor."""
         if self.ligacao is not None:
-            self.ligacao.terminar()              # envia "adeus" e fecha depois de o enviar
-        elif self._rede is not None:
-            self._rede.fechar()                  # ainda à espera / a ligar: cancela
-        self._rede = self.ligacao = None
+            self.ligacao.terminar()              # envia "adeus" ao outro jogador
+        if self._servidor is not None:
+            self._servidor.ligacao = None
+        self.ligacao = None
         self.online = None
+        self._online_modo = None
         self.jogador_remoto = None
         som.gravacao = None
+
+    def _online_fechar_rede(self):
+        """Sai do modo online: larga o jogo e fecha a ligação ao servidor."""
+        self._online_largar_jogo()
+        if self._servidor is not None:
+            self._servidor.fechar()
+            self._servidor = None
 
     def _online_sair(self):
         """O próprio jogador saiu (pausa → abandonar, ou no fim do jogo)."""
@@ -562,9 +574,3 @@ class OnlineMixin:
                     if btn["rect"].collidepoint(event.pos):
                         self._online_acao({"passe": "passe", "remate": "remate"}.get(chave, "trocar"))
                         break
-
-    def _gravar_endereco_online(self, definicoes: dict):
-        """Junta o último endereço às definições guardadas (para não o escrever outra vez)."""
-        definicoes["online_endereco"] = self._online_endereco
-        return definicoes
-

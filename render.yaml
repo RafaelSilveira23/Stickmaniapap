@@ -1,0 +1,10 @@
+# Configuração do Render.com para o servidor do jogo online (ver o README, "Servidor do jogo online").
+# No Render: New -> Blueprint -> escolher este repositório. Fica no plano gratuito.
+services:
+  - type: web
+    name: stickmania-servidor
+    runtime: python
+    plan: free
+    buildCommand: pip install -r servidor/requirements.txt
+    startCommand: python servidor/servidor.py
+    healthCheckPath: /

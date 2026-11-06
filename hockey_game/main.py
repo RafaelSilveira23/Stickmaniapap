@@ -16,7 +16,11 @@ os.chdir(PASTA)
 
 
 def _mostrar_erro(texto: str):
-    caminho = os.path.join(PASTA, "saves", "erro.txt")
+    try:
+        from carreira import PASTA_SAVES     # no programa instalado é %APPDATA%\StickMania
+    except Exception:
+        PASTA_SAVES = os.path.join(PASTA, "saves")
+    caminho = os.path.join(PASTA_SAVES, "erro.txt")
     try:
         os.makedirs(os.path.dirname(caminho), exist_ok=True)
         with open(caminho, "w", encoding="utf-8") as f:

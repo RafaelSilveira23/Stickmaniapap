@@ -17,11 +17,17 @@ import math
 import os
 import random
 import sqlite3
+import sys
 from datetime import datetime
 
 from team import EQUIPAS_LISTA, EQUIPAS_INFO, obter_plantel
 
-PASTA_SAVES = os.path.join(os.path.dirname(os.path.abspath(__file__)), "saves")
+if getattr(sys, "frozen", False):
+    # Programa instalado (StickMania.exe): os jogos gravados ficam em %APPDATA%\StickMania,
+    # para não se perderem quando se instala uma versão nova
+    PASTA_SAVES = os.path.join(os.environ.get("APPDATA") or os.path.expanduser("~"), "StickMania")
+else:
+    PASTA_SAVES = os.path.join(os.path.dirname(os.path.abspath(__file__)), "saves")
 CAMINHO_BD = os.path.join(PASTA_SAVES, "carreira.db")
 
 PONTOS_VITORIA, PONTOS_EMPATE, PONTOS_DERROTA = 3, 1, 0

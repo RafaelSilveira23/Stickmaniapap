@@ -25,5 +25,5 @@ hockey_game/saves/*.db
 hockey_game/saves/definicoes.json
 hockey_game/saves/erro.txt
 
-# Versão do browser gerada pelo ferramentas/construir_web.py (publicada no ramo gh-pages)
-build_web/
+# Programa e instalador gerados pelo ferramentas/construir_app.py (o instalador fica em download/)
+build_app/

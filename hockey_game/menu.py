@@ -214,7 +214,7 @@ class MenuPrincipal:
         self.lista = ListaBotoes([
             BotaoMenu((x, 258, bw, 52), "JOGO RÁPIDO", "Escolhe dois clubes e joga uma partida",
                       "jogar", (40, 190, 100), "jogar"),
-            BotaoMenu((x, 316, bw, 52), "JOGAR ONLINE", "Joga contra um amigo noutro computador",
+            BotaoMenu((x, 316, bw, 52), "JOGAR ONLINE", "Jogo aleatório ou sala privada com um amigo",
                       "online", (40, 200, 210), "globo"),
             BotaoMenu((x, 374, bw, 52), "MODO CARREIRA", "Leva o teu clube ao título do campeonato",
                       "carreira", (255, 175, 40), "trofeu"),
@@ -343,7 +343,7 @@ class MenuPrincipal:
         pygame.draw.line(s, (40, 60, 105), (WIDTH // 2 - 220, HEIGHT - 44), (WIDTH // 2 + 220, HEIGHT - 44), 1)
         texto(s, "Projeto PAP  •  Rafael Silveira  •  2026/2027", 13, (110, 130, 175),
               (WIDTH // 2, HEIGHT - 26), negrito=False)
-        texto(s, "v17", 12, (80, 100, 145), (18, HEIGHT - 24), ancora="midleft")
+        texto(s, "v22", 12, (80, 100, 145), (18, HEIGHT - 24), ancora="midleft")
 
 
 # ====================================================================== #
