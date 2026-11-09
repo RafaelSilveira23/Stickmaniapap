@@ -67,6 +67,7 @@ DONO_32 = {
     "Jogo online": R, "Anfitrião com autoridade": R, "Comunicação": R, "Diferenças no jogo online": R,
     "Servidor do jogo": R, "Emparelhamento aleatório e salas privadas": R,
     "Aplicação para Windows e instalador": R, "Da versão do browser à aplicação": R,
+    "Stickada no jogo online": R, "Servidor na Europa": R,
 }
 # Figuras da secção 3.2 (número no relatório conjunto)
 DONO_FIG = {10: C, 11: C, 12: C, 13: C, 14: V, 15: V, 16: V, 17: V, 18: C, 19: V,
@@ -79,7 +80,7 @@ DONO_34 = {
     "Colisões e IA com comportamentos estranhos": C, "Bola e guarda-redes": C,
     "Porquê SQLite": V, "Regras do modo carreira": C, "Porquê sons sintetizados": V, "Flash branco no remate": V,
     "Quatro jogadores de campo": C, "Afinar a simulação com dados": C,
-    "Porquê um anfitrião com autoridade": R, "Porquê uma aplicação com um servidor próprio": R,
+    "Porquê um anfitrião com autoridade": R, "Porquê uma aplicação com um servidor próprio": R, "Quem decide a stickada no online": R,
 }
 
 # Tabela da divisão de tarefas (secção 5.4)

@@ -344,7 +344,7 @@ class MenuPrincipal:
         pygame.draw.line(s, (40, 60, 105), (WIDTH // 2 - 220, HEIGHT - 44), (WIDTH // 2 + 220, HEIGHT - 44), 1)
         texto(s, "Projeto PAP  •  Rafael Silveira  •  2026/2027", 13, (110, 130, 175),
               (WIDTH // 2, HEIGHT - 26), negrito=False)
-        texto(s, "v27", 12, (80, 100, 145), (18, HEIGHT - 24), ancora="midleft")
+        texto(s, "v28", 12, (80, 100, 145), (18, HEIGHT - 24), ancora="midleft")
 
 
 # ====================================================================== #

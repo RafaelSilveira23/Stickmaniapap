@@ -38,7 +38,7 @@ TAREFAS = [
     ("Análise e planeamento", None, None, None, None, None),
     ("", "Anteprojeto, requisitos e escolha das tecnologias", date(2026, 9, 15), date(2026, 10, 10), "Concluído", DOIS),
 
-    ("Desenvolvimento (versões 1 a 27)", None, None, None, None, None),
+    ("Desenvolvimento (versões 1 a 28)", None, None, None, None, None),
     ("", "Protótipo: rinque, jogadores, bola e física", date(2026, 10, 1), date(2026, 10, 10), "Concluído", RAFAEL),
     ("", "Interface do mockup, símbolos e seleção de equipas", date(2026, 10, 6), date(2026, 10, 15), "Concluído", VASCO),
     ("", "IA com três níveis de dificuldade", date(2026, 10, 11), date(2026, 10, 20), "Concluído", VASCO),
@@ -68,6 +68,7 @@ TAREFAS = [
     ("", "Versão para o browser (site) e online com código", date(2027, 2, 15), date(2027, 2, 28), "Concluído", RAFAEL),
     ("", "Aplicação para Windows, instalador e servidor online", date(2027, 3, 1), date(2027, 3, 14), "Concluído", RAFAEL),
     ("", "Guarda-redes no ecrã do remate (animação)", date(2027, 3, 15), date(2027, 3, 21), "Concluído", VASCO),
+    ("", "Stickada no online e servidor na Europa", date(2027, 3, 22), date(2027, 3, 28), "Concluído", RAFAEL),
 
     ("Novas funcionalidades", None, None, None, None, None),
     ("", "Estatísticas da partida e modo de 2 jogadores", date(2026, 11, 16), date(2026, 12, 31), "Planeado", DOIS),

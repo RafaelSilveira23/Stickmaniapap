@@ -67,9 +67,9 @@ aparece uma janela com a mensagem, que também fica gravada em `hockey_game/save
 | F11 | Ecrã inteiro |
 | F3 | Modo de depuração |
 
-No **jogo online** os controlos são os mesmos, mas o `X` faz um remate direto à baliza (o ecrã do remate na
-primeira pessoa pararia o jogo do outro jogador): carrega numa seta para cima ou para baixo ao mesmo tempo
-para apontar a esse lado da baliza.
+No **jogo online** os controlos são os mesmos, também com a **stickada** (o ecrã do remate na primeira
+pessoa): quando um jogador carrega em `X`, o jogo pára nos dois computadores e o outro vê o remate em direto
+(«REMATE DO ADVERSÁRIO»). Na pausa o jogo não pára, porque há outra pessoa a jogar.
 
 ## Jogar online
 
@@ -90,12 +90,17 @@ teclas que carrega e recebe 30 vezes por segundo o estado do jogo, que desenha c
 
 ### Servidor do jogo online (Render.com, grátis)
 
-O servidor corre no [Render](https://render.com), no plano gratuito, com a configuração do `render.yaml`:
+O servidor corre no [Render](https://render.com), no plano gratuito, na região de **Frankfurt**, com a
+configuração do `render.yaml`:
 
 1. Entrar em [dashboard.render.com](https://dashboard.render.com) com a conta do GitHub.
 2. **New → Blueprint**, escolher o repositório `Stickmaniapap` e carregar em **Apply**.
-3. O Render cria o serviço `stickmania-servidor` em `https://stickmania-servidor.onrender.com`
+3. O Render cria o serviço `stickmania-eu` em `https://stickmania-eu.onrender.com`
    (se o endereço for outro, muda a constante `SERVIDOR` em `hockey_game/rede.py`).
+4. Quando o `render.yaml` muda, carregar em **Manual sync** na página do Blueprint.
+
+A região conta muito: com o servidor nos EUA (a região por omissão do Render), uma mensagem entre dois
+jogadores em Portugal demorava ~0,5 s a ir e voltar; em Frankfurt demora ~0,15 s.
 
 O plano gratuito adormece o servidor ao fim de 15 minutos sem jogadores; o primeiro a entrar espera até
 1 minuto e o jogo mostra «A acordar o servidor do jogo».
