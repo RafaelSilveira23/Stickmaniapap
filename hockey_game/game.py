@@ -856,13 +856,21 @@ class Game(OnlineMixin):
         return (obter_info_equipa(self.equipa_casa_id)["sigla"], self.golos_azul,
                 obter_info_equipa(self.equipa_fora_id)["sigla"], self.golos_vermelho, tempo)
 
-    def _aplicar_remate(self, res):
-        """Depois do remate na primeira pessoa, põe a bola no sítio certo do jogo 2D."""
+    def _aplicar_remate(self, res, j=None, baliza: str = "esq"):
+        """
+        Depois do remate na primeira pessoa, põe a bola no sítio certo do jogo 2D.
+        baliza: "esq" (a equipa da casa ataca a da esquerda) ou "dir" (no online, o convidado).
+        """
         self.remate_pov = None
         if res is None:                     # cancelou com ESC: continua com a bola
             return
-        j, b = self.jogador_humano, self.bola
-        gx, cy = self.rink.linha_golo_esq_x, self.rink.rect.centery
+        j, b = j or self.jogador_humano, self.bola
+        cy = self.rink.rect.centery
+        if baliza == "dir":
+            gx, o, gr, marca = self.rink.linha_golo_dir_x, 1, self.gr_azul, "vermelho"
+        else:
+            gx, o, gr, marca = self.rink.linha_golo_esq_x, -1, self.gr_vermelho, "azul"
+        # o = lado de "dentro da baliza" (−1 para a esquerda, +1 para a direita)
         r, u, v = res["resultado"], res["u"], res["velocidade"]
         lado = 1 if u >= 0 else -1
         # O jogador continuou a patinar durante o remate: fica onde chegou, a 50 % da velocidade
@@ -890,27 +898,27 @@ class Game(OnlineMixin):
             self._efeitos_bola("defesa", v, sx, sy)
             self.efeitos.texto_pop("BLOQUEADO!", sx, sy - 60, (255, 150, 70), 30)
         elif r == "golo":
-            b.pos_x, b.pos_y = gx - 16, cy + max(-28, min(28, u))
-            b.vel.update(-60, 0)
-            self._golo("azul")
+            b.pos_x, b.pos_y = gx + o * 16, cy + max(-28, min(28, u))
+            b.vel.update(o * 60, 0)
+            self._golo(marca)
         elif r == "defesa":
-            self.gr_vermelho.pos_y = cy + res["u_gr"]
-            b.pos_x, b.pos_y = gx + 26, cy + res["u_gr"] + lado * 8
-            b.vel.update(v * 0.3, random.uniform(-1, 1) * v * 0.2)
+            gr.pos_y = cy + res["u_gr"]
+            b.pos_x, b.pos_y = gx - o * 26, cy + res["u_gr"] + lado * 8
+            b.vel.update(-o * v * 0.3, random.uniform(-1, 1) * v * 0.2)
             sx, sy = self.rink.camera.projetar(gx, b.pos_y)
             self._efeitos_bola("defesa", v, sx, sy)
         elif r == "poste":
-            b.pos_x, b.pos_y = gx + 8, cy + lado * (MEIA_BOCA + 7)
-            b.vel.update(v * 0.35, lado * v * 0.25)
+            b.pos_x, b.pos_y = gx - o * 8, cy + lado * (MEIA_BOCA + 7)
+            b.vel.update(-o * v * 0.35, lado * v * 0.25)
             sx, sy = self.rink.camera.projetar(gx, b.pos_y)
             self._efeitos_bola("poste", v, sx, sy)
         else:
             if abs(u) > MEIA_BOCA + 3:      # ao lado da baliza
-                b.pos_x, b.pos_y = gx - 10, cy + lado * min(abs(u) + 10, 75)
-                b.vel.update(-v * 0.3, lado * 40)
+                b.pos_x, b.pos_y = gx + o * 10, cy + lado * min(abs(u) + 10, 75)
+                b.vel.update(o * v * 0.3, lado * 40)
             else:                           # por cima da barra: cai atrás da baliza
-                b.pos_x, b.pos_y = gx - 70, cy + u
-                b.vel.update(-v * 0.2, lado * 40)
+                b.pos_x, b.pos_y = gx + o * 70, cy + u
+                b.vel.update(o * v * 0.2, lado * 40)
         b.rect.center = (round(b.pos_x), round(b.pos_y))
 
     # ------------------------------------------------------------------ #
@@ -1136,7 +1144,10 @@ class Game(OnlineMixin):
         if self.remate_pov is not None:
             self.remate_pov.update(dt)
             if self.remate_pov.terminado:
-                self._aplicar_remate(self.remate_pov.resultado)
+                if self.online:
+                    self._online_fechar_pov()      # anfitrião: aplica o remate de quem rematou
+                else:
+                    self._aplicar_remate(self.remate_pov.resultado)
             return
         if self.modo_teste:
             self._update_teste(dt)

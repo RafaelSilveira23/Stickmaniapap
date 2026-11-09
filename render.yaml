@@ -1,9 +1,12 @@
 # Configuração do Render.com para o servidor do jogo online (ver o README, "Servidor do jogo online").
 # No Render: New -> Blueprint -> escolher este repositório. Fica no plano gratuito.
+# Região Frankfurt (Europa): com o servidor nos EUA (a região por omissão), cada mensagem entre dois
+# jogadores em Portugal demorava ~0,5 s a ir e voltar; na Europa demora muito menos.
 services:
   - type: web
-    name: stickmania-servidor
+    name: stickmania-eu
     runtime: python
+    region: frankfurt
     plan: free
     buildCommand: pip install -r servidor/requirements.txt
     startCommand: python servidor/servidor.py

@@ -26,7 +26,7 @@ from http import HTTPStatus
 from websockets.asyncio.server import serve
 from websockets.exceptions import ConnectionClosed
 
-VERSAO = 2                  # tem de ser igual à VERSAO_ONLINE do jogo
+VERSAO = 3                  # tem de ser igual à VERSAO do jogo (hockey_game/rede.py)
 LETRAS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"     # sem O/0 e I/1, que se confundem
 MAX_MENSAGEM = 256 * 1024
 INTERVALO_CONTAGEM = 2.0    # segundos entre os avisos de quantos estão online

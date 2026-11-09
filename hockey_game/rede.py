@@ -23,8 +23,8 @@ import time
 
 # Endereço do servidor. Para testar com o servidor no próprio PC:
 #   set STICKMANIA_SERVIDOR=ws://localhost:8765
-SERVIDOR = os.environ.get("STICKMANIA_SERVIDOR", "wss://stickmania-servidor.onrender.com")
-VERSAO = 2                  # tem de ser igual à do servidor e à do outro jogo
+SERVIDOR = os.environ.get("STICKMANIA_SERVIDOR", "wss://stickmania-eu.onrender.com")
+VERSAO = 3                  # tem de ser igual à do servidor e à do outro jogo
 TEMPO_LIGAR = 90.0          # o servidor gratuito do Render "adormece" e pode demorar ~1 min a acordar
 
 

@@ -199,6 +199,28 @@ def decidir_remate(u_alvo: float, h_alvo: float, forca: float, distancia: float,
             "velocidade": velocidade, "tempo": tempo, "erro": erro}
 
 
+CAMPOS_DECISAO = ("resultado", "u", "h", "u_gr", "u_gr_inicio", "velocidade", "tempo", "erro", "forca", "tapado",
+                  "pos", "vel", "bola_ini", "bola_vista", "bola_anim", "t_bloqueio", "i_bloqueador", "pos_bloqueio")
+
+
+def decisao_para_rede(d: dict) -> dict:
+    """Só os números da decisão (o defesa que bloqueou vai como índice)."""
+    out = {}
+    for k in CAMPOS_DECISAO:
+        if k in d:
+            v = d[k]
+            out[k] = [round(float(x), 2) for x in v] if isinstance(v, (tuple, list)) else v
+    return out
+
+
+def decisao_da_rede(d: dict) -> dict:
+    out = dict(d)
+    for k in ("pos", "vel", "bola_ini", "bola_vista", "bola_anim", "pos_bloqueio"):
+        if k in out and out[k] is not None:
+            out[k] = tuple(out[k])
+    return out
+
+
 class RematePOV:
     """
     Ecrã do remate na primeira pessoa. O Game chama handle_event, update e draw; quando
@@ -206,7 +228,8 @@ class RematePOV:
     """
 
     def __init__(self, screen, rink, jogador, gr, dificuldade: str, limite_tempo: float | None = 5.0,
-                 cor_linhas=(30, 95, 210), defensores=(), velocidade=(0.0, 0.0), placar=None):
+                 cor_linhas=(30, 95, 210), defensores=(), velocidade=(0.0, 0.0), placar=None,
+                 baliza: str = "esq", espectador: bool = False):
         self.screen = screen
         self.rink = rink
         self.jogador = jogador
@@ -221,10 +244,17 @@ class RematePOV:
         self.t = 0.0
 
         r = rink.rect
-        self.gx = rink.linha_golo_esq_x          # o jogador (equipa azul) ataca a baliza da esquerda
+        # Baliza atacada: no jogo normal a equipa da casa ataca a da esquerda; no online o convidado
+        # (equipa de fora) ataca a da direita
+        self.baliza = baliza
+        self.espectador = espectador              # online: o outro jogador vê o remate, sem mexer
+        if baliza == "dir":
+            self.gx, self.fora_dir = rink.linha_golo_dir_x, 1
+            self.bx, self.bx_oposto = r.right, r.left
+        else:
+            self.gx, self.fora_dir = rink.linha_golo_esq_x, -1
+            self.bx, self.bx_oposto = r.left, r.right   # tabela atrás da baliza / a do outro lado
         self.cy = r.centery
-        self.fora_dir = -1                        # "atrás da baliza" é para a esquerda (x menor)
-        self.bx = r.left                          # tabela atrás da baliza
         # O jogador continua a patinar, a 50 % da velocidade que trazia
         self.pos = [float(jogador.pos_x), float(jogador.pos_y)]
         self.vel_corrida = math.hypot(*velocidade)
@@ -363,6 +393,8 @@ class RematePOV:
     # Eventos e lógica                                                   #
     # ------------------------------------------------------------------ #
     def handle_event(self, event):
+        if self.espectador:
+            return                                # quem manda é o outro jogador (chega pela rede)
         if self.estado != "mirar":
             # Depois do remate, qualquer tecla salta a animação do resultado
             if self.estado == "resultado" and event.type in (pygame.KEYDOWN, pygame.MOUSEBUTTONDOWN):
@@ -389,7 +421,7 @@ class RematePOV:
             return
         nx, ny = self.pos[0] + self.vel[0] * dt, self.pos[1] + self.vel[1] * dt
         r = self.rink.rect
-        perto = math.hypot(self.gx - nx, self.cy - ny) < DIST_MINIMA or nx < self.gx + 40
+        perto = math.hypot(self.gx - nx, self.cy - ny) < DIST_MINIMA or (nx - self.gx) * -self.fora_dir < 40
         fora = not (r.left + 20 < nx < r.right - 20 and r.top + 20 < ny < r.bottom - 20)
         # Trava antes de um defesa que esteja mesmo à frente (senão ficava encostado a ele e o
         # defesa tapava o ecrã todo); os que estão ao lado só travam se houver contacto
@@ -437,6 +469,14 @@ class RematePOV:
                 tapado = True
         return primeiro, tapado
 
+    def definir_mira(self, u: float, h: float, forca: float, a_carregar: bool, pos=None):
+        """Espectador: a mira, a força e a posição de quem está a rematar (chegam pela rede)."""
+        self.u, self.h = float(u), float(h)
+        self.forca, self.a_carregar = float(forca), bool(a_carregar)
+        if pos is not None and math.dist(pos, self.pos) > 0.5:
+            self.pos = [float(pos[0]), float(pos[1])]
+            self._definir_camera()
+
     def _comecar_carga(self):
         if not self.a_carregar:
             self.a_carregar = True
@@ -478,7 +518,9 @@ class RematePOV:
                 self._ang = 0.0
                 som.tocar("remate", 0.6 + 0.4 * self._decisao.get("forca", 0.5))
             return
-        if self.estado == "mirar":
+        if self.estado == "mirar" and self.espectador:
+            self.u_gr = self.u_gr0 + max(-12.0, min(12.0, self.u * 0.15))
+        elif self.estado == "mirar":
             teclas = pygame.key.get_pressed()
             du = (teclas[pygame.K_RIGHT] or teclas[pygame.K_d]) - (teclas[pygame.K_LEFT] or teclas[pygame.K_a])
             dh = (teclas[pygame.K_UP] or teclas[pygame.K_w]) - (teclas[pygame.K_DOWN] or teclas[pygame.K_s])
@@ -554,8 +596,23 @@ class RematePOV:
             i, t = bloqueio
             d = self.defensores[i]
             self._decisao.update(resultado="bloqueado", t_bloqueio=t, bloqueador=d["jogador"],
-                                 pos_bloqueio=(d["x"], d["y"]))
+                                 i_bloqueador=i, pos_bloqueio=(d["x"], d["y"]))
             self._decisao["u_gr"] = self._decisao["u_gr_inicio"]
+        self.comecar_animacao(self._decisao)
+
+    def comecar_animacao(self, decisao: dict):
+        """Golpe do stick, voo da bola e resultado de uma decisão já tomada (também no espectador)."""
+        self.a_carregar = False
+        self._decisao = decisao
+        if decisao.get("i_bloqueador") is not None and "bloqueador" not in decisao:
+            i = decisao["i_bloqueador"]
+            if 0 <= i < len(self.defensores):
+                decisao["bloqueador"] = self.defensores[i]["jogador"]
+        self.forca = decisao.get("forca", self.forca)
+        if self.espectador and decisao.get("pos"):
+            # A câmara fica exatamente onde estava quem rematou (a bola sai do mesmo sítio)
+            self.pos = [float(decisao["pos"][0]), float(decisao["pos"][1])]
+            self._definir_camera()
         # A animação dura mais do que o voo real, para se perceber o que aconteceu
         self._voo_dur = max(0.3, min(0.75, self._decisao["tempo"] * 1.7))
         self._voo_t = 0.0
@@ -662,8 +719,9 @@ class RematePOV:
         alt = ALTURA_TABELA_POV
         for quad in (
             [(self.bx, r.top, 0), (self.bx, r.bottom, 0), (self.bx, r.bottom, alt), (self.bx, r.top, alt)],
-            [(self.bx, r.top, 0), (r.right, r.top, 0), (r.right, r.top, alt), (self.bx, r.top, alt)],
-            [(self.bx, r.bottom, 0), (r.right, r.bottom, 0), (r.right, r.bottom, alt), (self.bx, r.bottom, alt)],
+            [(self.bx, r.top, 0), (self.bx_oposto, r.top, 0), (self.bx_oposto, r.top, alt), (self.bx, r.top, alt)],
+            [(self.bx, r.bottom, 0), (self.bx_oposto, r.bottom, 0), (self.bx_oposto, r.bottom, alt),
+             (self.bx, r.bottom, alt)],
         ):
             pts = self._poligono(quad)
             if len(pts) >= 3:
@@ -673,12 +731,13 @@ class RematePOV:
             self._placa(s, (self.bx, r.top + i * seg), (self.bx, r.top + (i + 1) * seg), alt,
                         pavilhao_pov.textura_placa(i))
         for i in range(4):                                         # nos lados, perto da baliza
-            x0 = self.bx + i * 130
-            self._placa(s, (x0, r.top), (x0 + 130, r.top), alt, pavilhao_pov.textura_placa(i + 4))
-            self._placa(s, (x0, r.bottom), (x0 + 130, r.bottom), alt, pavilhao_pov.textura_placa(i + 2))
+            x0 = self.bx - self.fora_dir * i * 130
+            x1 = x0 - self.fora_dir * 130
+            self._placa(s, (x0, r.top), (x1, r.top), alt, pavilhao_pov.textura_placa(i + 4))
+            self._placa(s, (x0, r.bottom), (x1, r.bottom), alt, pavilhao_pov.textura_placa(i + 2))
         # Corrimão na cor da equipa da casa e rodapé
-        for p1, p2 in (((self.bx, r.top), (self.bx, r.bottom)), ((self.bx, r.top), (r.right, r.top)),
-                       ((self.bx, r.bottom), (r.right, r.bottom))):
+        for p1, p2 in (((self.bx, r.top), (self.bx, r.bottom)), ((self.bx, r.top), (self.bx_oposto, r.top)),
+                       ((self.bx, r.bottom), (self.bx_oposto, r.bottom))):
             self._segmento(s, (*p1, alt), (*p2, alt), self.cor_linhas, 2.0, 2)
             self._segmento(s, (*p1, 0), (*p2, 0), (40, 30, 24), 1.0, 1)
 
@@ -688,15 +747,16 @@ class RematePOV:
         # Tabela atrás da baliza e tabelas dos lados
         for quad in (
             [(self.bx, r.top, 0), (self.bx, r.bottom, 0), (self.bx, r.bottom, alt), (self.bx, r.top, alt)],
-            [(self.bx, r.top, 0), (r.right, r.top, 0), (r.right, r.top, alt), (self.bx, r.top, alt)],
-            [(self.bx, r.bottom, 0), (r.right, r.bottom, 0), (r.right, r.bottom, alt), (self.bx, r.bottom, alt)],
+            [(self.bx, r.top, 0), (self.bx_oposto, r.top, 0), (self.bx_oposto, r.top, alt), (self.bx, r.top, alt)],
+            [(self.bx, r.bottom, 0), (self.bx_oposto, r.bottom, 0), (self.bx_oposto, r.bottom, alt),
+             (self.bx, r.bottom, alt)],
         ):
             pts = self._poligono(quad)
             if len(pts) >= 3:
                 pygame.draw.polygon(s, (226, 230, 238), pts)
         # Corrimão na cor da equipa da casa
-        for p1, p2 in (((self.bx, r.top), (self.bx, r.bottom)), ((self.bx, r.top), (r.right, r.top)),
-                       ((self.bx, r.bottom), (r.right, r.bottom))):
+        for p1, p2 in (((self.bx, r.top), (self.bx, r.bottom)), ((self.bx, r.top), (self.bx_oposto, r.top)),
+                       ((self.bx, r.bottom), (self.bx_oposto, r.bottom))):
             self._segmento(s, (*p1, alt), (*p2, alt), self.cor_linhas, 3.0, 3)
             self._segmento(s, (*p1, 0), (*p2, 0), (80, 86, 104), 1.0, 1)
 
@@ -1241,7 +1301,14 @@ class RematePOV:
             n = sum(1 for d in self.defensores if (p := self._proj(d["x"], d["y"])) and p[2] < self.z_baliza - 2)
             if n:
                 texto(s, f"Defesas à frente: {n}", 14, (255, 190, 120), (30, 80), ancora="midleft", negrito=False)
-        if self.estado == "mirar":
+        if self.espectador:
+            # Online: é o outro jogador que está a rematar (quem vê não controla nada)
+            r = pygame.Rect(0, 0, 360, 40)
+            r.midtop = (WIDTH // 2, 96)
+            pygame.draw.rect(s, (120, 20, 30), r, border_radius=20)
+            pygame.draw.rect(s, (255, 120, 120), r, 2, border_radius=20)
+            texto(s, "REMATE DO ADVERSÁRIO", 20, (255, 255, 255), r.center)
+        elif self.estado == "mirar":
             dica = ("Rato ou setas: apontar     Manter X ou o botão do rato: força (larga para rematar)"
                     "     ESC: cancelar")
             faixa = pygame.Surface((WIDTH, 34), pygame.SRCALPHA)

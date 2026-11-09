@@ -20,9 +20,10 @@ Como funciona (modelo "anfitrião com autoridade"):
     "preso". Para corrigir bem, cada envio de teclas leva um número; o anfitrião devolve o último
     número que recebeu, o que dá o tempo de ida e volta (RTT). A posição do anfitrião é comparada
     com a posição que o convidado tinha há RTT segundos.
-  - Remate com mira (os dois jogadores): manter X enche a barra de força, aponta-se com o rato e
-    larga-se o X (ou clica-se) para rematar. O jogo não pára, ao contrário do remate na primeira
-    pessoa, que só existe no jogo normal.
+  - Remate na primeira pessoa (stickada), como no jogo normal: quem tem a bola carrega em X e os
+    DOIS jogos abrem o ecrã do remate. Quem remata aponta e escolhe a força; o outro vê o mesmo
+    ecrã em direto (espectador). Enquanto isso o jogo pára nos dois. Quem remata decide o
+    resultado e envia-o; o anfitrião aplica-o no jogo 2D e avisa o convidado.
 
 Assim os dois veem sempre o mesmo jogo (só existe uma simulação: a do anfitrião).
 O Game herda desta classe (class Game(OnlineMixin)).
@@ -41,7 +42,7 @@ from carreira import FORCA_EQUIPAS
 from menu import MenuPausa, EcraFimJogo
 from online_menu import EcraOnline
 from rede import Servidor, VERSAO
-from remate_pov import MEIA_BOCA
+from remate_pov import MEIA_BOCA, RematePOV, decisao_para_rede, decisao_da_rede
 from sons import som
 from team import EQUIPAS_LISTA
 
@@ -75,9 +76,11 @@ class OnlineMixin:
         self._hist_pred = deque()        # (instante, x, y) do jogador previsto
         self._erro_pred = [0.0, 0.0]     # correção que falta aplicar aos poucos
         self._pred_jogador = None
-        # Remate com mira (os dois)
-        self._online_mira = False
-        self._mira_rato0 = None
+        # Remate na primeira pessoa: quem remata ("anfitriao" ou "convidado") e envios
+        self._online_mira = False        # (a mira do jogo normal nunca abre no online)
+        self._pov_quem = None
+        self._pov_t = self._pov_env_t = 0.0
+        self._pov_enviado = False
 
     # ================================================================== #
     # Ecrã "Jogar online"                                               #
@@ -156,8 +159,8 @@ class OnlineMixin:
         if not ligacao.ativa:
             self._online_terminar(ligacao.erro or "O outro jogador saiu do jogo.")
             return
-        if self.estado == "jogo":
-            self._online_atualizar_mira(dt)
+        if self.estado == "jogo" and self.remate_pov is not None:
+            self._online_pov_tick(dt)
         if self.online == "anfitriao" and self.estado == "jogo":
             self._online_enviar_estado(dt)
 
@@ -203,8 +206,16 @@ class OnlineMixin:
                     dx, dy, sp = msg["d"]
                     self._input_remoto = (max(-1, min(1, dx)), max(-1, min(1, dy)), bool(sp))
                     self._input_seq_remoto = n
-            elif t == "acao" and msg.get("a") in ("passe", "remate", "trocar"):
-                self._acoes_remotas.append((msg["a"], msg.get("d"), msg.get("f")))
+            elif t == "acao" and msg.get("a") == "pov":
+                self._online_abrir_pov("convidado")       # o convidado quer rematar (stickada)
+            elif t == "acao" and msg.get("a") in ("passe", "trocar"):
+                self._acoes_remotas.append((msg["a"], None, None))
+            elif t == "pov" and self._pov_espectador():
+                self.remate_pov.definir_mira(msg["u"], msg["h"], msg["f"], msg["c"], msg.get("p"))
+            elif t == "pov_remate" and self._pov_espectador():
+                self.remate_pov.comecar_animacao(decisao_da_rede(msg["d"]))
+            elif t == "pov_cancelar" and self.remate_pov is not None:
+                self.remate_pov.terminado, self.remate_pov.resultado = True, None
         else:
             if t == "inicio":
                 self.iniciar_partida(msg["casa"], msg["fora"])
@@ -218,6 +229,14 @@ class OnlineMixin:
                 self.ecra_online.mudar_fase("espera")
             elif t == "e" and self.estado == "jogo":
                 self._online_aplicar_estado(msg)
+            elif t == "pov_ini" and self.estado == "jogo":
+                self._online_abrir_pov_convidado(msg)
+            elif t == "pov" and self._pov_espectador():
+                self.remate_pov.definir_mira(msg["u"], msg["h"], msg["f"], msg["c"], msg.get("p"))
+            elif t == "pov_remate" and self._pov_espectador():
+                self.remate_pov.comecar_animacao(decisao_da_rede(msg["d"]))
+            elif t == "pov_fim":
+                self.remate_pov = None                    # o anfitrião já aplicou o remate
 
     def _online_largar_jogo(self):
         """Sai do jogo com o outro jogador (despedindo-se dele), mas fica ligado ao servidor."""
@@ -229,6 +248,7 @@ class OnlineMixin:
         self.online = None
         self._online_modo = None
         self.jogador_remoto = None
+        self.remate_pov = None
         som.gravacao = None
 
     def _online_fechar_rede(self):
@@ -286,14 +306,9 @@ class OnlineMixin:
             return
         dx, dy, sprint = self._input_remoto
         j.aplicar_controlo(dx, dy, sprint)
-        for a, direcao, forca in self._acoes_remotas:
+        for a, _d, _f in self._acoes_remotas:
             if a == "passe":
                 self._acao_passe(self.jogador_remoto)
-            elif a == "remate":
-                if direcao is not None and forca is not None:
-                    self._remate_mira(self.jogador_remoto, direcao, forca)
-                else:
-                    self._remate_rapido(self.jogador_remoto)
             elif a == "trocar":
                 self._trocar_remoto_proximo()
         self._acoes_remotas.clear()
@@ -357,20 +372,6 @@ class OnlineMixin:
             return
         forca = REMATE_FORCA * random.uniform(0.82, 1.0)
         j.fazer_remate_com_forca(self.bola, v.normalize(), forca)
-
-    def _remate_mira(self, j, direcao, forca: float):
-        """Remate com mira: direção escolhida com o rato e força da barra (0 a 1)."""
-        if not self.jogo_ativo or not j.tem_bola:
-            return
-        try:
-            v = pygame.math.Vector2(float(direcao[0]), float(direcao[1]))
-            forca = max(0.0, min(1.0, float(forca)))
-        except (TypeError, ValueError, IndexError):
-            return
-        if v.length_squared() < 1e-6:
-            return
-        # Igual ao remate com mira do jogo normal: entre 30 % e 100 % da força máxima
-        j.fazer_remate_com_forca(self.bola, v.normalize(), (0.30 + 0.70 * forca) * REMATE_FORCA)
 
     def _online_enviar_estado(self, dt: float):
         self._rede_t += dt
@@ -567,6 +568,14 @@ class OnlineMixin:
         p._atualizar_animacao(dt)
 
     def _update_convidado(self, dt: float):
+        if self.remate_pov is not None:
+            pov = self.remate_pov
+            pov.update(dt)
+            if pov.terminado and not pov.espectador:
+                if pov.resultado is None:
+                    self.ligacao.enviar({"t": "pov_cancelar"})    # cancelou com ESC
+                self.remate_pov = None
+            return
         if self.pausado:
             self.menu_pausa.update(dt)
         if self.fim_jogo:
@@ -642,60 +651,101 @@ class OnlineMixin:
     # ================================================================== #
 
     # ------------------------------------------------------------------ #
-    # Remate com mira (manter X, apontar com o rato, largar)              #
+    # Remate na primeira pessoa (stickada) no jogo online                 #
     # ------------------------------------------------------------------ #
 
-    def _online_iniciar_mira(self):
-        j = self.jogador_humano
-        if self._online_mira or j is None or not j.tem_bola or self.pausado or self.fim_jogo:
-            return
-        self._online_mira = True
-        self._mira_forca, self._mira_forca_dir = 0.0, 1.0
-        self._mira_rato0 = pygame.mouse.get_pos()
-        # Até se mexer o rato, aponta ao meio da baliza adversária
-        r = self.rink
-        gx = r.linha_golo_esq_x if j.equipa == "azul" else r.linha_golo_dir_x
-        v = pygame.math.Vector2(gx - j.pos_x, r.rect.centery - j.pos_y)
-        self._mira_direcao = v.normalize() if v.length_squared() > 0 else pygame.math.Vector2(1, 0)
+    def _pov_espectador(self) -> bool:
+        return self.remate_pov is not None and self.remate_pov.espectador
 
-    def _online_atualizar_mira(self, dt: float):
-        """Barra de força a subir e descer e direção pelo rato (o jogo continua: não há câmara lenta)."""
-        if not self._online_mira:
-            return
+    def _online_pedir_remate(self):
+        """X com a bola: o anfitrião abre logo a stickada; o convidado pede-a ao anfitrião."""
         j = self.jogador_humano
-        if j is None or not j.tem_bola or self.pausado or self.fim_jogo:
-            self._online_mira = False                # perdeu a bola: cancela
+        if self.remate_pov is not None or j is None or not j.tem_bola or self.pausado or self.fim_jogo:
             return
-        rato = pygame.mouse.get_pos()
-        if rato != self._mira_rato0:
-            mx, my = self.rink.camera.desprojetar(*rato)
-            v = pygame.math.Vector2(mx - j.pos_x, my - j.pos_y)
-            if v.length_squared() > 10:
-                self._mira_direcao = v.normalize()
-        self._mira_forca += self._mira_forca_dir * self._mira_vel * dt
-        if self._mira_forca >= 1.0:
-            self._mira_forca, self._mira_forca_dir = 1.0, -1.0
-        elif self._mira_forca <= 0.0:
-            self._mira_forca, self._mira_forca_dir = 0.0, 1.0
-
-    def _online_rematar_mira(self):
-        if not self._online_mira:
-            return
-        self._online_mira = False
-        d, f = self._mira_direcao, self._mira_forca
         if self.online == "convidado":
-            self.ligacao.enviar({"t": "acao", "a": "remate", "d": [round(d.x, 3), round(d.y, 3)],
-                                 "f": round(f, 3)})
+            self.ligacao.enviar({"t": "acao", "a": "pov"})
         else:
-            self._remate_mira(self.jogador_humano, (d.x, d.y), f)
+            self._online_abrir_pov("anfitriao")
+
+    def _online_criar_pov(self, j, quem: str, espectador: bool, vel=None):
+        """Ecrã do remate: a equipa da casa ataca a baliza da esquerda e a de fora a da direita."""
+        casa = quem == "anfitriao"
+        return RematePOV(self.screen, self.rink, j, self.gr_vermelho if casa else self.gr_azul, DIFICULDADE_ONLINE,
+                         limite_tempo=None if espectador else 5.0, cor_linhas=self.rink.cor_linhas,
+                         defensores=list(self.equipa_vermelha if casa else self.equipa_azul),
+                         velocidade=vel if vel is not None else (j.vel_x, j.vel_y), placar=self._placar_pov(),
+                         baliza="esq" if casa else "dir", espectador=espectador)
+
+    def _online_abrir_pov(self, quem: str):
+        """Anfitrião: abre a stickada (de quem remata) e avisa o convidado. O jogo pára nos dois."""
+        if self.remate_pov is not None or not self.jogo_ativo or self.fim_jogo:
+            return
+        j = self.jogador_humano if quem == "anfitriao" else self.jogador_remoto
+        if j is None or not j.tem_bola:
+            return
+        r = self.rink
+        frente = (j.pos_x - r.linha_golo_esq_x) if quem == "anfitriao" else (r.linha_golo_dir_x - j.pos_x)
+        if frente < 30:
+            self._remate_rapido(j)              # atrás da linha de golo não se vê a baliza
+            return
+        self.remate_pov = self._online_criar_pov(j, quem, espectador=quem != "anfitriao")
+        self._pov_quem, self._pov_t, self._pov_env_t, self._pov_enviado = quem, 0.0, 0.0, False
+        self._input_remoto = (0, 0, False)
+        som.gravacao = None                     # os sons da stickada tocam nos dois ecrãs: não se enviam
+        lista = list(self.equipa_azul) + list(self.equipa_vermelha)
+        self.ligacao.enviar({"t": "pov_ini", "quem": quem, "j": lista.index(j),
+                             "p": [round(j.pos_x, 1), round(j.pos_y, 1)], "v": [round(j.vel_x, 1), round(j.vel_y, 1)]})
+
+    def _online_abrir_pov_convidado(self, msg: dict):
+        """Convidado: abre a stickada - a dele (se é ele que remata) ou a do anfitrião, a ver."""
+        i = msg.get("j", -1)
+        if not 0 <= i < len(self._lista_rede):
+            return
+        j = self._lista_rede[i]
+        j.pos_x, j.pos_y = msg["p"]
+        quem = msg["quem"]
+        self.remate_pov = self._online_criar_pov(j, quem, espectador=quem != "convidado", vel=tuple(msg["v"]))
+        self._pov_quem, self._pov_t, self._pov_env_t, self._pov_enviado = quem, 0.0, 0.0, False
+
+    def _online_pov_tick(self, dt: float):
+        """Quem remata envia a mira (20 vezes por segundo) e, ao rematar, a decisão."""
+        pov = self.remate_pov
+        self._pov_t += dt
+        if pov.espectador:
+            # Segurança: se a decisão nunca chegar (ligação má), o anfitrião desiste do remate
+            if self.online == "anfitriao" and pov._decisao is None and self._pov_t > 12:
+                pov.terminado, pov.resultado = True, None
+            return
+        if pov.estado == "mirar":
+            self._pov_env_t += dt
+            if self._pov_env_t >= 0.05:
+                self._pov_env_t = 0.0
+                self.ligacao.enviar({"t": "pov", "u": round(pov.u, 1), "h": round(pov.h, 1),
+                                     "f": round(pov.forca, 3), "c": int(pov.a_carregar),
+                                     "p": [round(pov.pos[0], 1), round(pov.pos[1], 1)]})
+        elif pov._decisao is not None and not self._pov_enviado:
+            self._pov_enviado = True
+            self.ligacao.enviar({"t": "pov_remate", "d": decisao_para_rede(pov._decisao)})
+
+    def _online_fechar_pov(self):
+        """Anfitrião: a stickada acabou - aplica o resultado no jogo 2D e avisa o convidado."""
+        pov = self.remate_pov
+        if self._pov_quem == "convidado":
+            self._aplicar_remate(pov.resultado, self.jogador_remoto, "dir")
+        else:
+            self._aplicar_remate(pov.resultado, self.jogador_humano, "esq")
+        self.remate_pov = None
+        som.gravacao = []
+        if self.ligacao is not None:
+            self.ligacao.enviar({"t": "pov_fim"})
 
     def _online_acao(self, acao: str):
-        if self.online == "convidado":
+        if acao == "remate":
+            self._online_pedir_remate()
+        elif self.online == "convidado":
             self.ligacao.enviar({"t": "acao", "a": acao})
         elif acao == "passe":
             self._acao_passe()
-        elif acao == "remate":
-            self._remate_rapido(self.jogador_humano)
         elif acao == "trocar":
             self._selecionar_jogador_proximo()
 
@@ -705,6 +755,9 @@ class OnlineMixin:
                 self._online_fechar_rede()
                 self.running = False
                 return
+            if self.remate_pov is not None:
+                self.remate_pov.handle_event(event)      # (o espectador ignora as teclas)
+                continue
             if self.pausado:
                 acao = self.menu_pausa.handle_event(event)
                 self._som_acao(acao)
@@ -737,10 +790,7 @@ class OnlineMixin:
                 continue
             if event.type == pygame.KEYDOWN:
                 k = event.key
-                if k == pygame.K_ESCAPE and self._online_mira:
-                    self._online_mira = False            # ESC com a mira aberta só cancela o remate
-                elif k in (pygame.K_ESCAPE, pygame.K_p, pygame.K_m):
-                    self._online_mira = False
+                if k in (pygame.K_ESCAPE, pygame.K_p, pygame.K_m):
                     self.pausado = True
                     self.menu_pausa = MenuPausa(self.screen, modo_online=True)
                 elif k == pygame.K_F3:
@@ -748,15 +798,10 @@ class OnlineMixin:
                 elif k == pygame.K_z:
                     self._online_acao("passe")
                 elif k == pygame.K_x:
-                    self._online_iniciar_mira()          # manter X: mira e força
+                    self._online_pedir_remate()          # stickada (remate na primeira pessoa)
                 elif k in (pygame.K_TAB, pygame.K_c, pygame.K_SPACE):
                     self._online_acao("trocar")
-            elif event.type == pygame.KEYUP and event.key == pygame.K_x:
-                self._online_rematar_mira()              # largar X: remata
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-                if self._online_mira:
-                    self._online_rematar_mira()          # ou clicar
-                    continue
                 if event.pos[0] >= WIDTH - 56 and event.pos[1] <= 56:
                     self.pausado = True
                     self.menu_pausa = MenuPausa(self.screen, modo_online=True)
