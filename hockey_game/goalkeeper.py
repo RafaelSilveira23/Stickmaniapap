@@ -31,6 +31,18 @@ def _pasta_gr():
     return os.path.join(base, "..", "sprites_v2", "hd", "frames", "guarda_redes")
 
 
+def _pelos_pes(img: pygame.Surface) -> pygame.Surface:
+    """
+    Põe o boneco com os patins sempre no mesmo sítio da imagem (fundo, ao centro).
+    Cada sprite do GR tem o boneco numa posição diferente; sem isto, ao trocar de pose
+    (de pé -> agachado -> a defender) o corpo dava um salto.
+    """
+    caixa = img.get_bounding_rect()
+    nova = pygame.Surface(img.get_size(), pygame.SRCALPHA)
+    nova.blit(img, (img.get_width() // 2 - caixa.centerx, img.get_height() - 2 - caixa.bottom))
+    return nova
+
+
 def _carregar_animacoes_gr() -> dict:
     pasta = _pasta_gr()
     s = GR_SIZE
@@ -38,14 +50,14 @@ def _carregar_animacoes_gr() -> dict:
         "parado":        load_single_frame(os.path.join(pasta, "parado.png"), scale=s),
         "mover_cima":    load_single_frame(os.path.join(pasta, "mover_cima.png"),    scale=s),
         "mover_baixo":   load_single_frame(os.path.join(pasta, "mover_baixo.png"),   scale=s),
-        "mover_direita": load_single_frame(os.path.join(pasta, "mover_direita.png"), scale=s),
-        "mover_esquerda":load_single_frame(os.path.join(pasta, "mover_esquerda.png"),scale=s),
-        "defender":      load_animation_from_folder(pasta, "defender", fps=8.0,
-                                                    loop=True, scale=s),
+        # Pronto (bola perto): agachado, à espera do remate - uma só pose, sem piscar
+        "pronto":        load_single_frame(os.path.join(pasta, "defender_02.png"),   scale=s),
+        # Defesa (remate a vir ou bola defendida): estica-se com o stick
+        "defender":      load_single_frame(os.path.join(pasta, "defender_01.png"),   scale=s),
     }
     for estado, anim in anims.items():
         # o stick do GR é quase creme (pouco saturado), por isso aceitamos menos saturação
-        anim.frames = escurecer_stick(("gr", estado, s), anim.frames, sat_min=0.08)
+        anim.frames = [_pelos_pes(f) for f in escurecer_stick(("gr", estado, s), anim.frames, sat_min=0.08)]
     return anims
 
 
@@ -95,8 +107,11 @@ class Goalkeeper(pygame.sprite.Sprite):
 
         self.rect = self.image.get_rect(center=(round(self.pos_x), round(self.pos_y)))
 
-        # Cooldown da animação de defesa
+        # Animação: tempo que ainda falta a mostrar a pose de defesa, se está "pronto" (agachado)
+        # e a inclinação atual do corpo (muda aos poucos, para não tremer)
         self._defender_timer = 0.0
+        self._pronto = False
+        self._angulo = 0.0
         # Memória das últimas posições da bola: o GR reage ao que viu há 'reacao' segundos
         self._tempo = 0.0
         self._historico = []
@@ -157,10 +172,10 @@ class Goalkeeper(pygame.sprite.Sprite):
                 y_visto = centro + (y_visto - centro) * 0.5
         self._target_y = max(self._y_min, min(self._y_max, y_visto))
 
-        # Ativar animação de defender quando a bola se aproxima
-        dist = math.hypot(bola.pos_x - self.pos_x, bola.pos_y - self.pos_y)
-        if dist < self.alerta_dist and self._defender_timer <= 0:
-            self._defender_timer = 0.4   # mostra animação de defender por 0.4s
+        # Remate a vir para a baliza e já perto: estica-se para a bola
+        if para_mim and bola.dono is None and \
+                math.hypot(bola.pos_x - self.pos_x, bola.pos_y - self.pos_y) < self.alerta_dist:
+            self._defender_timer = max(self._defender_timer, 0.25)
 
     # ------------------------------------------------------------------ #
     # Movimento vertical com inércia                                       #
@@ -193,9 +208,17 @@ class Goalkeeper(pygame.sprite.Sprite):
 
     def _atualizar_animacao(self, dt: float, bola):
         self._defender_timer = max(0.0, self._defender_timer - dt)
+        # Bola perto: fica agachado, pronto. Sai só um pouco mais longe (para não estar sempre a
+        # trocar de pose quando a bola anda à volta do limite). Calculado aqui para funcionar
+        # também no convidado do jogo online, que só desenha.
+        dist = math.hypot(bola.pos_x - self.pos_x, bola.pos_y - self.pos_y)
+        self._pronto = dist < (self.alerta_dist * 1.2 if self._pronto else self.alerta_dist)
 
+        # Prioridade: defesa > pronto (agachado, mesmo a deslizar) > a deslizar > parado
         if self._defender_timer > 0:
             self._anim.estado = "defender"
+        elif self._pronto:
+            self._anim.estado = "pronto"
         elif abs(self.vel_y) > 8:
             self._anim.estado = "mover_cima" if self.vel_y < 0 else "mover_baixo"
         else:
@@ -206,22 +229,33 @@ class Goalkeeper(pygame.sprite.Sprite):
         if self.lado == "dir":
             img = pygame.transform.flip(img, True, False)
 
-        # Pequeno balanço ao deslizar e inclinação para o lado da bola ao defender
-        self._fase = (getattr(self, "_fase", 0.0) + dt * 10) if abs(self.vel_y) > 8 else 0.0
+        # Pequeno balanço ao deslizar (só de pé: agachado não balança)
+        a_deslizar = abs(self.vel_y) > 8 and self._anim.estado in ("mover_cima", "mover_baixo")
+        self._fase = (getattr(self, "_fase", 0.0) + dt * 10) if a_deslizar else 0.0
         bob = -round(abs(math.sin(self._fase)) * 2)
-        angulo = 0.0
+        # Ao defender, inclina-se para o lado da bola; a inclinação muda aos poucos
+        alvo = 0.0
         if self._anim.estado == "defender":
-            # Inclina o corpo na direção vertical da bola (estica-se para ela)
             dy = max(-1.0, min(1.0, (bola.pos_y - self.pos_y) / 40))
-            angulo = -dy * 10 if self.lado == "esq" else dy * 10
-            img = pygame.transform.rotozoom(img, angulo, 1.0)
+            alvo = -dy * 14 if self.lado == "esq" else dy * 14
+        self._angulo += (alvo - self._angulo) * min(1.0, dt * 14)
+        if abs(self._angulo) < 0.3:
+            self._angulo = 0.0
 
         tela = pygame.Surface(_TELA_GR, pygame.SRCALPHA)
         cx = _TELA_GR[0] // 2
         pes_y = _TELA_GR[1] // 2 + GR_SIZE[1] // 2 - 2
         sombra = sombra_oval(40, 11)
         tela.blit(sombra, (cx - sombra.get_width() // 2, pes_y - 8))
-        tela.blit(img, img.get_rect(center=(cx, _TELA_GR[1] // 2 + bob)))
+        if self._angulo:
+            # Roda à volta dos patins (não do centro da imagem): os pés ficam no chão
+            iw, ih = img.get_size()
+            pivo = pygame.math.Vector2(0, ih / 2 - 2).rotate(-self._angulo)
+            img = pygame.transform.rotozoom(img, self._angulo, 1.0)
+            centro = (cx - pivo.x, pes_y + bob - pivo.y)
+        else:
+            centro = (cx, pes_y + bob - (img.get_height() / 2 - 2))
+        tela.blit(img, img.get_rect(center=(round(centro[0]), round(centro[1]))))
         self.image = tela
         self.rect = self.image.get_rect(center=(round(self.pos_x), round(self.pos_y)))
 

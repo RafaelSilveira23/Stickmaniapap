@@ -13,7 +13,7 @@ from ai import AgentIA
 from goalkeeper import Goalkeeper
 from ui import HUDController
 from team import EQUIPAS_LISTA, obter_info_equipa, obter_plantel
-from menu import MenuPrincipal, EcraControlos, TeamSelectMenu, MenuPausa, EcraFimJogo
+from menu import MenuPrincipal, EcraControlos, TeamSelectMenu, MenuPausa, EcraFimJogo, EcraEscolhaTeste
 from cores import definir_equipamentos, misturar, cor_texto_sobre
 from componentes import COR_DESTAQUE
 from graficos import sombra_suave
@@ -49,6 +49,8 @@ class Game(OnlineMixin):
         definicoes = self._ler_definicoes()
         self.ecra_inteiro = bool(definicoes.get("ecra_inteiro", False))
         self.estilo_arcade = bool(definicoes.get("estilo_arcade", True))
+        # Tipo de passe: "z" (tecla Z, o jogo escolhe o colega) ou "clique" (clicar no colega)
+        self.tipo_passe = "clique" if definicoes.get("tipo_passe") == "clique" else "z"
         self.screen = self._criar_janela()
 
         # Som (se não houver placa de som, o jogo continua sem som)
@@ -127,7 +129,9 @@ class Game(OnlineMixin):
         self.efeitos.ativo  = self.estilo_arcade
         self._reposicao_pendente = None      # depois de um golo, a festa dura um pouco antes de repor
         self.remate_pov     = None           # ecrã do remate na primeira pessoa (quando está aberto)
-        self.modo_teste     = False          # MODO TESTE: só o jogador contra o guarda-redes
+        self.modo_teste     = False          # MODO TESTE: treinar contra o guarda-redes
+        self.teste_variante = "sozinho"      # "sozinho", "colega" ou "adversario"
+        self._teste_arranque = 0.0
         self.teste          = {"remates": 0, "golos": 0, "defesas": 0, "fora": 0}
         self._teste_espera  = 0.0
         self._teste_livre   = 0.0
@@ -336,7 +340,7 @@ class Game(OnlineMixin):
             os.makedirs(os.path.dirname(CAMINHO_DEFINICOES), exist_ok=True)
             with open(CAMINHO_DEFINICOES, "w", encoding="utf-8") as f:
                 json.dump({"ecra_inteiro": self.ecra_inteiro, "estilo_arcade": self.estilo_arcade,
-                           "vol_efeitos": som.vol_efeitos, "vol_publico": som.vol_publico}, f)
+                           "tipo_passe": self.tipo_passe, "vol_efeitos": som.vol_efeitos, "vol_publico": som.vol_publico}, f)
         except OSError:
             pass          # não conseguir gravar não impede de jogar
 
@@ -448,6 +452,7 @@ class Game(OnlineMixin):
                 pygame.event.post(e)
         self.ecra_controlos.ecra_inteiro = self.ecra_inteiro
         self.ecra_controlos.estilo_arcade = self.estilo_arcade
+        self.ecra_controlos.tipo_passe = self.tipo_passe
 
         # ── Menus (cada ecrã devolve uma "ação") ──────────────────────────
         if self.estado == "menu_principal":
@@ -463,9 +468,22 @@ class Game(OnlineMixin):
                 elif acao == "carreira_jogador":
                     self.abrir_carreira_jogador()
                 elif acao == "teste":
-                    self.iniciar_teste()
+                    self.ecra_teste = EcraEscolhaTeste(self.screen, arena=self.rink._surf)
+                    self.estado = "teste_escolha"
                 elif acao == "definicoes":
                     self._abrir_definicoes("menu_principal")
+                elif acao == "sair":
+                    self.running = False
+            return
+
+        if self.estado == "teste_escolha":
+            for event in pygame.event.get():
+                acao = self.ecra_teste.handle_event(event)
+                self._som_acao(acao)
+                if acao in ("teste_sozinho", "teste_colega", "teste_adversario"):
+                    self.iniciar_teste(acao.removeprefix("teste_"))
+                elif acao == "voltar":
+                    self.estado = "menu_principal"
                 elif acao == "sair":
                     self.running = False
             return
@@ -483,6 +501,10 @@ class Game(OnlineMixin):
                 elif acao == "estilo_arcade":
                     self.estilo_arcade = not self.estilo_arcade
                     self.efeitos.ativo = self.estilo_arcade
+                    self._gravar_definicoes()
+                elif acao == "tipo_passe":
+                    self.tipo_passe = "clique" if self.tipo_passe == "z" else "z"
+                    self.ecra_controlos.tipo_passe = self.tipo_passe
                     self._gravar_definicoes()
                 elif acao in ("volume_efeitos", "volume_publico"):
                     som.definir_volumes(self.ecra_controlos.vol_efeitos, self.ecra_controlos.vol_publico)
@@ -676,7 +698,7 @@ class Game(OnlineMixin):
                 elif event.key == pygame.K_z:
                     if self.modo_jogador and not self.jogador_humano.tem_bola:
                         self._pedir_bola()
-                    else:
+                    elif self.tipo_passe == "z":     # no modo "clique" o passe é feito com o rato
                         self._acao_passe()
                 elif event.key == pygame.K_x:
                     self._acao_remate()
@@ -708,10 +730,13 @@ class Game(OnlineMixin):
                 # Botão de pausa no canto superior direito
                 if event.pos[0] >= WIDTH - 56 and event.pos[1] <= 56:
                     self.abrir_pausa()
-                else:
-                    self._tratar_clique_botoes(event.pos)
+                elif not self._tratar_clique_botoes(event.pos) and self.tipo_passe == "clique":
+                    alvo = self._colega_sob_rato()
+                    if alvo is not None:
+                        self._passe_para(alvo)
 
-    def _tratar_clique_botoes(self, pos):
+    def _tratar_clique_botoes(self, pos) -> bool:
+        """Devolve True se o clique foi num dos botões do painel de baixo."""
         for chave, btn in self.hud.btn_rects.items():
             if btn["rect"].collidepoint(pos):
                 if chave == "passe":
@@ -720,7 +745,41 @@ class Game(OnlineMixin):
                     self._acao_remate()
                 elif chave in ("defender", "acelerar"):
                     self._selecionar_jogador_proximo()
-                return
+                return True
+        return False
+
+    # Distância máxima (no ecrã) entre o rato e o colega para o clique contar
+    _RAIO_CLIQUE = 55
+
+    def _colega_sob_rato(self):
+        """Modo de passe "clique": o colega mais perto do rato (se estiver perto o suficiente)."""
+        eu = self.jogador_humano
+        if not eu.tem_bola or not self.jogo_ativo or self._mira_ativa or self.remate_pov is not None:
+            return None
+        mx, my = pygame.mouse.get_pos()
+        cam = self.rink.camera
+        melhor, melhor_d = None, self._RAIO_CLIQUE
+        for j in (self.equipa_azul if eu.equipa == "azul" else self.equipa_vermelha):
+            if j is eu:
+                continue
+            # Centro do corpo no ecrã (os pés estão em pos_y; o corpo fica um pouco acima)
+            sx, sy = cam.projetar(j.pos_x, j.pos_y)
+            d = math.hypot(mx - sx, my - (sy - 25 * cam.escala(j.pos_y)))
+            if d < melhor_d:
+                melhor, melhor_d = j, d
+        return melhor
+
+    def _passe_para(self, alvo):
+        """Passe para um colega escolhido, para onde ele VAI estar (como a IA faz)."""
+        eu = self.jogador_humano
+        from ball import PASSE_FORCA
+        t = math.hypot(alvo.pos_x - eu.pos_x, alvo.pos_y - eu.pos_y) / PASSE_FORCA
+        v = pygame.math.Vector2(alvo.pos_x + alvo.vel_x * t - eu.pos_x,
+                                alvo.pos_y + alvo.vel_y * t - eu.pos_y)
+        if v.length_squared() == 0:
+            return
+        eu.fazer_passe(self.bola, v.normalize())
+        self.bola.marcar_recetor(alvo)
 
     # ================================================================== #
     # Ações do Jogador Humano                                              #
@@ -858,22 +917,54 @@ class Game(OnlineMixin):
     # MODO TESTE: treinar remates contra o guarda-redes                   #
     # ------------------------------------------------------------------ #
 
-    def iniciar_teste(self):
-        """Só o jogador e o guarda-redes adversário; remates ilimitados e contagem dos golos."""
+    # Mensagem do início de cada treino do modo teste
+    _MSG_TESTE = {
+        "sozinho": "MODO TESTE  •  aproxima-te e carrega em X",
+        "colega": "COM UM COLEGA  •  passa e remata",
+        "adversario": "CONTRA UM ADVERSÁRIO  •  não percas a bola",
+    }
+
+    def iniciar_teste(self, variante: str = "sozinho"):
+        """
+        MODO TESTE: remates ilimitados e contagem dos golos, contra o guarda-redes adversário.
+          • "sozinho"    - só o jogador
+          • "colega"     - o jogador e um colega da equipa (controlado pela IA)
+          • "adversario" - o jogador contra um defesa adversário (controlado pela IA)
+        """
         self.iniciar_partida(self.equipa_casa_id, self.equipa_fora_id)
         self.modo_teste = True
+        self.teste_variante = variante if variante in self._MSG_TESTE else "sozinho"
         humano = self.jogador_humano
+
+        # Fica só o jogador humano (e, no treino com colega, o médio da equipa)
+        colega = None
+        if self.teste_variante == "colega" and self.agentes_azul:
+            ag = next((a for a in self.agentes_azul if a.jogador.papel == "medio"), self.agentes_azul[0])
+            colega = ag.jogador
+            self.agentes_azul = [ag]
+        else:
+            self.agentes_azul = []
         for j in list(self.equipa_azul):
-            if j is not humano:
+            if j is not humano and j is not colega:
                 self.equipa_azul.remove(j)
-        self.agentes_azul = []
-        self.equipa_vermelha.empty()
-        self.agentes_vermelhos = []
-        self.todos_jogadores = pygame.sprite.Group(humano)
+
+        # Adversário: só o defesa (no treino contra um adversário)
+        adversario = None
+        if self.teste_variante == "adversario" and self.agentes_vermelhos:
+            ag = next((a for a in self.agentes_vermelhos if a.jogador.papel == "defesa"), self.agentes_vermelhos[0])
+            adversario = ag.jogador
+            self.agentes_vermelhos = [ag]
+        else:
+            self.agentes_vermelhos = []
+        for j in list(self.equipa_vermelha):
+            if j is not adversario:
+                self.equipa_vermelha.remove(j)
+
+        self.todos_jogadores = pygame.sprite.Group(*self.equipa_azul, *self.equipa_vermelha)
         self.tempo_restante = 1e9
-        self.teste = {"remates": 0, "golos": 0, "defesas": 0, "fora": 0}
+        self.teste = {"remates": 0, "golos": 0, "defesas": 0, "fora": 0, "perdidas": 0}
         self._teste_novo_remate()
-        self._msg_texto = "MODO TESTE  •  aproxima-te e carrega em X"
+        self._msg_texto = self._MSG_TESTE[self.teste_variante]
         self._msg_timer = 2.5
         self._msg_equipa = "azul"
 
@@ -892,8 +983,27 @@ class Game(OnlineMixin):
         j.tem_bola = True
         self.bola.seguir_jogador(j)
         self.gr_vermelho.pos_y = float(cy)
+        # Os outros jogadores do treino também vão para o sítio deles
+        for o in self.todos_jogadores:
+            if o is j:
+                continue
+            if o.equipa == j.equipa:
+                # Colega: do outro lado do campo, um pouco mais longe da baliza
+                ox = gx + random.uniform(220, 380)
+                oy = cy - (j.pos_y - cy) * 0.8 + random.uniform(-40, 40)
+            else:
+                # Defesa: entre o jogador e a baliza, mais perto da baliza
+                ox = gx + max(60.0, (j.pos_x - gx) * 0.3) + random.uniform(0, 20)
+                oy = cy + (j.pos_y - cy) * 0.3 + random.uniform(-25, 25)
+            o.pos_x = ox
+            o.pos_y = max(r.top + 40, min(r.bottom - 40, oy))
+            o.vel_x = o.vel_y = 0.0
+            o.set_target(0.0, 0.0)
+            o.tem_bola = False
+            o.rect.center = (round(o.pos_x), round(o.pos_y))
         self._teste_espera = 0.0
         self._teste_livre = 0.0
+        self._teste_arranque = 1.0          # segundos em que o defesa ainda não ataca
         self._reposicao_pendente = None
 
     def _update_teste(self, dt: float):
@@ -904,6 +1014,18 @@ class Game(OnlineMixin):
             self._teste_espera -= dt
             if self._teste_espera <= 0:
                 self._teste_novo_remate()
+            return
+        # Treino contra um adversário: se o defesa fica com a bola, a jogada acaba
+        # (o guarda-redes agarrar a bola não conta: é uma defesa)
+        dono = self.bola.dono
+        if dono is not None and dono in self.equipa_vermelha:
+            self.teste["perdidas"] += 1
+            if self.efeitos.ativo:
+                sx, sy = self.rink.camera.projetar(dono.pos_x, dono.pos_y)
+                self.efeitos.texto_pop("PERDESTE A BOLA!", sx, sy - 70, (255, 120, 90), 28)
+            else:
+                self._msg_texto, self._msg_timer, self._msg_equipa = "PERDESTE A BOLA", 1.2, "vermelho"
+            self._teste_espera = 1.4
             return
         if self.bola.dono is None and self.bola.vel.length() < 20:
             self._teste_livre += dt
@@ -988,6 +1110,9 @@ class Game(OnlineMixin):
         if self.estado == "carreira_escolha":
             self.ecra_carreira.update(dt)
             return
+        if self.estado == "teste_escolha":
+            self.ecra_teste.update(dt)
+            return
         if self.estado == "carreira":
             self.ecra_campeonato.update(dt)
             return
@@ -1068,9 +1193,15 @@ class Game(OnlineMixin):
         # IA Vermelha
         lista_verm = list(self.equipa_vermelha)
         lista_azul = list(self.equipa_azul)
-        for agente in self.agentes_vermelhos:
-            colegas = [j for j in lista_verm if j != agente.jogador]
-            agente.update(dt, self.bola, colegas, lista_azul)
+        # (no treino contra um adversário, o defesa espera um pouco no início de cada jogada)
+        if self.modo_teste and self._teste_arranque > 0:
+            self._teste_arranque -= dt
+            for agente in self.agentes_vermelhos:
+                agente.jogador.set_target(0.0, 0.0)
+        else:
+            for agente in self.agentes_vermelhos:
+                colegas = [j for j in lista_verm if j != agente.jogador]
+                agente.update(dt, self.bola, colegas, lista_azul)
 
         # IA Azul (colegas de equipa)
         for agente in self.agentes_azul:
@@ -1843,6 +1974,8 @@ class Game(OnlineMixin):
             self.ecra_online.draw()
         elif self.estado == "carreira_escolha":
             self.ecra_carreira.draw()
+        elif self.estado == "teste_escolha":
+            self.ecra_teste.draw()
         elif self.estado == "carreira":
             self.ecra_campeonato.draw()
         elif self.estado == "cj_criar":
@@ -1873,7 +2006,7 @@ class Game(OnlineMixin):
         """Identifica o ecrã que está à vista; quando muda, faz-se uma transição."""
         ecras = {"menu_principal": "menu_principal", "menu_selecao": "menu", "carreira_escolha": "ecra_carreira",
                  "carreira": "ecra_campeonato", "cj_criar": "ecra_cj_criar", "cj": "ecra_cj",
-                 "controlos": "ecra_controlos", "online": "ecra_online"}
+                 "controlos": "ecra_controlos", "online": "ecra_online", "teste_escolha": "ecra_teste"}
         obj = getattr(self, ecras.get(self.estado, ""), None)
         return (self.estado, id(obj), self.pausado, self.fim_jogo, self.remate_pov is not None)
 
@@ -1966,6 +2099,17 @@ class Game(OnlineMixin):
             else:
                 a.draw_extra(self.screen, self.font_num, self.show_debug)
             a.rect = guardado
+
+        # Passe com clique: anel nos pés do colega que está por baixo do rato
+        if self.tipo_passe == "clique" and not self.online:
+            alvo = self._colega_sob_rato()
+            if alvo is not None:
+                cam = self.rink.camera
+                sx, sy = cam.projetar(alvo.pos_x, alvo.pos_y)
+                k = cam.escala(alvo.pos_y)
+                anel = pygame.Rect(0, 0, round(54 * k), round(20 * k))
+                anel.center = (round(sx), round(sy))
+                pygame.draw.ellipse(self.screen, (255, 220, 60), anel, 3)
 
         # Estilo arcade: partículas por cima do campo e o ecrã a tremer (o marcador não treme)
         if self.efeitos.ativo:
@@ -2069,7 +2213,7 @@ class Game(OnlineMixin):
 
     def _draw_mira(self):
         """Desenha a linha de mira e barra de força estilo 8 Ball Pool."""
-        if not self._mira_ativa or not self.jogador_humano.tem_bola:
+        if not (self._mira_ativa or self._online_mira) or not self.jogador_humano.tem_bola:
             return
 
         screen = self.screen
@@ -2136,5 +2280,7 @@ class Game(OnlineMixin):
 
         # ── 4. Instrução ──────────────────────────────────────────────────
         fi = fontes.SysFont("Arial", 13, bold=True)
-        ti = fi.render("[X] ou Clique para rematar  •  [ESC] para cancelar", True, (220, 220, 100))
+        instrucao = ("Aponta com o rato  •  larga o [X] ou clica para rematar  •  [ESC] cancela"
+                     if self._online_mira else "[X] ou Clique para rematar  •  [ESC] para cancelar")
+        ti = fi.render(instrucao, True, (220, 220, 100))
         screen.blit(ti, (WIDTH // 2 - ti.get_width() // 2, HEIGHT - 30))

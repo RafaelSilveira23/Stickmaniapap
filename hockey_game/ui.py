@@ -70,7 +70,7 @@ class HUDController:
                  str(getattr(game, "kit_casa", "")), str(getattr(game, "kit_fora", "")),
                  game.golos_azul, game.golos_vermelho, getattr(game, "faltas_azul", 0),
                  getattr(game, "faltas_vermelho", 0), max(0, int(game.tempo_restante)), game.parte,
-                 getattr(game, "dificuldade", "normal"), str(teste))
+                 getattr(game, "dificuldade", "normal"), str(teste), getattr(game, "teste_variante", ""))
         if chave != getattr(self, "_chave_topo", None):
             camada = pygame.Surface((WIDTH, 66), pygame.SRCALPHA)
             self._desenhar_topo(camada, game)
@@ -154,7 +154,9 @@ class HUDController:
             t = game.teste
             t_cron = self.font_time.render(f"{t['golos']}/{t['remates']}", True, (255, 220, 80))
             screen.blit(t_cron, (time_x + timer_w // 2 - t_cron.get_width() // 2, sc_y + 4))
-            t_parte = f_parte.render("TESTE", True, (160, 190, 230))
+            nome = {"colega": "TESTE + COLEGA", "adversario": "TESTE vs DEFESA"}.get(
+                getattr(game, "teste_variante", "sozinho"), "TESTE")
+            t_parte = f_parte.render(nome, True, (160, 190, 230))
         else:
             # Tempo (ex: 12:34)
             mins = max(0, int(game.tempo_restante)) // 60

@@ -199,6 +199,10 @@ def icone(nome: str, tamanho: int, cor=(255, 255, 255)) -> pygame.Surface:
         elif nome == "cruz":
             pygame.draw.rect(s, c, (T * 0.38, T * 0.1, T * 0.24, T * 0.8), border_radius=int(T * 0.05))
             pygame.draw.rect(s, c, (T * 0.1, T * 0.38, T * 0.8, T * 0.24), border_radius=int(T * 0.05))
+        elif nome == "escudo":
+            # Escudo (defesa): topo direito e bico em baixo
+            pygame.draw.polygon(s, c, [(T * 0.14, T * 0.14), (T * 0.86, T * 0.14), (T * 0.86, T * 0.5),
+                                       (m, T * 0.92), (T * 0.14, T * 0.5)])
         elif nome == "jogador":
             # Um jogador: cabeça e tronco (carreira de jogador)
             pygame.draw.circle(s, c, (m, T * 0.26), T * 0.17)

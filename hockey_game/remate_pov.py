@@ -91,6 +91,10 @@ ANG_PREPARAR = 34            # graus que o stick vem para trás (para o jogador)
 ANG_ACOMPANHAR = 26          # graus que o stick segue para a frente (para a baliza) depois do golpe
 DUR_GOLPE = (0.15, 0.08)     # duração da descida do stick até à bola: fraco -> forte (segundos)
 
+PE_GR = 0.75                 # onde fica o pé de apoio do mergulho (fração de meia largura do boneco)
+# Para que lado está virada cada imagem do guarda-redes (+1 direita, −1 esquerda): a luva levantada do
+# defender_01 está à direita; no defender_02 o corpo inclina-se para a esquerda
+VIRADO_GR = {"defender_01": 1, "defender_02": -1, "mover_baixo": 1}
 _PASTA_GR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "sprites_v2", "hd", "frames",
                          "guarda_redes")
 _cache = {}
@@ -251,6 +255,7 @@ class RematePOV:
         self._cache_stick = {}
         self._rato_ant = pygame.mouse.get_pos()
         self._decisao = None
+        self._gr_k = 0.0
         self._voo_t = 0.0
         self._voo_dur = 0.4
         self._res_t = 0.0
@@ -503,6 +508,7 @@ class RematePOV:
             # O guarda-redes só começa a mexer-se depois do tempo de reação
             reacao = GR_PERFIL.get(self.dificuldade, GR_PERFIL["normal"])[0]
             kr = max(0.0, min(1.0, (k * d["tempo"] - reacao) / max(0.05, d["tempo"] - reacao)))
+            self._gr_k = kr                  # progresso do mergulho (0 = ainda não reagiu, 1 = a bola chegou)
             ini = d["u_gr_inicio"]
             self.u_gr = ini + (d["u_gr"] - ini) * (1 - (1 - kr) ** 2)
             if d["resultado"] == "bloqueado":
@@ -742,35 +748,77 @@ class RematePOV:
             s.blit(camada, camada.get_rect(center=(p[0], p[1])))
 
     def _desenhar_gr(self, s):
+        """
+        Guarda-redes no ecrã do remate.
+          • a apontar e até reagir: de pé, à espera (antes sentava-se logo depois do remate);
+          • remate alto: estica a luva para cima, inclina-se até 38° e salta, ficando no ar quando
+            a bola chega; só depois cai;
+          • remate baixo: deita-se de lado no chão (até 70°), com as caneleiras a tapar a baliza.
+        O corpo roda à volta dos pés (antes rodava à volta do meio da imagem e parecia enterrar-se no
+        chão) e a imagem é rodada com suavização. O lado é decidido uma vez, no remate.
+        """
         x = self.gx - self.fora_dir * 6                 # um pouco à frente da linha de golo
-        p = self._proj(x, self.cy + self.u_gr, 0)
-        if not p:
+        d = self._decisao
+        # ---- Pose, lado, inclinação e salto
+        nome, lado, ang_max, salto = "mover_baixo", 1, 0.0, 0.0
+        k = 0.0                                          # progresso do mergulho (0 a 1)
+        if d is not None and self.estado != "golpe" and d["resultado"] != "bloqueado":
+            total = d["u_gr"] - d["u_gr_inicio"]
+            k = self._gr_k
+            alto = d["h"] >= 20
+            if k > 0:
+                nome = "defender_01" if alto else "defender_02"   # luva em cima / deitado no chão
+            if abs(total) >= 3:                          # só se atira para o lado se tiver de ir
+                lado = 1 if total > 0 else -1
+                ang_max = 38.0 if alto else 70.0
+            if alto:                                     # remate alto: salta (até ~0,4 m)
+                salto = max(0.0, min(14.0, d["h"] - 18.0))
+        suave = k * k * (3 - 2 * k)                      # começa e acaba devagar
+        ang = ang_max * suave
+        # Altura do salto: chega ao máximo quando a bola chega e só depois cai (antes voltava ao chão
+        # no fim do mergulho e a bola passava-lhe por cima)
+        h_salto = salto * math.sin(math.pi / 2 * min(1.0, k * 1.15))
+        if self.estado == "resultado":
+            h_salto *= max(0.0, 1.0 - (self._res_t / 0.35) ** 2)
+
+        # ---- Tamanho da imagem e posição dos pés
+        img = _img_gr(nome)
+        img = img.subsurface(img.get_bounding_rect())   # só o boneco
+        comprimento = img.get_height() * 62 / 128        # altura do corpo em unidades do campo
+        largura = img.get_width() * 62 / 128
+        # O corpo roda à volta do pé do lado para onde se atira (se rodasse à volta do meio dos pés, o
+        # outro canto da imagem descia abaixo do chão). Os pés ficam deslocados para o lado de onde ele
+        # parte, para o MEIO do corpo ficar onde o modelo do guarda-redes diz (u_gr).
+        a = math.radians(ang)
+        u_pes = self.u_gr - lado * (largura * PE_GR / 2 * (1 - math.cos(a)) + comprimento / 2 * math.sin(a))
+        p = self._proj(x, self.cy + u_pes, h_salto)
+        chao = self._proj(x, self.cy + self.u_gr, 0)
+        if not p or not chao:
             return
-        mergulho = self.u_gr - self.u_gr0
-        if self.estado == "mirar":
-            img = _img_gr("mover_baixo")
-            ang, levanta = 0, 0
-        else:
-            img = _img_gr("defender_01" if int(self.t * 8) % 2 == 0 else "defender_02")
-            # Inclina para o lado do mergulho; nos remates altos o corpo sobe
-            lado_ecra = 1 if (mergulho * self.sinal_u) > 0 else -1
-            ang = -lado_ecra * min(55, abs(mergulho) * 2.2)
-            levanta = min(14, self._decisao["h"] * 0.35) * min(1.0, abs(mergulho) / 12)
-            if lado_ecra < 0:
-                img = pygame.transform.flip(img, True, False)
-        alt = F * 62 / p[2]                              # 62 = altura da imagem no campo (o boneco ocupa ~70 %)
-        img = pygame.transform.scale(img, (max(2, round(alt)), max(2, round(alt))))
-        # O boneco não está ao centro da imagem: centramos pela parte visível
-        caixa = img.get_bounding_rect()
-        desvio = img.get_width() / 2 - caixa.centerx
-        if ang:
-            img = pygame.transform.rotate(img, ang)
-        sombra = pygame.Surface((round(alt * 0.7), round(alt * 0.16)), pygame.SRCALPHA)
-        pygame.draw.ellipse(sombra, (20, 10, 0, 90), sombra.get_rect())
-        s.blit(sombra, sombra.get_rect(center=(p[0], p[1])))
-        # O centro do corpo fica a ~35 % da altura da imagem acima dos patins (também quando roda)
-        centro = (p[0] + desvio, p[1] - alt * 0.36 - F * levanta / p[2])
-        s.blit(img, img.get_rect(center=centro))
+        escala = F * 62 / p[2] / 128                     # 62 = tamanho da imagem (128 px) no campo
+        w, h = max(2, round(img.get_width() * escala)), max(2, round(img.get_height() * escala))
+        lado_ecra = lado * self.sinal_u
+        if lado_ecra * VIRADO_GR.get(nome, 1) < 0:     # vira a imagem para o lado do mergulho
+            img = pygame.transform.flip(img, True, False)
+        # Ampliada para o dobro e rodada com suavização (rotozoom): sem serrilhado
+        img = pygame.transform.smoothscale(img, (w * 2, h * 2))
+        ang_ecra = -lado_ecra * ang                      # positivo = roda para a esquerda no ecrã
+        img = pygame.transform.rotozoom(img, ang_ecra, 0.5)
+
+        # ---- Sombra no chão (mais comprida deitado, mais clara no ar)
+        pes_y = p[1] + 0.1 * F * 62 / p[2]
+        sombra_w = round(w * (0.9 + 0.9 * suave * ang_max / 70))
+        alpha = round(90 * (1 - 0.5 * min(1.0, h_salto / 14)))
+        sombra = pygame.Surface((max(2, sombra_w), max(2, round(w * 0.22))), pygame.SRCALPHA)
+        pygame.draw.ellipse(sombra, (20, 10, 0, alpha), sombra.get_rect())
+        s.blit(sombra, sombra.get_rect(center=(chao[0], chao[1] + 0.1 * F * 62 / chao[2] - 2)))
+
+        # ---- Corpo: o centro da imagem rodada fica à distância certa dos pés
+        pe = lado_ecra * w / 2 * PE_GR                   # o pé do lado do mergulho (px a partir do meio)
+        pivo = pygame.math.Vector2(p[0] + pe, pes_y)
+        do_pivo = pygame.math.Vector2(-pe, -h / 2).rotate(-ang_ecra)
+        centro = pivo + do_pivo
+        s.blit(img, img.get_rect(center=(round(centro.x), round(centro.y))))
 
     def _defesa_destacado(self):
         """Índice do defesa que tapa a linha do remate (a apontar) ou que bloqueou a bola."""
@@ -1003,7 +1051,10 @@ class RematePOV:
                 rod.set_alpha(alpha)
             s.blit(rod, rod.get_rect(center=(round(centro.x), round(centro.y))))
             if alpha < 255:
-                rod.set_alpha(None)
+                # 255 e não None: no ângulo 0 'rod' é a imagem original (partilhada entre remates) e
+                # set_alpha(None) tirava-lhe a transparência - no remate seguinte o stick aparecia
+                # num retângulo branco no momento do contacto
+                rod.set_alpha(255)
 
         # Rasto de velocidade: cópias meio transparentes dos ângulos anteriores (só quando anda depressa)
         if self.estado in ("golpe", "voo") and len(self._rasto) > 1:

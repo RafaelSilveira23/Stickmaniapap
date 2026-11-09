@@ -58,6 +58,7 @@ DONO_32 = {
     "Remate na primeira pessoa": V, "Perspetiva na primeira pessoa": V, "Guarda-redes no remate": V,
     "Modo teste": V, "Remate em movimento": V, "Defesas no ecrã": V, "Defesas do tamanho certo": V,
     "Bloqueio do remate": V, "Aspeto do ecrã do remate": V, "Stick e bola": V, "Animação da stickada": V,
+    "Animação do guarda-redes no remate": V,
     "Carreira de jogador": V, "Nota e evolução": V, "Base de dados da carreira de jogador": V,
     "A vida do jogador": V, "Eventos e atividades": V, "Como a vida mexe no hóquei": V,
     "Pessoas e relações": V, "Escolhas com consequências": V, "Bens e conquistas": V,
@@ -68,15 +69,15 @@ DONO_32 = {
     "Aplicação para Windows e instalador": R, "Da versão do browser à aplicação": R,
 }
 # Figuras da secção 3.2 (número no relatório conjunto)
-DONO_FIG = {10: C, 11: C, 12: C, 13: C, 14: V, 15: V, 16: V, 17: C, 18: V,
-            **{n: V for n in range(19, 29)}, **{n: R for n in range(29, 33)}}
+DONO_FIG = {10: C, 11: C, 12: C, 13: C, 14: V, 15: V, 16: V, 17: V, 18: C, 19: V,
+            **{n: V for n in range(20, 30)}, **{n: R for n in range(30, 34)}}
 # Parágrafos da secção 3.4
 DONO_34 = {
     "Perspetiva sem mudar a física": R, "Balizas desenhadas no código": R, "Desempenho": R,
     "Pontaria com o rato": R, "Sprites": R, "Cabelo igual em todos os frames": R,
     "Bola presa e jogadores colados": R,
     "Colisões e IA com comportamentos estranhos": C, "Bola e guarda-redes": C,
-    "Porquê SQLite": V, "Regras do modo carreira": C, "Porquê sons sintetizados": V,
+    "Porquê SQLite": V, "Regras do modo carreira": C, "Porquê sons sintetizados": V, "Flash branco no remate": V,
     "Quatro jogadores de campo": C, "Afinar a simulação com dados": C,
     "Porquê um anfitrião com autoridade": R, "Porquê uma aplicação com um servidor próprio": R,
 }
@@ -338,12 +339,15 @@ def gerar(aluno):
     fim53 = elementos_entre(h53._p, h6._p)[-1]
     cur = Cursor(fim53)
     cur.par(modelo_h2, ["5.4  Divisão de tarefas"])
+    # Número da figura do Gantt no relatório conjunto (é renumerada depois, como as outras)
+    legenda_gantt = [p.text for p in d.paragraphs if re.match(r"Figura \d+ – Diagrama de Gantt", p.text)][-1]
+    n_gantt = re.match(r"Figura (\d+)", legenda_gantt).group(1)
     cur.par(modelo_txt, [
         "O projeto foi feito em dupla. O trabalho foi dividido por partes do jogo, cada uma com os seus "
         "módulos, para cada elemento poder trabalhar sem estragar o trabalho do outro (Tabela 99). A base do "
         "jogo, o modo carreira, o estilo arcade, a análise, os diagramas, os testes e o relatório foram feitos "
         "pelos dois. As alterações de cada um foram juntadas no repositório do GitHub. O diagrama de Gantt "
-        "(Figura 33, na secção 5.1) também mostra quem fez cada tarefa e quando."])
+        f"(Figura {n_gantt}, na secção 5.1) também mostra quem fez cada tarefa e quando."])
     leg_modelo = procurar(d, "Tabela 10 – Cronograma", True)
     cur.par(leg_modelo, ["Tabela 99 – Divisão de tarefas entre os dois elementos do grupo"])
     tab_modelo = [t for t in d.tables if t.rows[0].cells[0].text == "Período"][0]

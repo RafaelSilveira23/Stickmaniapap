@@ -14,6 +14,15 @@ Como funciona (modelo "anfitrião com autoridade"):
     o resultado, os sons e os efeitos). Depois desenha esse estado com o código de sempre.
   - Entre dois estados o convidado continua o movimento de cada jogador com a velocidade
     que recebeu e corrige aos poucos (suavização), para não se ver aos saltos.
+  - O jogador do PRÓPRIO convidado não espera pela rede (previsão): mexe-se logo com as teclas
+    dele e vai sendo corrigido aos poucos pela posição que o anfitrião envia. Sem isto, cada
+    tecla só se via ao fim de uma ida e volta ao servidor (0,2 a 0,4 s) e o jogador parecia
+    "preso". Para corrigir bem, cada envio de teclas leva um número; o anfitrião devolve o último
+    número que recebeu, o que dá o tempo de ida e volta (RTT). A posição do anfitrião é comparada
+    com a posição que o convidado tinha há RTT segundos.
+  - Remate com mira (os dois jogadores): manter X enche a barra de força, aponta-se com o rato e
+    larga-se o X (ou clica-se) para rematar. O jogo não pára, ao contrário do remate na primeira
+    pessoa, que só existe no jogo normal.
 
 Assim os dois veem sempre o mesmo jogo (só existe uma simulação: a do anfitrião).
 O Game herda desta classe (class Game(OnlineMixin)).
@@ -21,6 +30,7 @@ O Game herda desta classe (class Game(OnlineMixin)).
 import math
 import random
 import time
+from collections import deque
 
 import pygame
 
@@ -56,9 +66,21 @@ class OnlineMixin:
         self._lista_rede = []            # convidado: jogadores pela ordem das mensagens
         self._input_enviado = None
         self._input_t = 0.0
+        self._input_seq_remoto = 0       # anfitrião: número do último envio de teclas recebido
+        # Convidado: previsão do próprio jogador
+        self._seq_input = 0              # número do próximo envio de teclas
+        self._envios = {}                # número -> instante em que foi enviado
+        self._ultimo_ack = 0
+        self._rtt = 0.15                 # tempo de ida e volta estimado (s)
+        self._hist_pred = deque()        # (instante, x, y) do jogador previsto
+        self._erro_pred = [0.0, 0.0]     # correção que falta aplicar aos poucos
+        self._pred_jogador = None
+        # Remate com mira (os dois)
+        self._online_mira = False
+        self._mira_rato0 = None
 
     # ================================================================== #
-    # Ecrã "Jogar online"                                                 #
+    # Ecrã "Jogar online"                                               #
     # ================================================================== #
 
     def abrir_online(self, erro: str = ""):
@@ -134,6 +156,8 @@ class OnlineMixin:
         if not ligacao.ativa:
             self._online_terminar(ligacao.erro or "O outro jogador saiu do jogo.")
             return
+        if self.estado == "jogo":
+            self._online_atualizar_mira(dt)
         if self.online == "anfitriao" and self.estado == "jogo":
             self._online_enviar_estado(dt)
 
@@ -174,10 +198,13 @@ class OnlineMixin:
             self._online_terminar("O outro jogador saiu do jogo.")
         elif self.online == "anfitriao":
             if t == "in":
-                dx, dy, sp = msg["d"]
-                self._input_remoto = (max(-1, min(1, dx)), max(-1, min(1, dy)), bool(sp))
+                n = msg.get("n", 0)
+                if n >= self._input_seq_remoto:          # ignora teclas antigas que cheguem atrasadas
+                    dx, dy, sp = msg["d"]
+                    self._input_remoto = (max(-1, min(1, dx)), max(-1, min(1, dy)), bool(sp))
+                    self._input_seq_remoto = n
             elif t == "acao" and msg.get("a") in ("passe", "remate", "trocar"):
-                self._acoes_remotas.append(msg["a"])
+                self._acoes_remotas.append((msg["a"], msg.get("d"), msg.get("f")))
         else:
             if t == "inicio":
                 self.iniciar_partida(msg["casa"], msg["fora"])
@@ -242,7 +269,9 @@ class OnlineMixin:
         remoto.humano = remoto.remoto = remoto.selecionado = True
         self.jogador_remoto = remoto
         self._input_remoto = (0, 0, False)
+        self._input_seq_remoto = 0
         self._acoes_remotas = []
+        self._online_mira = False
         som.gravacao = []
         self._rede_eventos_bola = []
         self._rede_x = []
@@ -257,11 +286,14 @@ class OnlineMixin:
             return
         dx, dy, sprint = self._input_remoto
         j.aplicar_controlo(dx, dy, sprint)
-        for a in self._acoes_remotas:
+        for a, direcao, forca in self._acoes_remotas:
             if a == "passe":
                 self._acao_passe(self.jogador_remoto)
             elif a == "remate":
-                self._remate_rapido(self.jogador_remoto)
+                if direcao is not None and forca is not None:
+                    self._remate_mira(self.jogador_remoto, direcao, forca)
+                else:
+                    self._remate_rapido(self.jogador_remoto)
             elif a == "trocar":
                 self._trocar_remoto_proximo()
         self._acoes_remotas.clear()
@@ -326,6 +358,20 @@ class OnlineMixin:
         forca = REMATE_FORCA * random.uniform(0.82, 1.0)
         j.fazer_remate_com_forca(self.bola, v.normalize(), forca)
 
+    def _remate_mira(self, j, direcao, forca: float):
+        """Remate com mira: direção escolhida com o rato e força da barra (0 a 1)."""
+        if not self.jogo_ativo or not j.tem_bola:
+            return
+        try:
+            v = pygame.math.Vector2(float(direcao[0]), float(direcao[1]))
+            forca = max(0.0, min(1.0, float(forca)))
+        except (TypeError, ValueError, IndexError):
+            return
+        if v.length_squared() < 1e-6:
+            return
+        # Igual ao remate com mira do jogo normal: entre 30 % e 100 % da força máxima
+        j.fazer_remate_com_forca(self.bola, v.normalize(), (0.30 + 0.70 * forca) * REMATE_FORCA)
+
     def _online_enviar_estado(self, dt: float):
         self._rede_t += dt
         if self._rede_t < 1.0 / ESTADOS_POR_SEGUNDO:
@@ -354,6 +400,7 @@ class OnlineMixin:
             "ev": [[t, r(f), r(x), r(y)] for t, f, x, y in self._rede_eventos_bola],
             "x": list(self._rede_x),
             "fim": int(self.fim_jogo),
+            "n": self._input_seq_remoto,         # último envio de teclas do convidado (para o RTT)
         }
         if self.fim_jogo:
             msg["mc"] = self.marcadores
@@ -379,24 +426,41 @@ class OnlineMixin:
         self.bola._rede = None
         self._input_enviado = None
         self._input_t = 0.0
+        # (o número dos envios de teclas nunca volta a 0: assim o anfitrião nunca o confunde
+        # com um envio antigo de outro jogo)
+        self._envios.clear()
+        self._hist_pred.clear()
+        self._erro_pred = [0.0, 0.0]
+        self._pred_jogador = None
+        self._online_mira = False
         self._msg_texto = "JOGO ONLINE  •  " + self._msg_texto
 
     def _online_aplicar_estado(self, msg: dict):
         agora = time.perf_counter()
+        # Tempo de ida e volta: o anfitrião devolve o número do último envio de teclas que recebeu
+        n = msg.get("n", 0)
+        if n > self._ultimo_ack and n in self._envios:
+            amostra = agora - self._envios[n]
+            self._rtt = max(0.02, min(1.0, self._rtt * 0.8 + amostra * 0.2))
+            self._ultimo_ack = n
         for p, d in zip(self._lista_rede, msg["j"]):
             x, y, vx, vy, dx, dy, acao, t_acao, tb, sel, sp = d
+            if sel and p.equipa == "vermelho":
+                self.jogador_humano = p
             if p._rede is None:                      # primeiro estado: põe logo no sítio
                 p.pos_x, p.pos_y = x, y
             p._rede = (x, y, vx, vy, agora)
-            p.vel_x, p.vel_y = vx, vy
-            p._target_vx, p._target_vy = vx, vy
-            if dx or dy:
-                p.vetor_direcao.update(dx, dy)
-            p.tem_bola, p.selecionado, p._sprint_ativo = bool(tb), bool(sel), bool(sp)
+            p.tem_bola, p.selecionado = bool(tb), bool(sel)
             if acao and p._estado_action != acao:
                 p._comecar_acao(acao, t_acao)
-            if sel and p.equipa == "vermelho":
-                self.jogador_humano = p
+            if p is self.jogador_humano:
+                self._corrigir_previsao(p, x, y, agora)
+                continue                             # o próprio jogador mexe-se com as teclas locais
+            p.vel_x, p.vel_y = vx, vy
+            p._target_vx, p._target_vy = vx, vy
+            p._sprint_ativo = bool(sp)
+            if dx or dy:
+                p.vetor_direcao.update(dx, dy)
         for g, (y, vy, t_def) in zip((self.gr_azul, self.gr_vermelho), msg["g"]):
             g._rede_y, g.vel_y, g._defender_timer = y, vy, t_def
         bx, by, bvx, bvy, dono = msg["b"]
@@ -433,6 +497,75 @@ class OnlineMixin:
             self.fim_jogo = True
             self.ecra_fim = EcraFimJogo(self.screen, online="convidado")
 
+    # Erro a partir do qual o jogador previsto salta logo para a posição do anfitrião
+    # (reposição depois de um golo, falta, choque forte)
+    _SALTO_PREVISAO = 110
+
+    def _corrigir_previsao(self, p, x: float, y: float, agora: float):
+        """
+        Compara a posição que o anfitrião enviou com a posição que o jogador previsto tinha há
+        RTT segundos (é essa que o anfitrião já conhece) e guarda a diferença para a corrigir aos poucos.
+        """
+        if p is not self._pred_jogador:
+            # Passou a controlar outro jogador: começa no sítio que o anfitrião diz
+            self._pred_jogador = p
+            self._hist_pred.clear()
+            self._erro_pred = [0.0, 0.0]
+            p.pos_x, p.pos_y = x, y
+            return
+        alvo = agora - self._rtt
+        hx, hy = p.pos_x, p.pos_y
+        for t, px, py in self._hist_pred:            # posição prevista mais perto desse instante
+            hx, hy = px, py
+            if t >= alvo:
+                break
+        self._erro_pred = [x - hx, y - hy]
+        if math.hypot(*self._erro_pred) > self._SALTO_PREVISAO:
+            p.pos_x += self._erro_pred[0]
+            p.pos_y += self._erro_pred[1]
+            self._erro_pred = [0.0, 0.0]
+            self._hist_pred.clear()
+
+    def _teclas_movimento(self):
+        """(dx, dy, sprint) das teclas que se estão a carregar (0 se o jogo está parado)."""
+        if self.pausado or self.fim_jogo:
+            return 0, 0, False
+        k = pygame.key.get_pressed()
+        dx = int(k[pygame.K_RIGHT] or k[pygame.K_d]) - int(k[pygame.K_LEFT] or k[pygame.K_a])
+        dy = int(k[pygame.K_DOWN] or k[pygame.K_s]) - int(k[pygame.K_UP] or k[pygame.K_w])
+        return dx, dy, bool(k[pygame.K_LSHIFT] or k[pygame.K_RSHIFT])
+
+    def _mover_previsto(self, p, dt: float, agora: float):
+        """O jogador do convidado: anda logo com as teclas e é corrigido aos poucos pelo anfitrião."""
+        if self._falta_ativa:
+            # Numa falta o anfitrião põe os jogadores no sítio: segue-o sem prever
+            x, y = p._rede[0], p._rede[1]
+            p.vel_x = p.vel_y = 0.0
+            p.pos_x += (x - p.pos_x) * min(1.0, dt * 10)
+            p.pos_y += (y - p.pos_y) * min(1.0, dt * 10)
+            self._hist_pred.clear()
+            self._erro_pred = [0.0, 0.0]
+        else:
+            p.aplicar_controlo(*self._teclas_movimento())
+            p._aplicar_inercia(dt)
+            p._mover(dt, self.rink.rect, self.rink)
+            # Correção aos poucos (cerca de 1/6 de segundo), para não se notar
+            k = min(1.0, dt * 6)
+            cx, cy = self._erro_pred[0] * k, self._erro_pred[1] * k
+            p.pos_x += cx
+            p.pos_y += cy
+            self._erro_pred[0] -= cx
+            self._erro_pred[1] -= cy
+            if cx or cy:
+                # O caminho guardado também é corrigido: senão, no estado seguinte, a mesma
+                # diferença voltava a ser contada e o jogador passava do sítio certo
+                self._hist_pred = deque((t, x + cx, y + cy) for t, x, y in self._hist_pred)
+            self._hist_pred.append((agora, p.pos_x, p.pos_y))
+            while self._hist_pred and self._hist_pred[0][0] < agora - 1.5:
+                self._hist_pred.popleft()
+        p.rect.center = (round(p.pos_x), round(p.pos_y))
+        p._atualizar_animacao(dt)
+
     def _update_convidado(self, dt: float):
         if self.pausado:
             self.menu_pausa.update(dt)
@@ -446,19 +579,18 @@ class OnlineMixin:
             self._msg_timer -= dt
 
     def _online_enviar_input(self, dt: float):
-        if self.pausado or self.fim_jogo:
-            dx = dy = 0
-            sprint = False
-        else:
-            k = pygame.key.get_pressed()
-            dx = int(k[pygame.K_RIGHT] or k[pygame.K_d]) - int(k[pygame.K_LEFT] or k[pygame.K_a])
-            dy = int(k[pygame.K_DOWN] or k[pygame.K_s]) - int(k[pygame.K_UP] or k[pygame.K_w])
-            sprint = bool(k[pygame.K_LSHIFT] or k[pygame.K_RSHIFT])
-        estado = (dx, dy, sprint)
+        dx, dy, sprint = estado = self._teclas_movimento()
         self._input_t += dt
-        # Só envia quando muda (e de vez em quando, para o caso de se perder alguma coisa)
-        if estado != self._input_enviado or self._input_t > 0.25:
-            self.ligacao.enviar({"t": "in", "d": [dx, dy, int(sprint)]})
+        # Envia logo que muda e, de 0,1 em 0,1 s, outra vez (para o caso de se perder alguma
+        # coisa e para medir o tempo de ida e volta)
+        if estado != self._input_enviado or self._input_t > 0.1:
+            self._seq_input += 1
+            agora = time.perf_counter()
+            self._envios[self._seq_input] = agora
+            if len(self._envios) > 60:                    # esquece os envios antigos
+                for n in [n for n, t in self._envios.items() if t < agora - 2.0]:
+                    del self._envios[n]
+            self.ligacao.enviar({"t": "in", "d": [dx, dy, int(sprint)], "n": self._seq_input})
             self._input_enviado, self._input_t = estado, 0.0
 
     def _online_suavizar(self, dt: float):
@@ -467,6 +599,9 @@ class OnlineMixin:
         k = min(1.0, dt * 14)
         for p in self._lista_rede:
             if p._rede is None:
+                continue
+            if p is self.jogador_humano and p is self._pred_jogador:
+                self._mover_previsto(p, dt, agora)
                 continue
             x, y, vx, vy, t0 = p._rede
             adiantar = min(agora - t0, 0.12)          # continua o movimento entre dois estados
@@ -505,6 +640,54 @@ class OnlineMixin:
     # ================================================================== #
     # Teclas durante um jogo online (anfitrião e convidado)              #
     # ================================================================== #
+
+    # ------------------------------------------------------------------ #
+    # Remate com mira (manter X, apontar com o rato, largar)              #
+    # ------------------------------------------------------------------ #
+
+    def _online_iniciar_mira(self):
+        j = self.jogador_humano
+        if self._online_mira or j is None or not j.tem_bola or self.pausado or self.fim_jogo:
+            return
+        self._online_mira = True
+        self._mira_forca, self._mira_forca_dir = 0.0, 1.0
+        self._mira_rato0 = pygame.mouse.get_pos()
+        # Até se mexer o rato, aponta ao meio da baliza adversária
+        r = self.rink
+        gx = r.linha_golo_esq_x if j.equipa == "azul" else r.linha_golo_dir_x
+        v = pygame.math.Vector2(gx - j.pos_x, r.rect.centery - j.pos_y)
+        self._mira_direcao = v.normalize() if v.length_squared() > 0 else pygame.math.Vector2(1, 0)
+
+    def _online_atualizar_mira(self, dt: float):
+        """Barra de força a subir e descer e direção pelo rato (o jogo continua: não há câmara lenta)."""
+        if not self._online_mira:
+            return
+        j = self.jogador_humano
+        if j is None or not j.tem_bola or self.pausado or self.fim_jogo:
+            self._online_mira = False                # perdeu a bola: cancela
+            return
+        rato = pygame.mouse.get_pos()
+        if rato != self._mira_rato0:
+            mx, my = self.rink.camera.desprojetar(*rato)
+            v = pygame.math.Vector2(mx - j.pos_x, my - j.pos_y)
+            if v.length_squared() > 10:
+                self._mira_direcao = v.normalize()
+        self._mira_forca += self._mira_forca_dir * self._mira_vel * dt
+        if self._mira_forca >= 1.0:
+            self._mira_forca, self._mira_forca_dir = 1.0, -1.0
+        elif self._mira_forca <= 0.0:
+            self._mira_forca, self._mira_forca_dir = 0.0, 1.0
+
+    def _online_rematar_mira(self):
+        if not self._online_mira:
+            return
+        self._online_mira = False
+        d, f = self._mira_direcao, self._mira_forca
+        if self.online == "convidado":
+            self.ligacao.enviar({"t": "acao", "a": "remate", "d": [round(d.x, 3), round(d.y, 3)],
+                                 "f": round(f, 3)})
+        else:
+            self._remate_mira(self.jogador_humano, (d.x, d.y), f)
 
     def _online_acao(self, acao: str):
         if self.online == "convidado":
@@ -554,7 +737,10 @@ class OnlineMixin:
                 continue
             if event.type == pygame.KEYDOWN:
                 k = event.key
-                if k in (pygame.K_ESCAPE, pygame.K_p, pygame.K_m):
+                if k == pygame.K_ESCAPE and self._online_mira:
+                    self._online_mira = False            # ESC com a mira aberta só cancela o remate
+                elif k in (pygame.K_ESCAPE, pygame.K_p, pygame.K_m):
+                    self._online_mira = False
                     self.pausado = True
                     self.menu_pausa = MenuPausa(self.screen, modo_online=True)
                 elif k == pygame.K_F3:
@@ -562,10 +748,15 @@ class OnlineMixin:
                 elif k == pygame.K_z:
                     self._online_acao("passe")
                 elif k == pygame.K_x:
-                    self._online_acao("remate")
+                    self._online_iniciar_mira()          # manter X: mira e força
                 elif k in (pygame.K_TAB, pygame.K_c, pygame.K_SPACE):
                     self._online_acao("trocar")
+            elif event.type == pygame.KEYUP and event.key == pygame.K_x:
+                self._online_rematar_mira()              # largar X: remata
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                if self._online_mira:
+                    self._online_rematar_mira()          # ou clicar
+                    continue
                 if event.pos[0] >= WIDTH - 56 and event.pos[1] <= 56:
                     self.pausado = True
                     self.menu_pausa = MenuPausa(self.screen, modo_online=True)
