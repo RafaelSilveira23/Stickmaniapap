@@ -1561,17 +1561,22 @@ class Game(OnlineMixin):
         if jogo is None:
             return
         jornada, g_eu, g_adv = camp.simular_jogo_do_jogador()
-        if g_eu > g_adv:
+        jogo = camp.partida(jogo["id"])                 # já com o resultado (e os penáltis, se houve)
+        vence = Campeonato.vencedor(jogo) if jogo["pen_casa"] is not None else None
+        if g_eu > g_adv or vence == camp.equipa_jogador:
             txt, cor = "VITÓRIA", (50, 170, 90)
             som.tocar("golo", 0.7)
-        elif g_eu < g_adv:
+        elif g_eu < g_adv or vence is not None:
             txt, cor = "DERROTA", (200, 60, 60)
             som.tocar("apito_final", 0.6)
         else:
             txt, cor = "EMPATE", (200, 150, 30)
             som.tocar("apito_final", 0.6)
+        if vence is not None:
+            txt += f" (PEN. {jogo['pen_casa']}-{jogo['pen_fora']})"
         em_casa = jogo["casa_id"] == camp.equipa_jogador
-        aviso = {"tipo": "jogo", "jornada": jornada, "casa": jogo["casa_id"], "fora": jogo["fora_id"],
+        aviso = {"tipo": "jogo", "jornada": jornada, "ronda": Campeonato.nome_ronda_curto(jogo),
+                 "casa": jogo["casa_id"], "fora": jogo["fora_id"],
                  "gc": g_eu if em_casa else g_adv, "gf": g_adv if em_casa else g_eu, "texto": txt, "cor": cor}
         self.abrir_campeonato(destaque=jornada, aviso=aviso)
 
@@ -1600,14 +1605,14 @@ class Game(OnlineMixin):
         eu = camp.equipa_jogador
         em_casa = jogo["casa_id"] == eu
         adversario = jogo["fora_id"] if em_casa else jogo["casa_id"]
-        self._jornada_carreira = jogo["jornada"]
+        self._jornada_carreira = Campeonato.nome_ronda_curto(jogo)
         self.iniciar_partida(eu, adversario, dificuldade=camp.dificuldade)
         self.modo_carreira = True
         if not em_casa:
             # Jogo fora: joga-se no pavilhão do adversário (emblema e cores do ringue dele)
             self.rink.definir_equipa_casa(adversario)
         local = "EM CASA" if em_casa else "FORA"
-        self._msg_texto = f"JORNADA {jogo['jornada']}  •  {local}"
+        self._msg_texto = f"{Campeonato.nome_ronda_curto(jogo).upper()}  •  {local}"
         self._msg_timer = 2.5
         self._msg_equipa = "azul"
 
@@ -1653,14 +1658,14 @@ class Game(OnlineMixin):
         eu = a["equipa_id"]
         em_casa = jogo["casa_id"] == eu
         adversario = jogo["fora_id"] if em_casa else jogo["casa_id"]
-        self._jornada_carreira = jogo["jornada"]
+        self._jornada_carreira = Campeonato.nome_ronda_curto(jogo)
         self.iniciar_partida(eu, adversario, dificuldade="normal")
         self.modo_carreira = True          # o resultado conta: sem "reiniciar" nem trocar de equipa
         if not em_casa:
             self.rink.definir_equipa_casa(adversario)
         self._preparar_jogador_cj(a)
         local = "EM CASA" if em_casa else "FORA"
-        self._msg_texto = f"JORNADA {jogo['jornada']}  •  {local}  •  {a['nome']}"
+        self._msg_texto = f"{Campeonato.nome_ronda_curto(jogo).upper()}  •  {local}  •  {a['nome']}"
         self._msg_timer = 2.5
         self._msg_equipa = "azul"
 

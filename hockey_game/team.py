@@ -75,16 +75,51 @@ EQUIPAS_INFO = {
     },
 }
 
-EQUIPAS_LISTA = [
-    "fc_porto",
-    "riba_dave",
-    "sporting",
-    "benfica",
-    "oc_barcelos",
-    "ud_oliveirense",
-    "valongo",
-    "crp_lavra",
-]
+
+def _clube(cid, nome, sigla, cor1, cor2, logo, padrao=None):
+    info = {"id": cid, "nome": nome, "sigla": sigla, "cor_primaria": cor1, "cor_secundaria": cor2,
+            "ficheiros_logo": [logo]}
+    if padrao:
+        info["padrao"] = padrao
+    return info
+
+
+# 2.ª divisão e clubes estrangeiros (só jogam a Taça Europeia)
+for _info in (
+    _clube("hc_turquel", "HC Turquel", "HCT", (25, 25, 28), (255, 255, 255), "turquel.jpg"),
+    _clube("paco_arcos", "Paço de Arcos", "PDA", (200, 30, 40), (255, 255, 255), "pacodearcos.jpg"),
+    _clube("cd_povoa", "CD Póvoa", "CDP", (20, 60, 150), (255, 255, 255), "povoa.jpg", "riscas"),
+    _clube("ch_carvalhos", "CH Carvalhos", "CHC", (20, 30, 120), (255, 255, 255), "carvalhos.png"),
+    _clube("aa_espinho", "AA Espinho", "AAE", (30, 30, 35), (255, 255, 255), "espinho.jpg", "riscas"),
+    _clube("sc_marinhense", "SC Marinhense", "SCM", (20, 130, 60), (255, 255, 255), "marinhense.jpg"),
+    _clube("ha_cambra", "HA Cambra", "HAC", (235, 195, 20), (25, 25, 25), "cambra.jpg"),
+    _clube("fc_barcelona", "FC Barcelona", "FCB", (0, 70, 150), (165, 0, 52), "barcelona.png", "riscas"),
+    _clube("liceo", "Deportivo Liceo", "LIC", (0, 130, 70), (255, 255, 255), "liceo.jpg"),
+    _clube("reus", "Reus Deportiu", "RDE", (200, 25, 35), (20, 20, 20), "reus.jpg", "riscas"),
+    _clube("voltrega", "CP Voltregà", "CPV", (30, 70, 170), (255, 255, 255), "voltrega.jpg", "riscas"),
+):
+    EQUIPAS_INFO[_info["id"]] = _info
+
+# ── Competições ──
+EQUIPAS_1_DIVISAO = ["fc_porto", "riba_dave", "sporting", "benfica", "oc_barcelos", "ud_oliveirense",
+                     "valongo", "crp_lavra"]
+EQUIPAS_2_DIVISAO = ["hc_turquel", "paco_arcos", "cd_povoa", "ch_carvalhos", "aa_espinho", "sc_marinhense",
+                     "ha_cambra"]
+EQUIPAS_ESTRANGEIRAS = ["fc_barcelona", "liceo", "reus", "voltrega"]      # só jogam a Taça Europeia
+EQUIPAS_PORTUGUESAS = EQUIPAS_1_DIVISAO + EQUIPAS_2_DIVISAO               # as que se podem treinar na carreira
+# Separadores dos ecrãs de escolha: (nome, equipas)
+COMPETICOES = [("1.ª DIVISÃO", EQUIPAS_1_DIVISAO), ("2.ª DIVISÃO", EQUIPAS_2_DIVISAO),
+               ("EUROPA", EQUIPAS_ESTRANGEIRAS)]
+# Todas as equipas (jogo rápido e jogo online)
+EQUIPAS_LISTA = EQUIPAS_PORTUGUESAS + EQUIPAS_ESTRANGEIRAS
+
+
+def competicao_da_equipa(equipa_id: str) -> int:
+    """Índice em COMPETICOES do separador onde a equipa aparece (0 = 1.ª divisão)."""
+    for i, (_nome, equipas) in enumerate(COMPETICOES):
+        if equipa_id in equipas:
+            return i
+    return 0
 
 # ── Planteis: guarda-redes + 4 jogadores de campo (como no hóquei em patins real) ──
 # Os jogadores de campo estão pela ordem das posições da formação em losango:
@@ -122,6 +157,57 @@ PLANTEIS = {
     "crp_lavra": {
         "guarda_redes": "Santiago Morales",
         "jogadores": ["Rafael Silveira", "Tomás Teixeira", "Tiago Mendes", "Martim Constantino"],
+    },
+    # ── Clubes estrangeiros (nomes reais, procurados na Internet em novembro de 2026) ──
+    # FC Barcelona: site do clube (fcbarcelona.es), com as posições
+    "fc_barcelona": {
+        "guarda_redes": "Arnau Martínez",
+        "jogadores": ["Martí Casas", "Eloi Cervera", "Ignacio Alabart", "Sergi Aragonès"],
+    },
+    # Liceo: reforços de 2025/26 nas notícias; o defesa não foi encontrado (nome inventado)
+    "liceo": {
+        "guarda_redes": "Blai Roca",
+        "jogadores": ['Fran Torres "Tombita"', "Toni Pérez", "Nuno Paiva", "Marc Julià"],
+    },
+    # Reus Deportiu: renovações e reforços nas notícias do Diari de Tarragona
+    "reus": {
+        "guarda_redes": "Cándid Ballart",
+        "jogadores": ["Joan Salvat", "Roc Pujadas", "Carles Casas", "Pol Martínez"],
+    },
+    # Voltregà: nomes do site do clube (2026/27); o site não diz as posições, foram atribuídas
+    "voltrega": {
+        "guarda_redes": "Ferran Font",
+        "jogadores": ["Jordi Burgaya", "Aleix Molas", "Humbert Serra", "Gerard Teixidó"],
+    },
+    # ── 2.ª divisão: os planteis não estão publicados na Internet, por isso os nomes são inventados ──
+    # (basta trocar aqui pelos nomes verdadeiros)
+    "hc_turquel": {
+        "guarda_redes": "Rui Ferreira",
+        "jogadores": ["Diogo Marques", "Tiago Lopes", "André Gaspar", "Hugo Vieira"],
+    },
+    "paco_arcos": {
+        "guarda_redes": "Miguel Antunes",
+        "jogadores": ["Ricardo Pinto", "Duarte Simões", "João Farinha", "Nuno Leal"],
+    },
+    "cd_povoa": {
+        "guarda_redes": "Filipe Moreira",
+        "jogadores": ["Gonçalo Brito", "Vasco Rebelo", "Daniel Faria", "Pedro Matos"],
+    },
+    "ch_carvalhos": {
+        "guarda_redes": "Luís Barbosa",
+        "jogadores": ["Rúben Teixeira", "Henrique Sousa", "Bruno Couto", "Afonso Pires"],
+    },
+    "aa_espinho": {
+        "guarda_redes": "Sérgio Neves",
+        "jogadores": ["Tomás Rocha", "Leonardo Dias", "Fábio Ramos", "Jorge Moura"],
+    },
+    "sc_marinhense": {
+        "guarda_redes": "Carlos Vidal",
+        "jogadores": ["Martim Carvalho", "Rodrigo Esteves", "Paulo Graça", "Simão Lourenço"],
+    },
+    "ha_cambra": {
+        "guarda_redes": "Manuel Pacheco",
+        "jogadores": ["Francisco Valente", "Gustavo Brandão", "Salvador Nogueira", "Ivo Correia"],
     },
 }
 

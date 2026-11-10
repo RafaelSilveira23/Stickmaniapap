@@ -77,6 +77,66 @@ CLUBES = {
         melodia=[(0, 1.5), (3, .5), (5, 1), (7, 1), (8, 1.5), (7, .5), (5, 1), (3, 1)],
         vogais="oaoooaoo", grito=[("a", .75), ("a", 1.25)],
         acordes=[(0, "m"), (5, "m"), (10, "M"), (0, "m")]),
+    # ── 2.ª divisão ──
+    "hc_turquel": dict(
+        bpm=112, raiz=50, bateria="folk", instrumento="concertina", grave=50,
+        melodia=[(0, 1), (2, .5), (4, .5), (5, 1), (4, 1), (2, .5), (0, .5), (2, 1), (0, 2)],
+        vogais="oeeoaeeoo", grito=[("u", .75), ("e", 1.25)],
+        acordes=[(0, "M"), (5, "M"), (7, "M"), (0, "M")]),
+    "paco_arcos": dict(
+        bpm=122, raiz=53, bateria="marcha", instrumento="metais", grave=52,
+        melodia=[(7, .5), (5, .5), (4, 1), (4, .5), (5, .5), (7, 1), (9, .5), (7, .5), (5, 1), (4, .5), (2, .5),
+                 (0, 1)],
+        vogais="eeoeeoaaoeeo", grito=[("a", .5), ("o", .5), ("a", .5), ("o", .5)],
+        acordes=[(0, "M"), (9, "m"), (5, "M"), (7, "M")]),
+    "cd_povoa": dict(
+        bpm=118, raiz=55, bateria="palmas", instrumento=None, grave=52,
+        melodia=[(0, .5), (3, .5), (7, 1), (5, .5), (3, .5), (2, 1), (3, .5), (5, .5), (7, 1), (0, 2)],
+        vogais="oooeeoooao", grito=[("o", .5), ("o", .5), ("a", 1)],
+        acordes=[(0, "m"), (8, "M"), (10, "M"), (0, "m")]),
+    "ch_carvalhos": dict(
+        bpm=130, raiz=52, bateria="rock", instrumento="guitarra", grave=48,
+        melodia=[(0, .5), (0, .5), (0, .5), (3, .5), (5, 1), (3, 1), (0, .5), (0, .5), (-2, 1), (0, 2)],
+        vogais="eeeoaoeeoo", grito=[("a", .5), ("a", .5), ("o", 1)],
+        acordes=[(0, "m"), (10, "M"), (8, "M"), (10, "M")]),
+    "aa_espinho": dict(
+        bpm=96, raiz=50, bateria="maritimo", instrumento=None, grave=44, graves=True,
+        melodia=[(7, 1.5), (5, .5), (3, 1), (2, 1), (3, 1.5), (5, .5), (0, 2)],
+        vogais="ooaooao", grito=[("e", .5), ("i", .5), ("o", 1)],
+        acordes=[(0, "m"), (3, "M"), (10, "M"), (0, "m")]),
+    "sc_marinhense": dict(
+        bpm=108, raiz=52, bateria="samba", instrumento=None, grave=46,
+        melodia=[(4, .75), (4, .75), (5, .5), (7, 1), (9, .75), (7, .75), (5, .5), (4, 1), (2, 1), (0, 1)],
+        vogais="eeeoaaeoeo", grito=[("a", .5), ("i", .5), ("e", .5), ("e", .5)],
+        acordes=[(0, "M"), (5, "M"), (2, "m"), (7, "M")]),
+    "ha_cambra": dict(
+        bpm=140, raiz=55, bateria="polka", instrumento="acordeao", grave=52,
+        melodia=[(7, .5), (4, .5), (7, .5), (4, .5), (5, .5), (2, .5), (5, 1), (4, .5), (2, .5), (0, .5), (2, .5),
+                 (4, 2)],
+        vogais="aeaeaeoeeeeo", grito=[("a", .75), ("a", 1.25)],
+        acordes=[(0, "M"), (7, "M"), (7, "M"), (0, "M")]),
+    # ── Clubes espanhóis (Taça Europeia) ──
+    "fc_barcelona": dict(
+        bpm=110, raiz=52, bateria="bombos", instrumento="metais", grave=46,
+        melodia=[(0, 1), (4, 1), (7, 1.5), (9, .5), (7, 1), (5, .5), (4, .5), (2, 1), (0, 1)],
+        vogais="ooooaoeoo", grito=[("a", .75), ("a", 1.25)],
+        acordes=[(0, "M"), (5, "M"), (7, "M"), (0, "M")]),
+    "liceo": dict(
+        bpm=104, raiz=50, bateria="folk", instrumento="concertina", grave=48,
+        melodia=[(0, .5), (2, .5), (3, .5), (5, .5), (7, 1), (5, .5), (3, .5), (2, .5), (3, .5), (2, .5), (0, .5),
+                 (-2, 1), (0, 1)],
+        vogais="eeeeoeeeeeeoo", grito=[("i", .5), ("e", .5), ("o", 1)],
+        acordes=[(0, "m"), (10, "M"), (8, "M"), (10, "M")]),
+    "reus": dict(
+        bpm=126, raiz=53, bateria="palmas", instrumento=None, grave=50,
+        melodia=[(0, .5), (0, .5), (7, 1), (5, .5), (3, .5), (5, 1), (0, .5), (0, .5), (3, 1), (2, .5), (0, 1.5)],
+        vogais="eeoeeoeeoeo", grito=[("e", .5), ("u", 1.5)],
+        acordes=[(0, "m"), (5, "m"), (10, "M"), (0, "m")]),
+    "voltrega": dict(
+        bpm=116, raiz=50, bateria="marcha", instrumento="metais", grave=50,
+        melodia=[(0, .5), (0, .5), (4, .5), (7, .5), (12, 1), (9, 1), (7, .5), (5, .5), (4, 1), (2, 1), (0, 1)],
+        vogais="eeeeoaeeoao", grito=[("o", .5), ("e", .5), ("a", 1)],
+        acordes=[(0, "M"), (9, "m"), (5, "M"), (7, "M")]),
 }
 
 # Formantes das vogais: (frequência em Hz, volume)

@@ -25,7 +25,7 @@ import random
 from datetime import datetime
 
 from carreira import Campeonato, PASTA_SAVES, FORCA_EQUIPAS, PESO_GOLO_POSICAO
-from team import EQUIPAS_LISTA, EQUIPAS_INFO
+from team import EQUIPAS_PORTUGUESAS, EQUIPAS_INFO
 
 CAMINHO_BD_JOGADOR = os.path.join(PASTA_SAVES, "carreira_jogador.db")
 
@@ -174,7 +174,7 @@ class CarreiraJogador:
             raise ValueError("o jogador precisa de um nome")
         if posicao not in POSICOES:
             raise ValueError(f"posição desconhecida: {posicao}")
-        if equipa_id not in EQUIPAS_LISTA:
+        if equipa_id not in EQUIPAS_PORTUGUESAS:
             raise ValueError(f"equipa desconhecida: {equipa_id}")
         numero = max(1, min(99, int(numero)))
         with self.con:
@@ -190,7 +190,8 @@ class CarreiraJogador:
                                f"Tens {self.vida.estado['idade']} anos.", {}, "inicio")
 
     def _nova_epoca(self, equipa_id: str, epoca: int, semente: int | None = None):
-        self.camp.novo(equipa_id, "normal", semente)
+        # Da 2.ª época em diante o campeonato continua (subidas e descidas), mesmo mudando de clube
+        self.camp.novo(equipa_id, "normal", semente, continuar=epoca > 1)
         tid = self.camp.torneio_id
         with self.con:
             # O número da época é o da carreira do jogador (mesmo que mude de clube)
@@ -239,7 +240,7 @@ class CarreiraJogador:
         with self.con:
             res = self._gravar_atuacao(jogo["id"], est, g_eu, g_adv, simulado=False)
             res["vida"] = self.vida.depois_do_jogo(True, res["nota"], g_eu, g_adv, res["golos"])
-        res.update(jornada=jornada, casa=jogo["casa_id"], fora=jogo["fora_id"])
+        res.update(jornada=jornada, casa=jogo["casa_id"], fora=jogo["fora_id"], ronda=Campeonato.nome_ronda_curto(jogo))
         return res
 
     def simular_jogo(self, semente: int | None = None) -> dict:
@@ -278,7 +279,7 @@ class CarreiraJogador:
         with self.con:
             res = self._gravar_atuacao(jogo["id"], est, g_eu, g_adv, simulado=True, nota=nota)
             res["vida"] = self.vida.depois_do_jogo(True, nota, g_eu, g_adv, res["golos"])
-        res.update(jornada=jornada, casa=jogo["casa_id"], fora=jogo["fora_id"])
+        res.update(jornada=jornada, casa=jogo["casa_id"], fora=jogo["fora_id"], ronda=Campeonato.nome_ronda_curto(jogo))
         return res
 
     def simular_sem_jogador(self, semente: int | None = None) -> dict:
@@ -299,7 +300,8 @@ class CarreiraJogador:
                                                      marcadores_eu=marcadores)
         with self.con:
             frases = self.vida.depois_do_jogo(False, None, g_eu, g_adv)
-        return {"jornada": jornada, "casa": jogo["casa_id"], "fora": jogo["fora_id"], "g_eu": g_eu,
+        return {"jornada": jornada, "ronda": Campeonato.nome_ronda_curto(jogo), "casa": jogo["casa_id"],
+                "fora": jogo["fora_id"], "g_eu": g_eu,
                 "g_adv": g_adv, "simulado": True, "ausente": motivo, "vida": frases}
 
     def simular_resto_da_epoca(self, semente: int | None = None) -> int:
@@ -367,7 +369,7 @@ class CarreiraJogador:
         salto = 6 + (media - limiar) * 12 + fama / 20
         if "agente" in self.vida.marcas():
             salto += 5                               # o agente arranja propostas de clubes maiores
-        clubes = [e for e in EQUIPAS_LISTA if e != atual and f_atual < FORCA_EQUIPAS.get(e, 75) <= f_atual + salto]
+        clubes = [e for e in EQUIPAS_PORTUGUESAS if e != atual and f_atual < FORCA_EQUIPAS.get(e, 75) <= f_atual + salto]
         clubes.sort(key=lambda e: -FORCA_EQUIPAS.get(e, 75))
         return clubes[:2]
 

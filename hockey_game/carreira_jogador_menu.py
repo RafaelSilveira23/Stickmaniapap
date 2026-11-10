@@ -12,8 +12,8 @@ import math
 import pygame
 
 from settings import WIDTH, HEIGHT
-from team import EQUIPAS_LISTA, obter_info_equipa, carregar_logo_equipa
-from carreira import FORCA_EQUIPAS
+from team import EQUIPAS_PORTUGUESAS, obter_info_equipa, carregar_logo_equipa
+from carreira import FORCA_EQUIPAS, Campeonato
 from carreira_jogador import (POSICOES, NOME_POSICAO, GERAL_INICIAL, ATRIBUTOS, atributos)
 from cores import kit_principal, misturar, cor_texto_sobre
 from componentes import fonte, texto, sprite_equipamento, COR_DESTAQUE, COR_TEXTO, COR_TEXTO_SUAVE
@@ -97,14 +97,15 @@ class EcraCriarJogador:
         self.nome = nome
         self.numero = 10
         self.posicao = "avancado"
-        self.equipa = equipa_id if equipa_id in EQUIPAS_LISTA else EQUIPAS_LISTA[-1]
+        self.equipa = equipa_id if equipa_id in EQUIPAS_PORTUGUESAS else EQUIPAS_PORTUGUESAS[7]
         self.erro = ""
         self.r_nome = pygame.Rect(40, 128, 590, 58)
         self.r_num_menos = pygame.Rect(40, 224, 58, 58)
         self.r_num_mais = pygame.Rect(232, 224, 58, 58)
         self.r_pos = [pygame.Rect(40 + i * 200, 326, 190, 118) for i in range(3)]
-        self.r_clubes = [pygame.Rect(40 + (i % 4) * 149, 486 + (i // 4) * 70, 141, 62)
-                         for i in range(len(EQUIPAS_LISTA))]
+        # 15 clubes (1.ª e 2.ª divisão) em 3 filas de 5
+        self.r_clubes = [pygame.Rect(40 + (i % 5) * 119, 482 + (i // 5) * 48, 113, 44)
+                         for i in range(len(EQUIPAS_PORTUGUESAS))]
         self.btn_comecar = BotaoMenu((700, 620, 540, 64), "COMEÇAR CARREIRA", "Primeira época no clube escolhido",
                                      "comecar", (40, 190, 100), "jogar")
         self.btn_voltar = BotaoMenu((40, 648, 230, 50), "VOLTAR", "", "voltar", (150, 110, 255), "casa",
@@ -142,7 +143,7 @@ class EcraCriarJogador:
                 som.ui("mover")
             elif k in (pygame.K_LEFT, pygame.K_RIGHT):
                 d = 1 if k == pygame.K_RIGHT else -1
-                self.equipa = EQUIPAS_LISTA[(EQUIPAS_LISTA.index(self.equipa) + d) % len(EQUIPAS_LISTA)]
+                self.equipa = EQUIPAS_PORTUGUESAS[(EQUIPAS_PORTUGUESAS.index(self.equipa) + d) % len(EQUIPAS_PORTUGUESAS)]
                 som.ui("mover")
             elif k in (pygame.K_PAGEUP, pygame.K_KP_PLUS):
                 self._mudar_numero(1)
@@ -164,7 +165,7 @@ class EcraCriarJogador:
                     som.ui("mover")
             for i, r in enumerate(self.r_clubes):
                 if r.collidepoint(p):
-                    self.equipa = EQUIPAS_LISTA[i]
+                    self.equipa = EQUIPAS_PORTUGUESAS[i]
                     som.ui("mover")
         elif event.type == pygame.MOUSEWHEEL:
             if pygame.Rect(40, 224, 250, 58).collidepoint(pygame.mouse.get_pos()):
@@ -241,17 +242,18 @@ class EcraCriarJogador:
 
         # Clube
         texto(s, "CLUBE", 13, COR_DESTAQUE, (40, 472), ancora="midleft")
-        for eq, r in zip(EQUIPAS_LISTA, self.r_clubes):
+        texto(s, "1.ª e 2.ª divisão", 11, COR_TEXTO_SUAVE, (110, 472), ancora="midleft", negrito=False)
+        for eq, r in zip(EQUIPAS_PORTUGUESAS, self.r_clubes):
             escolhido = eq == self.equipa
             _vidro(s, r, 10, 235, COR_DESTAQUE if escolhido else (60, 90, 150))
             if escolhido:
                 pygame.draw.rect(s, COR_DESTAQUE, r, 3, border_radius=10)
-            logo = carregar_logo_equipa(eq, (42, 42))
+            logo = carregar_logo_equipa(eq, (32, 32))
             if logo:
-                s.blit(logo, logo.get_rect(center=(r.left + 30, r.centery)))
-            texto(s, obter_info_equipa(eq)["sigla"], 15, (255, 255, 255) if escolhido else COR_TEXTO,
-                  (r.left + 58, r.top + 22), ancora="midleft")
-            _barra_forca(s, r.left + 58, r.top + 38, 70, FORCA_EQUIPAS.get(eq, 75))
+                s.blit(logo, logo.get_rect(center=(r.left + 22, r.centery)))
+            texto(s, obter_info_equipa(eq)["sigla"], 13, (255, 255, 255) if escolhido else COR_TEXTO,
+                  (r.left + 44, r.top + 15), ancora="midleft")
+            _barra_forca(s, r.left + 44, r.top + 28, 58, FORCA_EQUIPAS.get(eq, 75))
 
         # Pré-visualização do jogador
         caixa = pygame.Rect(700, 100, 540, 500)
@@ -594,7 +596,7 @@ class EcraCarreiraJogador:
               14, COR_TEXTO_SUAVE, (40, 74), ancora="midleft", negrito=False)
         r = pygame.Rect(WIDTH - 330, 22, 290, 58)
         _vidro(s, r, 12, 220, COR_DESTAQUE)
-        etiqueta = "ÉPOCA TERMINADA" if self.terminado else f"JORNADA {self.jornada} DE {self.total_jornadas}"
+        etiqueta = "ÉPOCA TERMINADA" if self.terminado else f"RONDA {self.jornada} DE {self.total_jornadas}"
         texto(s, etiqueta, 15, COR_DESTAQUE, (r.centerx, r.top + 18))
         total = max(1, self.total_jornadas)
         larg = (r.width - 40 - (total - 1) * 6) / total
@@ -653,7 +655,7 @@ class EcraCarreiraJogador:
             return
         p = self.proximo
         eu = self.atleta["equipa_id"]
-        _titulo_painel(s, caixa, f"PRÓXIMO JOGO  •  JORNADA {p['jornada']}")
+        _titulo_painel(s, caixa, f"PRÓXIMO JOGO  •  {Campeonato.nome_ronda_curto(p).upper()}")
         for eq, cx in ((p["casa_id"], caixa.left + 90), (p["fora_id"], caixa.right - 90)):
             logo = carregar_logo_equipa(eq, (74, 74))
             if logo:
@@ -971,7 +973,7 @@ class EcraCarreiraJogador:
         res = "VITÓRIA" if g_eu > g_adv else ("DERROTA" if g_eu < g_adv else "EMPATE")
         cor = (90, 215, 120) if g_eu > g_adv else ((230, 80, 80) if g_eu < g_adv else (240, 200, 70))
         tipo = "JOGO SIMULADO" if av.get("simulado") else "JOGO JOGADO"
-        texto(s, f"JORNADA {av['jornada']}  •  {tipo}", 13, COR_TEXTO_SUAVE, (caixa.centerx, caixa.top + 26))
+        texto(s, f"{av.get('ronda', 'Jornada %d' % av['jornada']).upper()}  •  {tipo}", 13, COR_TEXTO_SUAVE, (caixa.centerx, caixa.top + 26))
         casa, fora = obter_info_equipa(av["casa"]), obter_info_equipa(av["fora"])
         eu_casa = av["casa"] == self.atleta["equipa_id"]
         gc, gf = (g_eu, g_adv) if eu_casa else (g_adv, g_eu)

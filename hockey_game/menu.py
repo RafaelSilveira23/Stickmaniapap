@@ -16,7 +16,7 @@ import random
 import pygame
 import fontes
 from settings import WIDTH, HEIGHT
-from team import EQUIPAS_LISTA, obter_info_equipa, carregar_logo_equipa
+from team import EQUIPAS_LISTA, COMPETICOES, competicao_da_equipa, obter_info_equipa, carregar_logo_equipa
 from ai import DIFICULDADES
 from cores import (definir_equipamentos, cor_linhas_campo, cor_visivel_em_escuro,
                    cor_texto_sobre, misturar, clarear, escurecer)
@@ -344,7 +344,7 @@ class MenuPrincipal:
         pygame.draw.line(s, (40, 60, 105), (WIDTH // 2 - 220, HEIGHT - 44), (WIDTH // 2 + 220, HEIGHT - 44), 1)
         texto(s, "Projeto PAP  •  Rafael Silveira  •  2026/2027", 13, (110, 130, 175),
               (WIDTH // 2, HEIGHT - 26), negrito=False)
-        texto(s, "v29", 12, (80, 100, 145), (18, HEIGHT - 24), ancora="midleft")
+        texto(s, "v30", 12, (80, 100, 145), (18, HEIGHT - 24), ancora="midleft")
 
 
 # ====================================================================== #
@@ -711,6 +711,8 @@ class TeamSelectMenu:
             self.fora_idx = (self.casa_idx + 1) % len(EQUIPAS_LISTA)
         self.dificuldade = dificuldade if dificuldade in DIFICULDADES else "normal"
         self.anim_t = 0.0
+        # Separador da grelha: 1.ª divisão, 2.ª divisão ou Europa (começa no da equipa da casa)
+        self.aba = competicao_da_equipa(EQUIPAS_LISTA[self.casa_idx])
         self._setup_rects()
 
     # ------------------------------------------------------------------ #
@@ -726,14 +728,11 @@ class TeamSelectMenu:
             setattr(self, f"btn_{nome}_prev", prev)
             setattr(self, f"btn_{nome}_next", nxt)
 
-        # Grelha com todas as equipas
-        card_w, card_h, gap = 118, 88, 14
-        total_w = len(EQUIPAS_LISTA) * card_w + (len(EQUIPAS_LISTA) - 1) * gap
-        start_x = (WIDTH - total_w) // 2
-        self.grid_rects = []
-        for i, eq_id in enumerate(EQUIPAS_LISTA):
-            r = pygame.Rect(start_x + i * (card_w + gap), 384, card_w, card_h)
-            self.grid_rects.append((eq_id, i, r))
+        # Separadores das competições, por cima da grelha
+        aw, ag = 150, 10
+        x0 = (WIDTH - (len(COMPETICOES) * aw + (len(COMPETICOES) - 1) * ag)) // 2
+        self.rects_abas = [pygame.Rect(x0 + i * (aw + ag), 352, aw, 26) for i in range(len(COMPETICOES))]
+        self._montar_grelha()
 
         # Dificuldade
         cx = WIDTH // 2
@@ -745,6 +744,22 @@ class TeamSelectMenu:
         self.btn_jogar = Botao((WIDTH // 2 - 160, 596, 320, 56), "INICIAR PARTIDA", "iniciar",
                                cor=(40, 190, 100), tamanho_texto=22, icone="►")
 
+    def _montar_grelha(self):
+        """Grelha com as equipas do separador escolhido: (id, índice em EQUIPAS_LISTA, retângulo)."""
+        equipas = COMPETICOES[self.aba][1]
+        card_w, card_h, gap = 118, 88, 14
+        total_w = len(equipas) * card_w + (len(equipas) - 1) * gap
+        start_x = (WIDTH - total_w) // 2
+        self.grid_rects = []
+        for i, eq_id in enumerate(equipas):
+            r = pygame.Rect(start_x + i * (card_w + gap), 384, card_w, card_h)
+            self.grid_rects.append((eq_id, EQUIPAS_LISTA.index(eq_id), r))
+
+    def mudar_aba(self, aba: int):
+        if aba != self.aba:
+            self.aba = aba % len(COMPETICOES)
+            self._montar_grelha()
+
     # ------------------------------------------------------------------ #
     # Lógica                                                             #
     # ------------------------------------------------------------------ #
@@ -752,6 +767,7 @@ class TeamSelectMenu:
         self.casa_idx = (self.casa_idx + delta) % len(EQUIPAS_LISTA)
         if self.casa_idx == self.fora_idx:
             self.casa_idx = (self.casa_idx + delta) % len(EQUIPAS_LISTA)
+        self.mudar_aba(competicao_da_equipa(EQUIPAS_LISTA[self.casa_idx]))   # a grelha acompanha a escolha
 
     def mudar_fora(self, delta: int):
         self.fora_idx = (self.fora_idx + delta) % len(EQUIPAS_LISTA)
@@ -806,10 +822,12 @@ class TeamSelectMenu:
                 self.dificuldade = "normal"
             elif event.key in (pygame.K_g, pygame.K_F3):
                 self.dificuldade = "dificil"
+            elif event.key in (pygame.K_q, pygame.K_e, pygame.K_PAGEUP, pygame.K_PAGEDOWN):
+                self.mudar_aba(self.aba + (1 if event.key in (pygame.K_e, pygame.K_PAGEDOWN) else -1))
             elif pygame.K_1 <= event.key <= pygame.K_8:
-                idx = event.key - pygame.K_1
-                if 0 <= idx < len(EQUIPAS_LISTA):
-                    self.escolher_casa(idx)
+                k = event.key - pygame.K_1          # número do cartão no separador
+                if 0 <= k < len(self.grid_rects):
+                    self.escolher_casa(self.grid_rects[k][1])
 
         elif event.type == pygame.MOUSEBUTTONDOWN and event.button in (1, 3):
             mpos = event.pos
@@ -821,6 +839,10 @@ class TeamSelectMenu:
                 for b in self.botoes_dif:
                     if b.por_cima(mpos):
                         self.dificuldade = b.acao
+                        return None
+                for i, r in enumerate(self.rects_abas):
+                    if r.collidepoint(mpos):
+                        self.mudar_aba(i)
                         return None
                 if self.btn_casa_prev.collidepoint(mpos):
                     self.mudar_casa(-1)
@@ -877,11 +899,20 @@ class TeamSelectMenu:
         # VS + pré-visualização do ringue
         self._desenhar_centro(info_casa)
 
-        # Grelha
-        texto(s, "TODAS AS EQUIPAS   •   clique esquerdo = casa   •   clique direito = visitante",
-              13, (170, 200, 255), (WIDTH // 2, 368))
-        for eq_id, idx, r in self.grid_rects:
-            self._desenhar_mini_card(eq_id, idx, r, mpos)
+        # Separadores e grelha
+        for i, (r, (nome, equipas)) in enumerate(zip(self.rects_abas, COMPETICOES)):
+            ativa = i == self.aba
+            tem_escolhida = any(EQUIPAS_LISTA.index(e) in (self.casa_idx, self.fora_idx) for e in equipas)
+            pygame.draw.rect(s, (40, 80, 150) if ativa else (20, 32, 62), r, border_radius=8)
+            borda = (110, 170, 255) if ativa else ((90, 120, 190) if r.collidepoint(mpos) else (45, 70, 130))
+            pygame.draw.rect(s, borda, r, 1, border_radius=8)
+            texto(s, nome, 13, COR_TEXTO if ativa else COR_TEXTO_SUAVE, r.center)
+            if tem_escolhida and not ativa:
+                pygame.draw.circle(s, (255, 205, 60), (r.right - 10, r.top + 7), 4)   # há uma equipa escolhida aqui
+        texto(s, "clique esquerdo = casa  •  direito = visitante", 11, (140, 170, 220),
+              (self.rects_abas[-1].right + 16, self.rects_abas[-1].centery), ancora="midleft", negrito=False)
+        for k, (eq_id, idx, r) in enumerate(self.grid_rects):
+            self._desenhar_mini_card(eq_id, idx, r, mpos, k)
 
         # Dificuldade
         texto(s, "DIFICULDADE DA IA", 14, (200, 220, 255), (WIDTH // 2, 496))
@@ -894,7 +925,8 @@ class TeamSelectMenu:
         # Botão principal (pulsa ligeiramente para chamar a atenção)
         self.btn_jogar.draw(s, mpos, focado=(math.sin(self.anim_t * 3) > 0.6))
 
-        texto(s, "[A/D] casa   [W/S] visitante   [1-8] escolher casa   [TAB] dificuldade   [ENTER] começar   [ESC] voltar",
+        texto(s, "[A/D] casa   [W/S] visitante   [Q/E] divisão   [1-8] escolher casa   [TAB] dificuldade   "
+                 "[ENTER] começar   [ESC] voltar",
               12, (110, 140, 190), (WIDTH // 2, 682), negrito=False)
 
     def _desenhar_card(self, rect, titulo, info, kit, btn_prev, btn_next, virar: bool):
@@ -957,7 +989,7 @@ class TeamSelectMenu:
         pygame.draw.rect(s, cor_l, (r.right - 40, r.centery - 24, 26, 48), 2)
         texto(s, "RINGUE DA CASA", 11, (170, 200, 255), (cx, r.bottom + 18))
 
-    def _desenhar_mini_card(self, eq_id, idx, r, mpos):
+    def _desenhar_mini_card(self, eq_id, idx, r, mpos, k: int = 0):
         s = self.screen
         info = obter_info_equipa(eq_id)
         e_casa, e_fora = idx == self.casa_idx, idx == self.fora_idx
@@ -997,7 +1029,7 @@ class TeamSelectMenu:
         elif e_fora:
             etiqueta, cor_et = "FORA", (255, 130, 130)
         else:
-            etiqueta, cor_et = f"#{idx + 1}", (90, 120, 170)
+            etiqueta, cor_et = f"#{k + 1}", (90, 120, 170)
         texto(s, etiqueta, 11, cor_et, (rr.centerx, rr.bottom - 17))
 
 
@@ -1143,7 +1175,7 @@ class EcraFimJogo:
         elif modo_carreira:
             # O resultado conta para o campeonato: só se pode continuar
             self.lista = ListaBotoes([
-                BotaoMenu((cx - 210, y, 420, bh), "CONTINUAR", f"O resultado conta para a jornada {jornada}",
+                BotaoMenu((cx - 210, y, 420, bh), "CONTINUAR", f"O resultado conta  •  {jornada}",
                           "continuar", (40, 190, 100), "jogar")])
         else:
             bw = 270
@@ -1288,7 +1320,7 @@ class EcraFimJogo:
             pygame.draw.rect(s, cor_nota(j["nota"]), pil, 2, border_radius=16)
             texto(s, linha, 15, cor_nota(j["nota"]), pil.center)
         elif self.modo_carreira:
-            texto(s, f"MODO CARREIRA  •  jornada {self.jornada}", 14, COR_DESTAQUE, (WIDTH // 2, caixa.top + 96))
+            texto(s, f"MODO CARREIRA  •  {self.jornada}", 14, COR_DESTAQUE, (WIDTH // 2, caixa.top + 96))
         elif self.online:
             pontos = "." * (1 + int(self.t * 2) % 3)
             msg = (f"JOGO ONLINE  •  à espera que o anfitrião recomece{pontos}" if self.online == "convidado"

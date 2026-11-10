@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 """carreira_menu.py - ecrãs do modo carreira.
 
-  • EcraCarreiraEscolha - escolher a equipa e a dificuldade para começar o campeonato
-  • EcraCampeonato      - classificação (com a forma), próximo jogo (com as probabilidades),
-                          resultados, calendário e os botões para jogar ou simular
+  • EcraCarreiraEscolha - escolher o clube (1.ª ou 2.ª divisão) e a dificuldade
+  • EcraCampeonato      - classificação das duas divisões (com a forma), próximo jogo (com as
+                          probabilidades), resultados, calendário, marcadores, quadro da Taça
+                          Europeia e os botões para jogar ou simular
 
 Tal como os outros menus, cada ecrã tem handle_event(event) -> ação, update(dt) e draw().
 Quem decide o que fazer com a ação é a classe Game (game.py).
@@ -14,9 +15,9 @@ import random
 import pygame
 
 from settings import WIDTH, HEIGHT
-from team import EQUIPAS_LISTA, obter_info_equipa, carregar_logo_equipa
+from team import EQUIPAS_1_DIVISAO, EQUIPAS_2_DIVISAO, obter_info_equipa, carregar_logo_equipa
 from ai import DIFICULDADES
-from carreira import FORCA_EQUIPAS
+from carreira import FORCA_EQUIPAS, Campeonato, LIGA1, LIGA2, NOMES_COMPETICAO
 from cores import cor_visivel_em_escuro, misturar, clarear, escurecer
 from componentes import (fonte, texto, painel, Botao, gradiente_vertical, painel_vidro,
                          COR_DESTAQUE, COR_TEXTO, COR_TEXTO_SUAVE)
@@ -37,7 +38,23 @@ def _barra_forca(s, x, y, w, forca):
     pygame.draw.rect(s, cor, (x, y, max(8, int(w * t)), 8), border_radius=4)
 
 
-def _categoria(forca: int) -> str:
+DIVISOES = [("1.ª DIVISÃO", EQUIPAS_1_DIVISAO), ("2.ª DIVISÃO", EQUIPAS_2_DIVISAO)]
+COR_EUROPA, COR_SOBE = (80, 160, 255), (90, 210, 120)
+
+
+def _abas(s, rects, nomes, ativa, mpos, tamanho=12):
+    """Separadores (botões pequenos lado a lado); o ativo fica azul."""
+    for i, (r, nome) in enumerate(zip(rects, nomes)):
+        sim = i == ativa
+        pygame.draw.rect(s, (40, 80, 150) if sim else (20, 32, 62), r, border_radius=8)
+        borda = (110, 170, 255) if sim else ((90, 120, 190) if r.collidepoint(mpos) else (45, 70, 130))
+        pygame.draw.rect(s, borda, r, 1, border_radius=8)
+        texto(s, nome, tamanho, COR_TEXTO if sim else COR_TEXTO_SUAVE, r.center)
+
+
+def _categoria(forca: int, equipa_id: str = "") -> str:
+    if equipa_id in EQUIPAS_2_DIVISAO:
+        return "Candidato à subida" if forca >= 64 else "Equipa da 2.ª divisão"
     if forca >= 86:
         return "Candidato ao título"
     if forca >= 78:
@@ -75,32 +92,50 @@ class EcraCarreiraEscolha:
                  arena: pygame.Surface | None = None):
         self.screen = screen
         self.arena = arena
-        self.idx = EQUIPAS_LISTA.index(equipa_id) if equipa_id in EQUIPAS_LISTA else 0
+        # Separador (0 = 1.ª divisão, 1 = 2.ª divisão) e índice do clube dentro dele
+        self.aba = 1 if equipa_id in EQUIPAS_2_DIVISAO else 0
+        lista = DIVISOES[self.aba][1]
+        self.idx = lista.index(equipa_id) if equipa_id in lista else 0
         self.dificuldade = dificuldade if dificuldade in DIFICULDADES else "normal"
         self.t = 0.0
-        self._k = [0.0] * len(EQUIPAS_LISTA)     # animação de cada cartão (0 = normal, 1 = escolhido)
+        self._k = {}                              # animação de cada cartão (0 = normal, 1 = escolhido)
+        self.rects_abas = [pygame.Rect(WIDTH // 2 - 166 + i * 172, 96, 160, 26) for i in range(2)]
 
         self.btn_voltar = Botao((24, 20, 130, 40), "VOLTAR", "voltar", cor=(50, 140, 255),
                                 tamanho_texto=15, icone="◄")
-        cw, ch, gap = 262, 140, 18
-        x0 = (WIDTH - (4 * cw + 3 * gap)) // 2
-        self.cartoes = []
-        for i, eq in enumerate(EQUIPAS_LISTA):
-            r = pygame.Rect(x0 + (i % 4) * (cw + gap), 112 + (i // 4) * (ch + 18), cw, ch)
-            self.cartoes.append((eq, r))
+        self._montar_cartoes()
         cx = WIDTH // 2
         self.botoes_dif = [
             Botao((cx - 222, 474, 140, 38), "FÁCIL", "facil", cor=(40, 180, 90), tamanho_texto=17),
             Botao((cx - 70, 474, 140, 38), "NORMAL", "normal", cor=(50, 140, 255), tamanho_texto=17),
             Botao((cx + 82, 474, 140, 38), "DIFÍCIL", "dificil", cor=(230, 70, 70), tamanho_texto=17),
         ]
-        self.btn_comecar = BotaoMenu((WIDTH // 2 - 230, 566, 460, 72), "COMEÇAR CAMPEONATO",
-                                     "7 jornadas contra todas as outras equipas", "comecar",
+        self.btn_comecar = BotaoMenu((WIDTH // 2 - 230, 566, 460, 72), "COMEÇAR CARREIRA",
+                                     "Liga, Taça Europeia e subidas e descidas de divisão", "comecar",
                                      (40, 190, 100), "trofeu")
+
+    def _montar_cartoes(self):
+        cw, ch, gap = 262, 140, 18
+        x0 = (WIDTH - (4 * cw + 3 * gap)) // 2
+        self.cartoes = []
+        for i, eq in enumerate(DIVISOES[self.aba][1]):
+            r = pygame.Rect(x0 + (i % 4) * (cw + gap), 136 + (i // 4) * (ch + 14), cw, ch)
+            self.cartoes.append((eq, r))
+
+    def _mudar_aba(self, aba: int):
+        aba %= len(DIVISOES)
+        if aba != self.aba:
+            self.aba, self.idx = aba, 0
+            self._montar_cartoes()
+            som.ui("mover")
+
+    @property
+    def lista(self) -> list:
+        return DIVISOES[self.aba][1]
 
     @property
     def equipa(self) -> str:
-        return EQUIPAS_LISTA[self.idx]
+        return self.lista[self.idx]
 
     def handle_event(self, event) -> str | None:
         if event.type == pygame.QUIT:
@@ -111,12 +146,15 @@ class EcraCarreiraEscolha:
             if event.key in (pygame.K_ESCAPE, pygame.K_BACKSPACE):
                 return "voltar"
             antes = self.idx
+            n = len(self.lista)
             if event.key in (pygame.K_LEFT, pygame.K_a):
-                self.idx = (self.idx - 1) % len(EQUIPAS_LISTA)
+                self.idx = (self.idx - 1) % n
             elif event.key in (pygame.K_RIGHT, pygame.K_d):
-                self.idx = (self.idx + 1) % len(EQUIPAS_LISTA)
+                self.idx = (self.idx + 1) % n
             elif event.key in (pygame.K_UP, pygame.K_w, pygame.K_DOWN, pygame.K_s):
-                self.idx = (self.idx + 4) % len(EQUIPAS_LISTA)
+                self.idx = (self.idx + 4) % n if self.idx + 4 < n else self.idx % 4
+            elif event.key in (pygame.K_q, pygame.K_e, pygame.K_PAGEUP, pygame.K_PAGEDOWN):
+                self._mudar_aba(self.aba + 1)
             elif event.key == pygame.K_TAB:
                 ordem = ["facil", "normal", "dificil"]
                 self.dificuldade = ordem[(ordem.index(self.dificuldade) + 1) % 3]
@@ -132,6 +170,9 @@ class EcraCarreiraEscolha:
                 if b.por_cima(event.pos):
                     self.dificuldade = b.acao
                     som.ui("mover")
+            for i, r in enumerate(self.rects_abas):
+                if r.collidepoint(event.pos):
+                    self._mudar_aba(i)
             for i, (eq, r) in enumerate(self.cartoes):
                 if r.collidepoint(event.pos) and i != self.idx:
                     self.idx = i
@@ -140,8 +181,9 @@ class EcraCarreiraEscolha:
 
     def update(self, dt: float):
         self.t += dt
-        for i in range(len(self._k)):
-            self._k[i] += ((1.0 if i == self.idx else 0.0) - self._k[i]) * min(1.0, dt * 10)
+        for eq in self.lista:
+            k = self._k.get(eq, 0.0)
+            self._k[eq] = k + ((1.0 if eq == self.equipa else 0.0) - k) * min(1.0, dt * 10)
         self.btn_comecar.animar(dt, self.btn_comecar.por_cima(pygame.mouse.get_pos()) or
                                 math.sin(self.t * 2.5) > 0.2)
 
@@ -157,9 +199,10 @@ class EcraCarreiraEscolha:
         emb = emblema_sticks(44)
         r_t = texto(s, "MODO CARREIRA", 36, COR_TEXTO, (WIDTH // 2 + 26, 40), sombra=True)
         s.blit(emb, emb.get_rect(center=(r_t.left - 32, 40)))
-        texto(s, "Escolhe o clube que vais treinar  •  joga contra todas as outras equipas e tenta ser campeão",
-              14, COR_TEXTO_SUAVE, (WIDTH // 2, 78), negrito=False)
+        texto(s, "Escolhe o clube que vais treinar  •  na 1.ª divisão luta pelo título e pela Europa, "
+                 "na 2.ª tenta subir", 14, COR_TEXTO_SUAVE, (WIDTH // 2, 74), negrito=False)
         self.btn_voltar.draw(s, mpos)
+        _abas(s, self.rects_abas, [d[0] for d in DIVISOES], self.aba, mpos, 13)
 
         for i, (eq, r) in enumerate(self.cartoes):
             self._cartao(i, eq, r, r.collidepoint(mpos))
@@ -171,14 +214,14 @@ class EcraCarreiraEscolha:
         texto(s, DIFICULDADES[self.dificuldade]["descricao"], 13, (160, 195, 240), (WIDTH // 2, 532),
               negrito=False)
         self.btn_comecar.draw(s)
-        texto(s, "← → ↑ ↓  escolher clube     TAB  dificuldade     ENTER  começar     ESC  voltar",
+        texto(s, "← → ↑ ↓  escolher clube     Q / E  divisão     TAB  dificuldade     ENTER  começar     ESC  voltar",
               12, (120, 145, 195), (WIDTH // 2, 690), negrito=False)
 
     def _cartao(self, i, eq, r, hover):
         s = self.screen
         info = obter_info_equipa(eq)
         cor = info["cor_primaria"]
-        k = self._k[i]
+        k = self._k.get(eq, 0.0)
         rr = r.move(0, -round(6 * k) - (2 if hover else 0))
         if k > 0.02:
             halo = brilho_retangulo(rr.size, cor_visivel_em_escuro(cor), 14, 18, 170).copy()
@@ -198,7 +241,7 @@ class EcraCarreiraEscolha:
             s.blit(logo, logo.get_rect(center=(rr.left + 52, rr.top + 64)))
         texto(s, info["nome"], 17, COR_TEXTO, (rr.left + 100, rr.top + 34), ancora="midleft")
         forca = FORCA_EQUIPAS.get(eq, 75)
-        texto(s, _categoria(forca), 11, COR_TEXTO_SUAVE, (rr.left + 100, rr.top + 55), ancora="midleft",
+        texto(s, _categoria(forca, eq), 11, COR_TEXTO_SUAVE, (rr.left + 100, rr.top + 55), ancora="midleft",
               negrito=False)
         texto(s, f"FORÇA {forca}", 11, (170, 200, 240), (rr.left + 100, rr.top + 78), ancora="midleft")
         _barra_forca(s, rr.left + 100, rr.top + 90, rr.width - 120, forca)
@@ -236,14 +279,21 @@ class EcraCampeonato:
         self._confirmar = None             # botão que está à espera da 2.ª confirmação
         self._confetis = []
         # Dados lidos da base de dados uma vez (o ecrã é desenhado 60 vezes por segundo)
-        self._tabela_cache = list(camp.classificacao())
-        self._formas = {l["equipa_id"]: camp.forma(l["equipa_id"]) for l in self._tabela_cache}
+        self.liga = camp.liga_do_jogador
+        self.liga_vista = self.liga                # divisão mostrada na tabela (teclas 1 e 2)
+        self._tabelas = {LIGA1: list(camp.classificacao(LIGA1)), LIGA2: list(camp.classificacao(LIGA2))}
+        self._tabela_cache = self._tabelas[self.liga]
+        self._formas = {l["equipa_id"]: camp.forma(l["equipa_id"])
+                        for t in self._tabelas.values() for l in t}
         self._prob = None if camp.terminado else camp.probabilidades_proximo_jogo()
-        self._marcadores = list(camp.melhores_marcadores(7))
+        self._marcadores = list(camp.melhores_marcadores(6))
+        self._europa = list(camp.jogos_europa())
+        self._resumo = camp.resumo_epoca() if camp.terminado else None
         if camp.terminado:
             self.aba = "marcadores"        # no fim da época mostra logo quem foi o melhor marcador
         self._criar_botoes()
-        if self.camp.terminado and self.camp.posicao_do_jogador() == 1:
+        if self.camp.terminado and (self.camp.posicao_do_jogador() == 1 or
+                                    self._resumo["europa"] == self.camp.equipa_jogador):
             rnd = random.Random(7)
             self._confetis = [[rnd.uniform(0, WIDTH), rnd.uniform(-HEIGHT, 0), rnd.uniform(40, 120),
                                rnd.uniform(-30, 30), rnd.choice([(255, 205, 60), (255, 255, 255),
@@ -260,7 +310,8 @@ class EcraCampeonato:
             jogo = camp.proximo_jogo()
             local = "em casa" if jogo["casa_id"] == camp.equipa_jogador else "fora"
             self.btn_principal = BotaoMenu((760, 312, 272, 64), "JOGAR",
-                                           f"Jornada {jogo['jornada']}  •  {local}", "jogar", (40, 190, 100), "jogar")
+                                           f"{Campeonato.nome_ronda_curto(jogo)}  •  {local}", "jogar", (40, 190, 100),
+                                           "jogar")
             self.btn_simular = BotaoMenu((1044, 312, 196, 64), "SIMULAR", "sem jogar", "simular",
                                          (255, 175, 40), "avancar", seta=False)
         self.btn_nova = BotaoMenu((40, 640, 270, 50), "NOVA CARREIRA", "", "nova_carreira",
@@ -270,9 +321,10 @@ class EcraCampeonato:
             seta=False, tamanho=18)
         self.btn_menu = BotaoMenu((WIDTH - 310, 640, 270, 50), "MENU PRINCIPAL", "", "menu",
                                   (150, 110, 255), "casa", seta=False, tamanho=18)
-        self.aba_res = pygame.Rect(900, 398, 104, 28)
-        self.aba_cal = pygame.Rect(1010, 398, 104, 28)
-        self.aba_mar = pygame.Rect(1120, 398, 104, 28)
+        # Separadores do painel de baixo e da tabela
+        self.abas = ["resultados", "calendario", "marcadores", "europa"]
+        self.rects_abas = [pygame.Rect(774 + i * 114, 398, 108, 26) for i in range(4)]
+        self.rects_ligas = [pygame.Rect(500 + i * 116, 110, 110, 24) for i in range(2)]
         self.foco = 0                       # 0 = jogar / nova época, 1 = simular (setas ← →)
 
     @property
@@ -313,9 +365,10 @@ class EcraCampeonato:
             if event.key == pygame.K_ESCAPE:
                 return "menu"
             if event.key == pygame.K_TAB:
-                ordem = ["resultados", "calendario", "marcadores"]
-                self.aba = ordem[(ordem.index(self.aba) + 1) % len(ordem)]
+                self.aba = self.abas[(self.abas.index(self.aba) + 1) % len(self.abas)]
                 som.ui("mover")
+            if event.key in (pygame.K_1, pygame.K_2):
+                self._ver_liga(LIGA1 if event.key == pygame.K_1 else LIGA2)
             if event.key in (pygame.K_LEFT, pygame.K_RIGHT, pygame.K_a, pygame.K_d) and self.btn_simular:
                 self.foco = 1 - self.foco
                 som.ui("mover")
@@ -334,12 +387,12 @@ class EcraCampeonato:
                 return "nova_carreira" if self._pedir_confirmacao(self.btn_nova, "NOVA CARREIRA") else None
             if self.btn_epoca is not None and self.btn_epoca.por_cima(p):
                 return "simular_epoca" if self._pedir_confirmacao(self.btn_epoca, "SIMULAR ÉPOCA") else None
-            if self.aba_res.collidepoint(p):
-                self.aba = "resultados"
-            elif self.aba_cal.collidepoint(p):
-                self.aba = "calendario"
-            elif self.aba_mar.collidepoint(p):
-                self.aba = "marcadores"
+            for aba, r in zip(self.abas, self.rects_abas):
+                if r.collidepoint(p):
+                    self.aba = aba
+            for liga, r in zip((LIGA1, LIGA2), self.rects_ligas):
+                if r.collidepoint(p):
+                    self._ver_liga(liga)
         elif event.type == pygame.MOUSEMOTION:
             if self.btn_simular is not None:
                 if self.btn_simular.por_cima(event.pos):
@@ -347,6 +400,11 @@ class EcraCampeonato:
                 elif self.btn_principal.por_cima(event.pos):
                     self.foco = 0
         return None
+
+    def _ver_liga(self, liga: str):
+        if liga != self.liga_vista:
+            self.liga_vista = liga
+            som.ui("mover")
 
     def update(self, dt: float):
         self.t += dt
@@ -386,7 +444,8 @@ class EcraCampeonato:
         for b in self._botoes:
             b.draw(s)
         dica = "ENTER  nova época" if camp.terminado else "ENTER  jogar     S  simular     ← →  escolher"
-        texto(s, dica + "     TAB  resultados / calendário / marcadores     ESC  menu principal", 12, (120, 145, 195),
+        texto(s, dica + "     1 / 2  divisão     TAB  resultados / calendário / marcadores / Europa     ESC  menu",
+              12, (120, 145, 195),
               (WIDTH // 2, 704), negrito=False)
 
         for x, y, _, _, cor in self._confetis:
@@ -402,7 +461,8 @@ class EcraCampeonato:
         logo = carregar_logo_equipa(camp.equipa_jogador, (60, 60))
         if logo:
             s.blit(logo, logo.get_rect(center=(72, 50)))
-        texto(s, camp.info["nome"].upper(), 26, COR_TEXTO, (112, 36), ancora="midleft", sombra=True)
+        texto(s, f"{NOMES_COMPETICAO[self.liga].upper()}  •  {camp.info['nome'].upper()}", 24, COR_TEXTO,
+              (112, 36), ancora="midleft", sombra=True)
         dif = DIFICULDADES[camp.dificuldade]["nome"]
         texto(s, f"{info_eu['nome']}   •   Época {camp.info['epoca']}   •   Dificuldade {dif}", 14,
               COR_TEXTO_SUAVE, (112, 66), ancora="midleft", negrito=False)
@@ -410,7 +470,7 @@ class EcraCampeonato:
         # Progresso da época: um segmento por jornada
         total = camp.total_jornadas
         jogadas = camp.ultima_jornada_jogada()
-        etiqueta = "ÉPOCA TERMINADA" if camp.terminado else f"JORNADA {camp.jornada_atual} DE {total}"
+        etiqueta = "ÉPOCA TERMINADA" if camp.terminado else f"RONDA {camp.jornada_atual} DE {total}"
         r = pygame.Rect(WIDTH - 330, 24, 290, 58)
         _vidro(s, r, 12, 220, COR_DESTAQUE)
         texto(s, etiqueta, 15, COR_DESTAQUE, (r.centerx, r.top + 18))
@@ -430,6 +490,8 @@ class EcraCampeonato:
         s = self.screen
         _vidro(s, caixa, 14, 225)
         _titulo_painel(s, caixa, "CLASSIFICAÇÃO")
+        _abas(s, self.rects_ligas, ["1.ª DIVISÃO", "2.ª DIVISÃO"], 0 if self.liga_vista == LIGA1 else 1,
+              pygame.mouse.get_pos(), 11)
         colunas = [("J", 318), ("V", 352), ("E", 386), ("D", 420), ("GM", 460), ("GS", 500),
                    ("DG", 542), ("PTS", 588)]
         y = caixa.top + 50
@@ -439,25 +501,31 @@ class EcraCampeonato:
         pygame.draw.line(s, (40, 65, 120), (caixa.left + 16, y + 14), (caixa.right - 16, y + 14), 1)
 
         eu = self.camp.equipa_jogador
-        tabela = self._tabela_cache
+        tabela = self._tabelas[self.liga_vista]
         n = len(tabela)
+        liga1 = self.liga_vista == LIGA1
         for i, l in enumerate(tabela, start=1):
             # As linhas entram a deslizar, uma de cada vez, quando o ecrã abre
             k = max(0.0, min(1.0, (self.t - (i - 1) * 0.05) / 0.3))
             desl = round((1 - k) ** 2 * 60)
-            yy = y + 22 + (i - 1) * 54
-            linha = pygame.Rect(caixa.left + 12 + desl, yy, caixa.width - 24, 48)
+            yy = y + 22 + (i - 1) * 52
+            linha = pygame.Rect(caixa.left + 12 + desl, yy, caixa.width - 24, 46)
             if l["equipa_id"] == eu:
                 gradiente_vertical(s, linha, (52, 100, 180), (32, 66, 132), raio=8)
                 pygame.draw.rect(s, (120, 180, 255), linha, 2, border_radius=8)
             elif i % 2 == 0:
                 pygame.draw.rect(s, (18, 28, 54), linha, border_radius=8)
-            # Zonas: campeão a dourado, último lugar a vermelho
+            # Zonas: campeão a dourado, Europa a azul (1.ª div.), sobe a verde (2.ª div.), desce a vermelho
+            zona = None
             if i == 1:
-                pygame.draw.rect(s, COR_DESTAQUE, (linha.left, linha.top + 6, 4, linha.height - 12), border_radius=2)
-            elif i == n:
-                pygame.draw.rect(s, COR_DERROTA, (linha.left, linha.top + 6, 4, linha.height - 12), border_radius=2)
-            cor_pos = COR_DESTAQUE if i == 1 else ((235, 90, 90) if i == n else COR_TEXTO)
+                zona = COR_DESTAQUE
+            elif liga1 and i <= 4:
+                zona = COR_EUROPA
+            elif liga1 and i == n:
+                zona = COR_DERROTA
+            if zona:
+                pygame.draw.rect(s, zona, (linha.left, linha.top + 6, 4, linha.height - 12), border_radius=2)
+            cor_pos = COR_DESTAQUE if i == 1 else ((235, 90, 90) if liga1 and i == n else COR_TEXTO)
             texto(s, f"{i}.", 18, cor_pos, (linha.left + 26, linha.centery))
             logo = carregar_logo_equipa(l["equipa_id"], (34, 34))
             if logo:
@@ -472,6 +540,16 @@ class EcraCampeonato:
                       negrito=negrito)
             _bolinhas_forma(s, self._formas.get(l["equipa_id"], []), (caixa.left + 640 + desl, linha.centery),
                             raio=5, passo=13)
+        # Legenda das zonas
+        if liga1:
+            itens = [(COR_DESTAQUE, "Campeão"), (COR_EUROPA, "Taça Europeia"), (COR_DERROTA, "Desce")]
+        else:
+            itens = [(COR_DESTAQUE, "Campeão e sobe à 1.ª divisão")]
+        x = caixa.left + 24
+        for cor, nome in itens:
+            pygame.draw.rect(s, cor, (x, caixa.bottom - 22, 10, 10), border_radius=2)
+            r = texto(s, nome, 11, COR_TEXTO_SUAVE, (x + 16, caixa.bottom - 17), ancora="midleft", negrito=False)
+            x = r.right + 22
 
     def _cartao_proximo(self, caixa):
         s = self.screen
@@ -483,7 +561,7 @@ class EcraCampeonato:
             return
         eu = camp.equipa_jogador
         em_casa = jogo["casa_id"] == eu
-        texto(s, f"Jornada {jogo['jornada']}  •  {'EM CASA' if em_casa else 'FORA'}", 13,
+        texto(s, f"{Campeonato.nome_ronda_curto(jogo)}  •  {'EM CASA' if em_casa else 'FORA'}", 13,
               (150, 200, 255) if em_casa else (255, 170, 120), (caixa.right - 20, caixa.top + 22),
               ancora="midright")
         posicoes = {l["equipa_id"]: i for i, l in enumerate(self._tabela_cache, start=1)}
@@ -496,7 +574,8 @@ class EcraCampeonato:
                 s.blit(logo, logo.get_rect(center=(cx, caixa.top + 80)))
             cor = COR_DESTAQUE if eq == eu else COR_TEXTO
             texto(s, info["nome"], 16, cor, (cx, caixa.top + 132))
-            texto(s, f"{posicoes.get(eq, '-')}.º lugar  •  força {FORCA_EQUIPAS.get(eq, 75)}", 11,
+            lugar = f"{posicoes[eq]}.º lugar  •  " if eq in posicoes else ""
+            texto(s, f"{lugar}força {FORCA_EQUIPAS.get(eq, 75)}", 11,
                   COR_TEXTO_SUAVE, (cx, caixa.top + 150), negrito=False)
             _bolinhas_forma(s, self._formas.get(eq, []), (cx, caixa.top + 168), raio=5, passo=13)
         pulso = 1 + 0.05 * math.sin(self.t * 4)
@@ -522,53 +601,118 @@ class EcraCampeonato:
         s = self.screen
         cl = self._tabela_cache
         campeao = cl[0]
+        eu = self.camp.equipa_jogador
         _vidro(s, caixa, 14, 230, COR_DESTAQUE)
-        texto(s, "CAMPEÃO NACIONAL", 20, COR_DESTAQUE, (caixa.centerx, caixa.top + 24), sombra=True)
+        texto(s, f"CAMPEÃO DA {NOMES_COMPETICAO[self.liga].upper()}", 19, COR_DESTAQUE,
+              (caixa.centerx, caixa.top + 22), sombra=True)
         info = obter_info_equipa(campeao["equipa_id"])
-        halo = luz(260, 200, info["cor_primaria"], 90)
-        s.blit(halo, halo.get_rect(center=(caixa.centerx, caixa.top + 92)), special_flags=pygame.BLEND_RGB_ADD)
-        tr = icone("trofeu", 46, COR_DESTAQUE)
-        s.blit(tr, tr.get_rect(center=(caixa.centerx - 90, caixa.top + 92)))
-        s.blit(tr, tr.get_rect(center=(caixa.centerx + 90, caixa.top + 92)))
-        logo = carregar_logo_equipa(campeao["equipa_id"], (90, 90))
+        halo = luz(240, 170, info["cor_primaria"], 90)
+        s.blit(halo, halo.get_rect(center=(caixa.centerx, caixa.top + 78)), special_flags=pygame.BLEND_RGB_ADD)
+        tr = icone("trofeu", 40, COR_DESTAQUE)
+        s.blit(tr, tr.get_rect(center=(caixa.centerx - 86, caixa.top + 78)))
+        s.blit(tr, tr.get_rect(center=(caixa.centerx + 86, caixa.top + 78)))
+        logo = carregar_logo_equipa(campeao["equipa_id"], (76, 76))
         if logo:
-            s.blit(logo, logo.get_rect(center=(caixa.centerx, caixa.top + 92)))
-        texto(s, f"{campeao['nome']}  •  {campeao['pontos']} pontos", 19, COR_TEXTO, (caixa.centerx, caixa.top + 150))
+            s.blit(logo, logo.get_rect(center=(caixa.centerx, caixa.top + 78)))
+        texto(s, f"{campeao['nome']}  •  {campeao['pontos']} pontos", 17, COR_TEXTO, (caixa.centerx, caixa.top + 128))
         pos = self.camp.posicao_do_jogador()
-        pts = next(l["pontos"] for l in cl if l["equipa_id"] == self.camp.equipa_jogador)
+        pts = next(l["pontos"] for l in cl if l["equipa_id"] == eu)
         if pos == 1:
             msg, cor = "PARABÉNS! A TUA EQUIPA É CAMPEÃ!", (120, 230, 140)
         else:
             msg, cor = f"A tua equipa ficou em {pos}.º lugar com {pts} pontos", COR_TEXTO_SUAVE
-        texto(s, msg, 14, cor, (caixa.centerx, caixa.top + 178))
+        texto(s, msg, 13, cor, (caixa.centerx, caixa.top + 152))
+        # O que muda na próxima época, e a Taça Europeia
+        r = self._resumo
+        if r["sobe"] == eu:
+            msg2, cor2 = "SOBES À 1.ª DIVISÃO!", (120, 230, 140)
+        elif r["desce"] == eu:
+            msg2, cor2 = "Desces à 2.ª divisão", (235, 110, 100)
+        elif self.liga == LIGA1 and pos <= 4:
+            msg2, cor2 = "Na próxima época jogas a Taça Europeia", COR_EUROPA
+        else:
+            msg2, cor2 = "", COR_TEXTO_SUAVE
+        if r["europa"] == eu:
+            msg2, cor2 = "E GANHASTE A TAÇA EUROPEIA!", COR_DESTAQUE
+        elif r["europa"]:
+            msg2 += ("   •   " if msg2 else "") + f"Taça Europeia: {obter_info_equipa(r['europa'])['nome']}"
+        texto(s, msg2, 13, cor2, (caixa.centerx, caixa.top + 176))
 
     def _painel_jogos(self, caixa):
         s = self.screen
         _vidro(s, caixa, 14, 225)
-        for r, nome, aba in ((self.aba_res, "RESULTADOS", "resultados"), (self.aba_cal, "CALENDÁRIO", "calendario"),
-                             (self.aba_mar, "MARCADORES", "marcadores")):
-            ativa = self.aba == aba
-            pygame.draw.rect(s, (40, 80, 150) if ativa else (20, 32, 62), r, border_radius=8)
-            pygame.draw.rect(s, (110, 170, 255) if ativa else (45, 70, 130), r, 1, border_radius=8)
-            texto(s, nome, 12, COR_TEXTO if ativa else COR_TEXTO_SUAVE, r.center)
-        y0 = caixa.top + 48
+        _abas(s, self.rects_abas, ["RESULTADOS", "CALENDÁRIO", "MARCADORES", "EUROPA"], self.abas.index(self.aba),
+              pygame.mouse.get_pos(), 11)
+        y0 = caixa.top + 62
         eu = self.camp.equipa_jogador
+
+        def subtitulo(txt):
+            texto(s, txt, 13, COR_DESTAQUE, (caixa.left + 20, caixa.top + 48), ancora="midleft")
+
         if self.aba == "resultados":
             j = self.destaque or self.camp.ultima_jornada_jogada()
-            _titulo_painel(s, caixa, f"JORNADA {j}" if j else "RESULTADOS")
-            if not j:
+            jogos = self.camp.jogos_da_jornada(j) if j else []
+            subtitulo(Campeonato.nome_ronda(jogos[0]).upper() if jogos else "RESULTADOS")
+            if not jogos:
                 texto(s, "Ainda não se jogou nenhuma jornada.", 14, COR_TEXTO_SUAVE,
                       (caixa.centerx, caixa.centery + 16), negrito=False)
                 return
-            for k, p in enumerate(self.camp.jogos_da_jornada(j)):
-                self._linha_jogo(pygame.Rect(caixa.left + 14, y0 + k * 44, caixa.width - 28, 38), p, eu)
+            for k, p in enumerate(jogos):
+                self._linha_jogo(pygame.Rect(caixa.left + 14, y0 + k * 40, caixa.width - 28, 36), p, eu)
         elif self.aba == "marcadores":
+            subtitulo(f"MARCADORES DA {NOMES_COMPETICAO[self.liga].upper()}")
             self._lista_marcadores(caixa, y0, eu)
+        elif self.aba == "europa":
+            self._quadro_europa(caixa, eu)
         else:
-            _titulo_painel(s, caixa, "TEUS JOGOS")
-            for k, p in enumerate(self.camp.jogos_do_jogador()):
+            subtitulo("OS TEUS JOGOS")
+            jogos = list(self.camp.jogos_do_jogador())
+            # Só cabem 6: mostra uma janela à volta do próximo jogo
+            prox = next((i for i, p in enumerate(jogos) if not p["jogada"]), len(jogos))
+            ini = max(0, min(prox - 2, len(jogos) - 6))
+            for k, p in enumerate(jogos[ini:ini + 6]):
                 self._linha_jogo(pygame.Rect(caixa.left + 14, y0 + k * 25, caixa.width - 28, 23), p, eu,
                                  compacto=True)
+
+    def _quadro_europa(self, caixa, eu):
+        """Quadro da Taça Europeia: quartos, meias e final em três colunas."""
+        s = self.screen
+        jogos = {f: [p for p in self._europa if p["fase"] == f] for f in (1, 2, 3)}
+        larg, alt = 140, 36
+        colunas = [caixa.left + 14, caixa.centerx - larg // 2, caixa.right - 14 - larg]
+        for f, x in zip((1, 2, 3), colunas):
+            texto(s, {1: "QUARTOS", 2: "MEIAS-FINAIS", 3: "FINAL"}[f], 11, COR_DESTAQUE, (x + larg // 2, caixa.top + 46))
+        y_q = [caixa.top + 58 + i * 42 for i in range(4)]
+        ys = {1: y_q, 2: [(y_q[0] + y_q[1]) // 2, (y_q[2] + y_q[3]) // 2], 3: [(y_q[1] + y_q[2]) // 2]}
+        for f, x in zip((1, 2, 3), colunas):
+            for i, y in enumerate(ys[f]):
+                p = jogos[f][i] if i < len(jogos[f]) else None
+                self._caixa_eliminatoria(pygame.Rect(x, y, larg, alt), p, eu)
+        if not self.camp.na_europa(eu):
+            for k, linha in enumerate(("A tua equipa não", "joga esta época")):
+                texto(s, linha, 11, COR_TEXTO_SUAVE, (colunas[2] + larg // 2, caixa.bottom - 40 + k * 15),
+                      negrito=False)
+
+    def _caixa_eliminatoria(self, r, p, eu):
+        s = self.screen
+        meu = p is not None and eu in (p["casa_id"], p["fora_id"])
+        pygame.draw.rect(s, COR_LINHA_JOGADOR if meu else (18, 28, 54), r, border_radius=6)
+        pygame.draw.rect(s, (60, 90, 150), r, 1, border_radius=6)
+        if p is None:
+            texto(s, "?", 13, COR_TEXTO_SUAVE, r.center)
+            return
+        vence = Campeonato.vencedor(p)
+        for k, (eq, g, pen) in enumerate(((p["casa_id"], p["golos_casa"], p["pen_casa"]),
+                                          (p["fora_id"], p["golos_fora"], p["pen_fora"]))):
+            y = r.top + 10 + k * 16
+            logo = carregar_logo_equipa(eq, (14, 14))
+            if logo:
+                s.blit(logo, logo.get_rect(center=(r.left + 14, y)))
+            cor = COR_DESTAQUE if eq == vence else (COR_TEXTO if vence is None else COR_TEXTO_SUAVE)
+            texto(s, obter_info_equipa(eq)["sigla"], 12, cor, (r.left + 28, y), ancora="midleft")
+            if p["jogada"]:
+                txt = f"{g}" + (f" ({pen})" if pen is not None else "")
+                texto(s, txt, 12, cor, (r.right - 8, y), ancora="midright")
 
     def _lista_marcadores(self, caixa, y0, eu):
         """Os 7 melhores marcadores do campeonato (os da equipa do jogador a azul)."""
@@ -606,7 +750,7 @@ class EcraCampeonato:
         tam = 13 if compacto else 15
         logo_t = 18 if compacto else 26
         if compacto:
-            texto(s, f"J{p['jornada']}", 12, COR_TEXTO_SUAVE, (r.left + 18, r.centery))
+            texto(s, Campeonato.sigla_ronda(p), 12, COR_TEXTO_SUAVE, (r.left + 18, r.centery))
         for eq, lado in ((p["casa_id"], -1), (p["fora_id"], 1)):
             info = obter_info_equipa(eq)
             x_logo = r.centerx + lado * 50
@@ -631,7 +775,13 @@ class EcraCampeonato:
                     texto(s, "SIM", 9, (40, 25, 0), et.center)
         else:
             res, cor = "vs", COR_TEXTO_SUAVE
-        texto(s, res, tam + 1, cor, r.center)
+        if p["jogada"] and p["pen_casa"] is not None:
+            # Eliminatória decidida nos penáltis
+            texto(s, res, tam + 1, cor, (r.centerx, r.centery - (4 if compacto else 6)))
+            texto(s, f"pen. {p['pen_casa']}-{p['pen_fora']}", 9, COR_TEXTO_SUAVE,
+                  (r.centerx, r.centery + (7 if compacto else 9)), negrito=False)
+        else:
+            texto(s, res, tam + 1, cor, r.center)
 
     def _mostrar_aviso(self):
         """Cartão com o resultado da simulação (fecha sozinho ao fim de 3,5 s ou com uma tecla)."""
@@ -651,7 +801,8 @@ class EcraCampeonato:
         c = caixa.width // 2
 
         if av["tipo"] == "jogo":
-            texto(camada, f"JORNADA {av['jornada']}  •  JOGO SIMULADO", 15, COR_TEXTO_SUAVE, (c, 30))
+            ronda = av.get("ronda") or f"Jornada {av['jornada']}"
+            texto(camada, f"{ronda.upper()}  •  JOGO SIMULADO", 15, COR_TEXTO_SUAVE, (c, 30))
             for eq, x in ((av["casa"], c - 170), (av["fora"], c + 170)):
                 logo = carregar_logo_equipa(eq, (86, 86))
                 if logo:
@@ -660,7 +811,7 @@ class EcraCampeonato:
                 texto(camada, obter_info_equipa(eq)["nome"], 16, cor_nome, (x, 172))
             texto(camada, f"{av['gc']}  -  {av['gf']}", 54, COR_TEXTO, (c, 112), sombra=True)
         else:
-            texto(camada, f"{av['jornadas']} JORNADAS SIMULADAS", 15, COR_TEXTO_SUAVE, (c, 30))
+            texto(camada, f"{av['jornadas']} JOGOS SIMULADOS", 15, COR_TEXTO_SUAVE, (c, 30))
             tr = icone("trofeu", 70, COR_DESTAQUE if av["posicao"] == 1 else (150, 170, 210))
             camada.blit(tr, tr.get_rect(center=(c - 120, 112)))
             logo = carregar_logo_equipa(self.camp.equipa_jogador, (86, 86))
