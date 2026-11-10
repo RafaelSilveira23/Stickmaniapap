@@ -53,7 +53,7 @@ DONO_32 = {
     "Base de dados": V,
     "Menu principal e definições": V,
     "Gráficos": R,
-    "Sons": V, "Sons no jogo": V,
+    "Sons": V, "Sons no jogo": V, "Cânticos dos clubes": V, "Cânticos no jogo": V,
     "Estilo arcade": C, "Tempo de jogo e ecrã a tremer": C,
     "Remate na primeira pessoa": V, "Perspetiva na primeira pessoa": V, "Guarda-redes no remate": V,
     "Modo teste": V, "Remate em movimento": V, "Defesas no ecrã": V, "Defesas do tamanho certo": V,
@@ -78,7 +78,7 @@ DONO_34 = {
     "Pontaria com o rato": R, "Sprites": R, "Cabelo igual em todos os frames": R,
     "Bola presa e jogadores colados": R,
     "Colisões e IA com comportamentos estranhos": C, "Bola e guarda-redes": C,
-    "Porquê SQLite": V, "Regras do modo carreira": C, "Porquê sons sintetizados": V, "Flash branco no remate": V,
+    "Porquê SQLite": V, "Regras do modo carreira": C, "Porquê sons sintetizados": V, "Porquê cânticos feitos por código": V, "Flash branco no remate": V,
     "Quatro jogadores de campo": C, "Afinar a simulação com dados": C,
     "Porquê um anfitrião com autoridade": R, "Porquê uma aplicação com um servidor próprio": R, "Quem decide a stickada no online": R,
 }
@@ -87,7 +87,7 @@ DONO_34 = {
 DIVISAO = [
     ("Inteligência artificial e guarda-redes", "ai.py, goalkeeper.py", V),
     ("Menus e interface", "menu.py, ui.py, componentes.py, graficos.py", V),
-    ("Sons", "sons.py", V),
+    ("Sons e cânticos dos clubes", "sons.py, canticos.py", V),
     ("Base de dados (SQLite)", "carreira.py, carreira_jogador.py (parte da base de dados)", V),
     ("Carreira de jogador e vida do jogador", "carreira_jogador.py, carreira_jogador_menu.py, vida.py", V),
     ("Remate na primeira pessoa e modo teste", "remate_pov.py, pavilhao_pov.py", V),

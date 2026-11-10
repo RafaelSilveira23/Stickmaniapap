@@ -147,6 +147,11 @@ Para testar no próprio PC: `python servidor/servidor.py` (porta 8765) e, antes 
   desenhada ("DEFESA!", "POSTE!", "ROUBO!"), rasto da bola e contorno nos jogadores (`hockey_game/efeitos.py`)
 - **Sons** criados por síntese no código (sem ficheiros de fora): apito, tacadas, tabelas, postes,
   defesas, golo com buzina e público; volume dos efeitos e do público nas Definições
+- **Cânticos dos clubes**: cada clube tem um cântico original, composto no código (`hockey_game/canticos.py`):
+  a bancada canta uma melodia a várias vozes, grita o nome do clube e bate palmas, com o ritmo e o
+  instrumento do clube (bombos e metais no FC Porto, fanfarra no Benfica, concertina no Barcelos, guitarra
+  na Oliveirense, batucada no Valongo...). Durante o jogo a bancada vai cantando e, quando há golo, ouve-se
+  logo o cântico de quem marcou
   - **Melhores marcadores**: cada golo fica com o nome de quem marcou (no jogo e nos jogos simulados),
     gravado nas tabelas `jogador` e `estatistica`; separador MARCADORES no ecrã do campeonato
 - 8 equipas portuguesas com emblemas e **planteis reais**: 4 jogadores de campo + guarda-redes, como no
@@ -191,6 +196,7 @@ Para testar no próprio PC: `python servidor/servidor.py` (porta 8765) e, antes 
 | `hockey_game/remate_pov.py` | Remate na primeira pessoa (perspetiva, mira, força e modelo do guarda-redes) |
 | `hockey_game/efeitos.py` | Estilo arcade (tremer, pausa nos impactos, partículas, festa do golo) |
 | `hockey_game/sons.py` | Síntese e reprodução dos sons (os `.wav` ficam em `hockey_game/assets/sounds`) |
+| `hockey_game/canticos.py` | Compõe os cânticos dos clubes (`python canticos.py` cria `assets/sounds/canticos/*.wav`) |
 | `ferramentas/analise_simulacao.py` | Verifica se os resultados simulados do modo carreira fazem sentido |
 | `hockey_game/cores.py` | Cores dos equipamentos, contraste e recoloração dos sprites |
 | `hockey_game/team.py` | Dados das equipas (nome, sigla, cores, emblema) |
