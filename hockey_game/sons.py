@@ -20,6 +20,8 @@ import struct
 import pygame
 
 PASTA_SONS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "sounds")
+# Cânticos dos clubes: um ficheiro por clube (<id do clube>.mp3), feitos com IA (CellCog)
+PASTA_CANTICOS = os.path.join(PASTA_SONS, "canticos")
 TAXA = 22050          # amostras por segundo dos ficheiros .wav
 
 
@@ -307,6 +309,13 @@ class Sons:
         self.gravacao = None        # lista onde se guardam os sons (só no anfitrião de um jogo online)
         self._canal_publico = None
         self._nivel_publico = 0.0      # 0 = desligado, 1 = jogo, valores intermédios nos menus
+        # Cânticos dos clubes
+        self._canal_cantico = None
+        self._canticos = {}            # id do clube -> pygame.mixer.Sound (ou None se não houver ficheiro)
+        self.equipas_jogo = ()         # (casa, fora) do jogo que está a decorrer
+        self._espera_cantico = 0.0     # segundos até a bancada começar outro cântico
+        self._fim_cantico = 0.0        # segundos até o cântico atual acabar (desce o volume devagar)
+        self._golo_cantico = 0.0       # > 0 enquanto se canta o golo (mais alto)
 
     def iniciar(self):
         if self.ativo:
@@ -316,11 +325,12 @@ class Sons:
                 pygame.mixer.quit()
             pygame.mixer.init(44100, -16, 2, 512)
             pygame.mixer.set_num_channels(24)
-            pygame.mixer.set_reserved(1)                 # canal 0 só para o público
+            pygame.mixer.set_reserved(2)                 # canal 0 para o público, 1 para os cânticos
             gerar_ficheiros()
             for nome in _receitas():
                 self._sons[nome] = pygame.mixer.Sound(os.path.join(PASTA_SONS, nome + ".wav"))
             self._canal_publico = pygame.mixer.Channel(0)
+            self._canal_cantico = pygame.mixer.Channel(1)
             self.ativo = True
         except (pygame.error, OSError):
             self.ativo = False
@@ -370,6 +380,100 @@ class Sons:
         self.vol_publico = max(0.0, min(1.0, publico))
         if self.ativo and self._canal_publico.get_busy():
             self._canal_publico.set_volume(self._nivel_publico * self.vol_publico)
+        if self.ativo and self._canal_cantico.get_busy():
+            self._canal_cantico.set_volume(self._volume_cantico())
+
+    # ------------------------------------------------------------------ #
+    # Cânticos dos clubes                                                  #
+    # ------------------------------------------------------------------ #
+    # Durante o jogo, de vez em quando, a bancada canta o cântico de um dos clubes (mais vezes o
+    # da casa). Quando há golo, ouve-se logo o cântico do clube que marcou, mais alto.
+    # Os cânticos seguem o volume do público.
+    VOL_CANTICO = 0.45             # cântico da bancada (por baixo do jogo)
+    VOL_CANTICO_GOLO = 0.9         # cântico do golo
+    DURACAO_CANTICO = 26.0         # segundos que a bancada canta de cada vez
+    DURACAO_CANTICO_GOLO = 12.0
+
+    def _cantico(self, equipa_id: str):
+        """Carrega (uma só vez) o cântico de um clube. None se não houver ficheiro."""
+        if equipa_id not in self._canticos:
+            som_clube = None
+            for ext in (".ogg", ".mp3", ".wav"):
+                caminho = os.path.join(PASTA_CANTICOS, equipa_id + ext)
+                if os.path.exists(caminho):
+                    try:
+                        som_clube = pygame.mixer.Sound(caminho)
+                    except pygame.error:
+                        som_clube = None
+                    break
+            self._canticos[equipa_id] = som_clube
+        return self._canticos[equipa_id]
+
+    def _volume_cantico(self) -> float:
+        base = self.VOL_CANTICO_GOLO if self._golo_cantico > 0 else self.VOL_CANTICO
+        return base * self.vol_publico
+
+    def comecar_canticos(self, casa: str, fora: str):
+        """Começo de um jogo: guarda as equipas e carrega já os dois cânticos (para o golo não ter atraso)."""
+        self.equipas_jogo = (casa, fora)
+        self._espera_cantico = random.uniform(5.0, 9.0)
+        self._golo_cantico = self._fim_cantico = 0.0
+        if self.ativo:
+            self._canal_cantico.stop()
+            for equipa_id in self.equipas_jogo:
+                self._cantico(equipa_id)
+
+    def parar_canticos(self):
+        self.equipas_jogo = ()
+        self._golo_cantico = 0.0
+        if self.ativo and self._canal_cantico.get_busy():
+            self._canal_cantico.fadeout(1200)
+
+    def cantico_golo(self, equipa_id: str):
+        """Golo: a bancada canta o cântico do clube que marcou."""
+        if not self.ativo:
+            return
+        som_clube = self._cantico(equipa_id)
+        if som_clube is None:
+            return
+        self._golo_cantico = self.DURACAO_CANTICO_GOLO
+        self._canal_cantico.stop()
+        self._canal_cantico.play(som_clube, fade_ms=1500)     # entra devagar, por baixo da buzina
+        self._canal_cantico.set_volume(self._volume_cantico())
+        self._espera_cantico = random.uniform(20.0, 35.0)
+
+    def atualizar_canticos(self, dt: float, a_jogar: bool):
+        """Chamado em cada frame. 'a_jogar' é False na pausa e no fim do jogo (o cântico vai-se calando)."""
+        if not self.ativo or not self.equipas_jogo:
+            return
+        canal = self._canal_cantico
+        if self._golo_cantico > 0:
+            self._golo_cantico -= dt
+            if self._golo_cantico <= 0:
+                canal.fadeout(3000)
+            return
+        if not a_jogar:
+            if canal.get_busy():
+                canal.fadeout(1500)
+            return
+        if canal.get_busy():
+            self._fim_cantico -= dt
+            if self._fim_cantico <= 0:
+                canal.fadeout(3500)
+                self._fim_cantico = 99.0
+            return
+        self._espera_cantico -= dt
+        if self._espera_cantico > 0:
+            return
+        casa, fora = self.equipas_jogo
+        equipa_id = casa if random.random() < 0.6 else fora     # a casa tem mais adeptos
+        som_clube = self._cantico(equipa_id) or self._cantico(casa if equipa_id == fora else fora)
+        self._espera_cantico = random.uniform(15.0, 30.0)
+        if som_clube is None:
+            return
+        canal.play(som_clube, fade_ms=2500)
+        canal.set_volume(self._volume_cantico())
+        self._fim_cantico = self.DURACAO_CANTICO
 
 
 # Um só gestor para o jogo todo (os menus também o usam para os cliques)

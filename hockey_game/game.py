@@ -377,6 +377,14 @@ class Game(OnlineMixin):
             self._nivel_publico = nivel
             som.publico(nivel)
 
+    def _atualizar_canticos(self, dt: float):
+        """Cânticos dos clubes: só durante o jogo; calam-se na pausa e acabam ao sair do jogo."""
+        if self.estado not in ("jogo", "controlos"):
+            if som.equipas_jogo:
+                som.parar_canticos()
+            return
+        som.atualizar_canticos(dt, self.estado == "jogo" and not self.pausado and not self.fim_jogo)
+
     def _tocar_sons_bola(self):
         """Transforma os acontecimentos da bola (tacada, tabela, poste, defesa) em sons."""
         cam = self.rink.camera
@@ -1099,6 +1107,7 @@ class Game(OnlineMixin):
 
     def update(self, dt: float):
         self._atualizar_publico()
+        self._atualizar_canticos(dt)
         self._online_tick(dt)                  # mensagens da rede (só no jogo online)
         if self.estado == "online":
             self.ecra_online.update(dt)
@@ -1367,6 +1376,7 @@ class Game(OnlineMixin):
         self._reposicao_pendente = None
         self._dono_anterior = None
         som.tocar("apito_curto")                # apito de início
+        som.comecar_canticos(casa_id, fora_id)  # a bancada vai cantando os cânticos dos dois clubes
 
         info_c = obter_info_equipa(casa_id)
         info_f = obter_info_equipa(fora_id)
@@ -1884,6 +1894,7 @@ class Game(OnlineMixin):
         self._msg_timer = 2.5
         self._msg_equipa = equipa
         som.tocar("golo")
+        som.cantico_golo(self.equipa_casa_id if equipa == "azul" else self.equipa_fora_id)
         if self.online == "anfitriao":
             self._rede_x.append(["golo", equipa, nome])      # o convidado também faz a festa
         # Recomeça com a bola a equipa que sofreu o golo

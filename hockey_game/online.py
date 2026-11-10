@@ -490,6 +490,7 @@ class OnlineMixin:
         for ev in msg["x"]:
             if ev[0] == "golo":
                 self._festa_golo(ev[1], ev[2])
+                som.cantico_golo(self.equipa_casa_id if ev[1] == "azul" else self.equipa_fora_id)
 
         if msg.get("fim") and not self.fim_jogo:
             self.marcadores = msg.get("mc", [])
