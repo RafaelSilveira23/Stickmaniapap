@@ -306,12 +306,12 @@ def modelo_dados():
       ["PK id", "nome", "sigla", "forca"])
     T("torneio", 440, 20, 240, 145, "Torneio",
       ["PK id", "nome", "FK equipa_jogador", "dificuldade", "epoca", "data_inicio", "estado"])
-    T("class", 860, 20, 240, 170, "Classificacao",
-      ["PK, FK torneio_id", "PK, FK equipa_id", "jogos", "vitorias", "empates", "derrotas",
+    T("class", 860, 20, 240, 188, "Classificacao",
+      ["PK, FK torneio_id", "PK, FK equipa_id", "competicao", "jogos", "vitorias", "empates", "derrotas",
        "golos_marcados", "golos_sofridos", "pontos"])
-    T("partida", 440, 220, 240, 185, "Partida",
+    T("partida", 440, 220, 240, 221, "Partida",
       ["PK id", "FK torneio_id", "jornada", "FK casa_id", "FK fora_id", "golos_casa", "golos_fora",
-       "jogada", "do_jogador", "simulado"])
+       "jogada", "do_jogador", "simulado", "competicao, fase", "pen_casa, pen_fora"])
     T("jogador", 20, 260, 240, 115, "Jogador",
       ["PK id", "FK equipa_id", "nome", "numero", "posicao"])
     T("estat", 860, 260, 240, 100, "Estatistica",
@@ -324,7 +324,7 @@ def modelo_dados():
       ["PK id", "FK atleta_id", "FK partida_id", "FK torneio_id", "golos", "assistencias", "remates",
        "passes", "recuperacoes", "perdas", "nota", "geral_depois"], cor="verde")
     d.seta("atleta", "atuacao", "1 : N", ponta=False, exato=True, pontos=[(260, 605), (440, 605)])
-    d.seta("partida", "atuacao", "1 : N", ponta=False, exato=True, pontos=[(560, 405), (560, 495)], pos_texto=0.78)
+    d.seta("partida", "atuacao", "1 : N", ponta=False, exato=True, pontos=[(560, 441), (560, 495)], pos_texto=0.6)
     d.seta("equipa", "atleta", "1 : N", ponta=False, exato=True,
            pontos=[(20, 70), (6, 70), (6, 590), (20, 590)], pos_texto=0.5)
     # Vida do jogador (vida.py): os valores da vida e o diário
@@ -361,7 +361,7 @@ def modelo_dados():
     d.seta("partida", "estat", "1 : N", ponta=False, exato=True,
            pontos=[(680, 330), (860, 330)])
     d.seta("jogador", "estat", "1 : N", ponta=False, exato=True,
-           pontos=[(140, 375), (140, 435), (980, 435), (980, 360)], pos_texto=0.5)
+           pontos=[(140, 375), (140, 448), (980, 448), (980, 360)], pos_texto=0.2)
     return d
 
 
@@ -372,18 +372,18 @@ def fluxograma_carreira():
     d = Diagrama("08_fluxograma_carreira", 700, 1100, "Fluxograma do modo carreira")
     d.caixa("ini", 190, 10, 280, 50, "Menu principal → MODO CARREIRA", "terminal", "cinza", negrito=True)
     d.caixa("d1", 220, 90, 220, 96, "Há um campeonato\nguardado?", "losango", "amarelo")
-    d.caixa("esc", 195, 222, 270, 56, "Escolher a equipa\ne a dificuldade", "retangulo", "azul")
-    d.caixa("cri", 180, 312, 300, 76, "Criar o campeonato: calendário\n(método do círculo) e classificação\na zeros, gravados em SQLite",
+    d.caixa("esc", 195, 222, 270, 56, "Escolher o clube (1.ª ou 2.ª\ndivisão) e a dificuldade", "retangulo", "azul")
+    d.caixa("cri", 180, 312, 300, 76, "Criar a época: calendários das 2\ndivisões, quartos da Taça Europeia\ne classificações, em SQLite",
             "retangulo", "roxo")
-    d.caixa("hub", 180, 420, 300, 72, "Ecrã do campeonato: classificação,\npróximo jogo, resultados\ne calendário",
+    d.caixa("hub", 180, 420, 300, 72, "Ecrã do campeonato: classificações,\npróximo jogo, resultados,\ncalendário e quadro europeu",
             "arredondado", "laranja", negrito=False)
     d.caixa("d2", 220, 525, 220, 96, "Campeonato\nterminado?", "losango", "amarelo")
-    d.caixa("fim", 15, 545, 170, 56, "Mostrar o campeão\ne a posição final", "retangulo", "laranja")
+    d.caixa("fim", 15, 545, 170, 56, "Campeões, quem sobe,\nquem desce e a Europa", "retangulo", "laranja")
     d.caixa("d4", 220, 655, 220, 90, "Jogar ou\nsimular?", "losango", "amarelo")
-    d.caixa("jog", 90, 780, 230, 56, "Jogar o jogo da jornada\n(em casa ou fora)", "retangulo", "verde")
+    d.caixa("jog", 90, 780, 230, 56, "Jogar o jogo da ronda\n(liga ou Taça Europeia)", "retangulo", "verde")
     d.caixa("sim", 360, 780, 290, 56, "Simular o jogo: força das equipas,\nforma e dificuldade", "retangulo", "verde")
     d.caixa("d3", 95, 870, 220, 90, "Desistiu\nna pausa?", "losango", "amarelo")
-    d.caixa("reg", 150, 1000, 400, 76, "Gravar o resultado, simular os outros 3\njogos e atualizar a classificação\n— tudo numa só transação",
+    d.caixa("reg", 150, 1000, 400, 76, "Gravar o resultado (penáltis se a eliminatória\nempatar), simular os outros jogos e criar\na fase europeia seguinte — numa transação",
             "retangulo", "roxo")
 
     d.seta("ini", "d1")
@@ -403,7 +403,7 @@ def fluxograma_carreira():
     d.seta("sim", "reg", exato=True, pontos=[(505, 836), (505, 1000)])
     d.seta("d3", "hub", "Sim\n(não conta)", exato=True,
            pontos=[(95, 915), (8, 915), (8, 480), (180, 480)], pos_texto=0.94)
-    d.seta("reg", "hub", "jornada seguinte", exato=True,
+    d.seta("reg", "hub", "ronda seguinte", exato=True,
            pontos=[(550, 1038), (665, 1038), (665, 450), (480, 450)], pos_texto=0.25)
     return d
 

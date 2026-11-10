@@ -118,7 +118,7 @@ Para testar no próprio PC: `python servidor/servidor.py` (porta 8765) e, antes 
 - **Gráficos melhorados**: piso desenhado com o dobro da resolução (linhas e emblema suaves),
   tábuas com veios e nós, reflexos das luzes no verniz, sombra junto às tabelas e sombras esbatidas
   nos jogadores e na bola; vsync para a imagem não "rasgar"
-- **Modo carreira**: escolhes um clube e jogas um campeonato contra as outras 7 equipas (7 jornadas, os outros jogos são simulados), com classificação, calendário e várias épocas. O progresso fica gravado numa base de dados SQLite (`hockey_game/saves/carreira.db`)
+- **Modo carreira**: escolhes um clube da 1.ª ou da 2.ª divisão e jogas épocas seguidas: o campeonato da tua divisão (7 jornadas, os outros jogos são simulados) e, para os 4 primeiros da 1.ª divisão, a **Taça Europeia** (quartos, meias e final contra clubes espanhóis, com penáltis se houver empate). No fim da época o campeão da 2.ª divisão **sobe** e o último da 1.ª **desce**. Classificações das duas divisões, calendário, marcadores e o quadro da taça. O progresso fica gravado numa base de dados SQLite (`hockey_game/saves/carreira.db`)
   - Podes **simular** o teu jogo (botão SIMULAR ou tecla `S`) ou a **época toda**
   - Resultados realistas: força dos clubes, forma recente e "forma do dia", golos por distribuição binomial
     (validado em 600 épocas com `ferramentas/analise_simulacao.py`)
@@ -154,8 +154,11 @@ Para testar no próprio PC: `python servidor/servidor.py` (porta 8765) e, antes 
   logo o cântico de quem marcou
   - **Melhores marcadores**: cada golo fica com o nome de quem marcou (no jogo e nos jogos simulados),
     gravado nas tabelas `jogador` e `estatistica`; separador MARCADORES no ecrã do campeonato
-- 8 equipas portuguesas com emblemas e **planteis reais**: 4 jogadores de campo + guarda-redes, como no
-  hóquei em patins (formação em losango: avançado, dois médios e defesa)
+- **19 clubes** com emblemas: 8 da 1.ª divisão e 7 da 2.ª divisão portuguesas e 4 clubes espanhóis (FC Barcelona,
+  Deportivo Liceo, Reus Deportiu e CP Voltregà), escolhidos por separadores (1.ª divisão, 2.ª divisão, Europa)
+- **Planteis**: 4 jogadores de campo + guarda-redes, como no hóquei em patins (formação em losango: avançado,
+  dois médios e defesa). Os da 1.ª divisão e dos clubes espanhóis têm nomes reais; os da 2.ª divisão não estão
+  publicados e por isso têm nomes inventados (podem ser trocados em `hockey_game/team.py`)
 - Os nomes aparecem no cartão do jogador, nas faltas, nos golos ("GOLO! FC PORTO • Hélder Nunes") e no fim do jogo
 - **Equipamentos com as cores de cada clube**; se as cores das duas equipas forem parecidas, a equipa visitante joga com o equipamento alternativo
 - **Linhas do ringue na cor da equipa da casa**, ajustadas automaticamente para se verem bem no piso de madeira
@@ -186,8 +189,8 @@ Para testar no próprio PC: `python servidor/servidor.py` (porta 8765) e, antes 
 |---|---|
 | `hockey_game/game.py` | Ciclo principal e estados do jogo (menus, partida, pausa, fim) |
 | `hockey_game/menu.py` | Ecrãs de menu |
-| `hockey_game/carreira.py` | Modo carreira: calendário, jogos simulados, classificação e base de dados SQLite |
-| `hockey_game/carreira_menu.py` | Ecrãs do modo carreira (escolha da equipa e campeonato) |
+| `hockey_game/carreira.py` | Modo carreira: duas divisões, Taça Europeia, subidas e descidas, jogos simulados e base de dados SQLite |
+| `hockey_game/carreira_menu.py` | Ecrãs do modo carreira (escolha do clube, classificações e quadro da Taça Europeia) |
 | `hockey_game/carreira_jogador.py` | Carreira de jogador: jogador criado, nota, evolução, propostas e base de dados |
 | `hockey_game/carreira_jogador_menu.py` | Ecrãs da carreira de jogador (criar o jogador e painel da carreira) |
 | `hockey_game/vida.py` | Vida do jogador: valores, eventos com escolhas, atividades, lesões, banco e diário |
