@@ -15,7 +15,7 @@ import math
 import random
 import pygame
 import fontes
-from settings import WIDTH, HEIGHT
+from settings import WIDTH, HEIGHT, VERSAO_JOGO
 from team import EQUIPAS_LISTA, COMPETICOES, competicao_da_equipa, obter_info_equipa, carregar_logo_equipa
 from ai import DIFICULDADES
 from cores import (definir_equipamentos, cor_linhas_campo, cor_visivel_em_escuro,
@@ -25,6 +25,36 @@ from componentes import (fonte, texto, painel, fundo_menu, Botao, ListaBotoes, p
                          gradiente_vertical, COR_DESTAQUE, COR_TEXTO, COR_TEXTO_SUAVE, COR_PAINEL)
 from graficos import (gradiente_radial, luz, cone_luz, sombra_suave, brilho_retangulo, vinheta,
                       icone, emblema_sticks, titulo_estilizado)
+
+
+# ====================================================================== #
+# Estatísticas da partida                                                #
+# ====================================================================== #
+
+def desenhar_estatisticas(s, game, centro_x: int, y: int, largura: int, passo: int = 26):
+    """
+    Estatísticas da partida (remates, defesas, posse e faltas), usadas na pausa e no fim do jogo.
+    Cada linha tem o valor da casa à esquerda, o nome ao centro e o valor do visitante à direita,
+    e por baixo uma barra dividida nas cores das duas equipas, proporcional aos valores.
+    """
+    cor_c = cor_visivel_em_escuro(game.kit_casa["principal"], 120)
+    cor_f = cor_visivel_em_escuro(game.kit_fora["principal"], 120)
+    x0 = centro_x - largura // 2
+    for k, (nome, va, vv, ta, tv) in enumerate(game.estatisticas_jogo()):
+        yy = y + k * passo
+        texto(s, ta, 15, COR_TEXTO if va >= vv else COR_TEXTO_SUAVE, (x0, yy), ancora="midleft")
+        texto(s, nome.upper(), 10, COR_TEXTO_SUAVE, (centro_x, yy))
+        texto(s, tv, 15, COR_TEXTO if vv >= va else COR_TEXTO_SUAVE, (x0 + largura, yy), ancora="midright")
+        barra = pygame.Rect(x0, yy + 9, largura, 4)
+        total = va + vv
+        meio = round(largura * (va / total if total else 0.5))
+        pygame.draw.rect(s, (22, 32, 60), barra, border_radius=2)
+        if total:
+            if meio > 1:
+                pygame.draw.rect(s, cor_c, (barra.left, barra.top, meio - 1, 4), border_radius=2)
+            if largura - meio > 1:
+                pygame.draw.rect(s, cor_f, (barra.left + meio + 1, barra.top, largura - meio - 1, 4),
+                                 border_radius=2)
 
 
 # ====================================================================== #
@@ -213,19 +243,21 @@ class MenuPrincipal:
         bw, x = 460, WIDTH // 2 - 230
         self.engrenagem = BotaoEngrenagem((WIDTH - 50, 48))
         self.lista = ListaBotoes([
-            BotaoMenu((x, 258, bw, 52), "JOGO RÁPIDO", "Escolhe dois clubes e joga uma partida",
+            BotaoMenu((x, 242, bw, 60), "JOGO RÁPIDO", "Escolhe dois clubes e joga uma partida",
                       "jogar", (40, 190, 100), "jogar"),
-            BotaoMenu((x, 316, bw, 52), "JOGAR ONLINE", "Jogo aleatório ou sala privada com um amigo",
+            BotaoMenu((x, 310, bw, 60), "JOGAR ONLINE", "Jogo aleatório ou sala privada com um amigo",
                       "online", (40, 200, 210), "globo"),
-            BotaoMenu((x, 374, bw, 52), "MODO CARREIRA", "Leva o teu clube ao título do campeonato",
+            BotaoMenu((x, 378, bw, 60), "MODO CARREIRA", "Duas divisões, Taça Europeia e subidas de divisão",
                       "carreira", (255, 175, 40), "trofeu"),
-            BotaoMenu((x, 432, bw, 52), "CARREIRA DE JOGADOR", "Cria o teu jogador e joga só com ele",
+            BotaoMenu((x, 446, bw, 60), "CARREIRA DE JOGADOR", "Cria o teu jogador e joga só com ele",
                       "carreira_jogador", (255, 110, 160), "jogador"),
-            BotaoMenu((x, 490, bw, 52), "MODO TESTE", "Treina remates, passes e jogadas contra um defesa",
+            BotaoMenu((x, 514, bw, 60), "MODO TESTE", "Treina remates, passes e jogadas contra um defesa",
                       "teste", (80, 170, 255), "alvo"),
-            BotaoMenu((x + 80, 550, bw - 160, 42), "SAIR", "", "sair", (230, 70, 70), "sair"),
+            BotaoMenu((x + 90, 584, bw - 180, 44), "SAIR", "", "sair", (230, 70, 70), "sair", seta=False, tamanho=19),
             self.engrenagem,
         ])
+        # Posição final de cada botão (entram a deslizar, um a seguir ao outro, quando o menu abre)
+        self._y_botoes = [b.rect.y for b in self.lista.botoes]
         self._cone = cone_luz(360, 470)
         self._feixe = cone_luz(240, 760, (190, 215, 255), 6, 26)
         fonte_titulo = fontes.SysFont("Arial Black", 86)
@@ -269,13 +301,13 @@ class MenuPrincipal:
 
     def _desenhar_titulo(self, s):
         cx = WIDTH // 2
-        emb = emblema_sticks(140)
+        emb = emblema_sticks(124)
         flutuar = 3 * math.sin(self.t * 1.8)
         brilho = luz(300, 200, (255, 210, 150), 70)
-        s.blit(brilho, brilho.get_rect(center=(cx, 78)), special_flags=pygame.BLEND_RGB_ADD)
-        s.blit(emb, emb.get_rect(center=(cx, 70 + flutuar)))
+        s.blit(brilho, brilho.get_rect(center=(cx, 68)), special_flags=pygame.BLEND_RGB_ADD)
+        s.blit(emb, emb.get_rect(center=(cx, 60 + flutuar)))
 
-        tr = self._titulo.get_rect(center=(cx, 174))
+        tr = self._titulo.get_rect(center=(cx, 158))
         s.blit(self._titulo, tr)
         # Reflexo de luz que atravessa o título de vez em quando
         ciclo = (self.t % 5.0) / 1.2
@@ -287,10 +319,10 @@ class MenuPrincipal:
                                 [(x, 0), (x + 50, 0), (x + 10, m.get_height()), (x - 40, m.get_height())])
             brilho_txt = m.copy()
             brilho_txt.blit(faixa, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
-            s.blit(brilho_txt, brilho_txt.get_rect(center=(cx, 174)))
+            s.blit(brilho_txt, brilho_txt.get_rect(center=(cx, 158)))
 
         # Subtítulo dourado com riscas dos lados
-        y = 236
+        y = 216
         r = texto(s, "H Ó Q U E I   E M   P A T I N S", 17, COR_DESTAQUE, (cx, y))
         for sinal in (-1, 1):
             xa = cx + sinal * (r.width // 2 + 18)
@@ -336,15 +368,28 @@ class MenuPrincipal:
                                       (kit_fora, self.fora_id, WIDTH - 200, True)):
             self._desenhar_jogador(s, kit, eq_id, cx, virar)
 
-        self.lista.draw(s)
+        # Entrada: cada botão sobe para o seu lugar, 0,05 s depois do anterior
+        for i, (b, y_final) in enumerate(zip(self.lista.botoes, self._y_botoes)):
+            if b is self.engrenagem:
+                continue
+            k = max(0.0, min(1.0, (self.t - 0.05 * i) / 0.32))
+            b.rect.y = y_final + round(46 * (1 - k) ** 3)
+        if self.t < 0.75:
+            # Enquanto entram, os botões são desenhados numa camada que vai ficando opaca
+            camada = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+            self.lista.draw(camada)
+            camada.set_alpha(int(255 * min(1.0, self.t / 0.45)))
+            s.blit(camada, (0, 0))
+        else:
+            self.lista.draw(s)
 
-        texto(s, "↑ ↓  escolher     ENTER  confirmar", 13, (130, 155, 205),
-              (WIDTH // 2, 606), negrito=False)
+        texto(s, "↑ ↓  escolher     ENTER  confirmar", 12, (120, 145, 195),
+              (WIDTH // 2, 652), negrito=False)
         # Rodapé
-        pygame.draw.line(s, (40, 60, 105), (WIDTH // 2 - 220, HEIGHT - 44), (WIDTH // 2 + 220, HEIGHT - 44), 1)
-        texto(s, "Projeto PAP  •  Rafael Silveira  •  2026/2027", 13, (110, 130, 175),
-              (WIDTH // 2, HEIGHT - 26), negrito=False)
-        texto(s, "v30", 12, (80, 100, 145), (18, HEIGHT - 24), ancora="midleft")
+        pygame.draw.line(s, (40, 60, 105), (WIDTH // 2 - 220, HEIGHT - 42), (WIDTH // 2 + 220, HEIGHT - 42), 1)
+        texto(s, "Projeto PAP  •  Vasco Andreia e Rafael Silveira  •  2026/2027", 13, (110, 130, 175),
+              (WIDTH // 2, HEIGHT - 24), negrito=False)
+        texto(s, f"v{VERSAO_JOGO}", 12, (80, 100, 145), (18, HEIGHT - 24), ancora="midleft")
 
 
 # ====================================================================== #
@@ -684,7 +729,7 @@ class EcraControlos:
         emb = emblema_sticks(56)
         s.blit(emb, emb.get_rect(center=(caixa.left + 70, y + 86)))
         texto(s, "STICKMANIA", 20, COR_TEXTO, (caixa.left + 112, y + 66), ancora="midleft")
-        texto(s, "Hóquei em patins 2D  •  versão 16", 12, COR_TEXTO_SUAVE, (caixa.left + 112, y + 90),
+        texto(s, f"Hóquei em patins 2D  •  versão {VERSAO_JOGO}", 12, COR_TEXTO_SUAVE, (caixa.left + 112, y + 90),
               ancora="midleft", negrito=False)
         texto(s, "Projeto PAP  •  2026/2027", 12, COR_TEXTO_SUAVE, (caixa.left + 112, y + 108),
               ancora="midleft", negrito=False)
@@ -1075,10 +1120,13 @@ class MenuPausa:
                      ("MENU PRINCIPAL", "menu", (150, 110, 255), "casa"),
                      ("SAIR DO JOGO", "sair", (230, 70, 70), "sair")]
         n = len(itens)
-        altura = 178 + n * 62
+        # No modo teste não há estatísticas da partida (só os remates, que já aparecem em cima)
+        self.com_stats = not modo_teste
+        extra = 104 if self.com_stats else 0
+        altura = 178 + extra + n * 58
         self.caixa = pygame.Rect(WIDTH // 2 - 230, (HEIGHT - altura) // 2 - 10, 460, altura)
-        y0 = self.caixa.top + 166
-        self.lista = ListaBotoes([BotaoMenu((WIDTH // 2 - 195, y0 + i * 62, 390, 52), titulo, "", acao, cor, ic,
+        y0 = self.caixa.top + 164 + extra
+        self.lista = ListaBotoes([BotaoMenu((WIDTH // 2 - 195, y0 + i * 58, 390, 50), titulo, "", acao, cor, ic,
                                             seta=(i == 0), tamanho=19)
                                   for i, (titulo, acao, cor, ic) in enumerate(itens)])
         self._titulo = titulo_estilizado("PAUSA", fontes.SysFont("Arial Black", 44), (255, 255, 255),
@@ -1132,6 +1180,9 @@ class MenuPausa:
                   (255, 255, 255), pilula.center)
             texto(s, f"{game.parte}.ª parte  •  faltam {mins:02d}:{segs:02d}", 12, COR_TEXTO_SUAVE,
                   (WIDTH // 2, caixa.top + 140), negrito=False)
+        if self.com_stats:
+            pygame.draw.line(s, (45, 65, 115), (caixa.left + 40, caixa.top + 156), (caixa.right - 40, caixa.top + 156))
+            desenhar_estatisticas(s, game, WIDTH // 2, caixa.top + 172, 300, 23)
 
         self.lista.draw(s)
         if self.modo_carreira:
@@ -1304,9 +1355,9 @@ class EcraFimJogo:
             msg, cor = f"VITÓRIA DO {info_f['nome'].upper()}!", cor_visivel_em_escuro(kit_f["principal"], 140)
         else:
             msg, cor = "EMPATE!", COR_DESTAQUE
-        texto(s, msg, 28, cor, (WIDTH // 2, caixa.top + 412), sombra=True)
-        faltas = f"Faltas:  {info_c['sigla']} {game.faltas_azul}   •   {info_f['sigla']} {game.faltas_vermelho}"
-        texto(s, faltas, 13, COR_TEXTO_SUAVE, (WIDTH // 2, caixa.top + 444), negrito=False)
+        texto(s, msg, 28, cor, (WIDTH // 2, caixa.top + 442), sombra=True)
+        # Estatísticas da partida entre as duas equipas
+        desenhar_estatisticas(s, game, WIDTH // 2, caixa.top + 300, 172, 29)
 
         if self.jogador:
             j = self.jogador

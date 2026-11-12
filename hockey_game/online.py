@@ -402,6 +402,9 @@ class OnlineMixin:
             "x": list(self._rede_x),
             "fim": int(self.fim_jogo),
             "n": self._input_seq_remoto,         # último envio de teclas do convidado (para o RTT)
+            # Estatísticas da partida (remates, defesas e segundos de posse de cada equipa)
+            "st": [[e["remates"], e["defesas"], round(e["posse"], 1)]
+                   for e in (self.stats_jogo["azul"], self.stats_jogo["vermelho"])],
         }
         if self.fim_jogo:
             msg["mc"] = self.marcadores
@@ -477,6 +480,8 @@ class OnlineMixin:
         (self.golos_azul, self.golos_vermelho, self.faltas_azul, self.faltas_vermelho,
          self.tempo_restante, self.parte) = msg["p"]
         self._msg_texto, self._msg_timer, self._msg_equipa = msg["m"]
+        for eq, valores in zip(("azul", "vermelho"), msg.get("st") or []):
+            self.stats_jogo[eq] = dict(zip(("remates", "defesas", "posse"), valores))
         falta_ativa, self._falta_timer, self._falta_tipo, self._msg_falta, self._msg_falta_sub = msg["f"]
         self._falta_ativa = bool(falta_ativa)
 

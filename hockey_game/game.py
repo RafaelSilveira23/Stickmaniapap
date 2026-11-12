@@ -117,6 +117,7 @@ class Game(OnlineMixin):
         self.ecra_cj_criar   = None
         self._cj_jogador     = None      # o Player que é o jogador da carreira
         self.stats_jogador   = {}
+        self.stats_jogo      = self._stats_a_zero()   # remates, defesas e posse de cada equipa
         self._cj_dono_ant    = None
         self._cj_assist      = None      # (colega que recebeu o meu passe, instante)
         self._cj_t           = 0.0
@@ -377,6 +378,48 @@ class Game(OnlineMixin):
             self._nivel_publico = nivel
             som.publico(nivel)
 
+    # ------------------------------------------------------------------ #
+    # Estatísticas da partida (pausa e fim do jogo)                        #
+    # ------------------------------------------------------------------ #
+
+    @staticmethod
+    def _stats_a_zero() -> dict:
+        return {eq: {"remates": 0, "defesas": 0, "posse": 0.0} for eq in ("azul", "vermelho")}
+
+    def _contar_evento(self, tipo: str, forca: float, x: float):
+        """
+        Conta remates e defesas a partir dos acontecimentos da bola.
+        Remate = tacada forte na direção da baliza adversária (a equipa da casa ataca a da esquerda).
+        Defesa = a bola bate no guarda-redes com força; a baliza diz de que equipa é.
+        """
+        st = self.stats_jogo
+        if tipo == "tacada" and forca >= 420:
+            quem = getattr(self.bola, "_cooldown_dono", None)
+            equipa = getattr(quem, "equipa", None)
+            vx = self.bola.vel.x
+            if equipa == "azul" and vx < 0:
+                st["azul"]["remates"] += 1
+            elif equipa == "vermelho" and vx > 0:
+                st["vermelho"]["remates"] += 1
+        elif tipo == "defesa" and forca >= 200:
+            st["vermelho" if x < self.rink.rect.centerx else "azul"]["defesas"] += 1
+
+    def _contar_posse(self, dt: float):
+        dono = self.bola.dono
+        if dono is not None and self.jogo_ativo and getattr(dono, "equipa", None) in self.stats_jogo:
+            self.stats_jogo[dono.equipa]["posse"] += dt
+
+    def estatisticas_jogo(self) -> list:
+        """Linhas para os ecrãs: (nome, valor da casa, valor de fora, texto da casa, texto de fora)."""
+        a, v = self.stats_jogo["azul"], self.stats_jogo["vermelho"]
+        total = a["posse"] + v["posse"]
+        pa = round(100 * a["posse"] / total) if total > 0 else 50
+        return [("Remates", a["remates"], v["remates"], str(a["remates"]), str(v["remates"])),
+                ("Defesas", a["defesas"], v["defesas"], str(a["defesas"]), str(v["defesas"])),
+                ("Posse de bola", pa, 100 - pa, f"{pa}%", f"{100 - pa}%"),
+                ("Faltas", self.faltas_azul, self.faltas_vermelho, str(self.faltas_azul),
+                 str(self.faltas_vermelho))]
+
     def _atualizar_canticos(self, dt: float):
         """Cânticos dos clubes: só durante o jogo; calam-se na pausa e acabam ao sair do jogo."""
         if self.estado not in ("jogo", "controlos"):
@@ -391,6 +434,7 @@ class Game(OnlineMixin):
         for tipo, forca, x, y in self.bola.eventos:
             sx, sy = cam.projetar(x, y)
             self._efeitos_bola(tipo, forca, sx, sy)
+            self._contar_evento(tipo, forca, x)
             if tipo == "tacada":
                 if forca >= 420:
                     som.tocar("remate", 0.55 + 0.45 * min(1.0, forca / 650), sx)
@@ -890,6 +934,9 @@ class Game(OnlineMixin):
         j.tem_bola = False
         b.libertar(pygame.math.Vector2(0, 0), dono_anterior=j)
         b.eventos.clear()                   # os sons já tocaram no ecrã do remate
+        self.stats_jogo[marca]["remates"] += 1
+        if res["resultado"] == "defesa":
+            self.stats_jogo["vermelho" if marca == "azul" else "azul"]["defesas"] += 1
         if self.modo_teste:
             self.teste["remates"] += 1
             chave = {"golo": "golos", "defesa": "defesas", "bloqueado": "defesas"}.get(r, "fora")
@@ -1277,6 +1324,7 @@ class Game(OnlineMixin):
         self._tocar_sons_bola()
 
         self._efeitos_posse()
+        self._contar_posse(dt)
         if self.modo_jogador:
             self._seguir_jogador_cj(dt)
 
@@ -1377,6 +1425,7 @@ class Game(OnlineMixin):
         self._dono_anterior = None
         som.tocar("apito_curto")                # apito de início
         som.comecar_canticos(casa_id, fora_id)  # a bancada vai cantando os cânticos dos dois clubes
+        self.stats_jogo = self._stats_a_zero()
 
         info_c = obter_info_equipa(casa_id)
         info_f = obter_info_equipa(fora_id)
@@ -1781,7 +1830,7 @@ class Game(OnlineMixin):
             return
         from carreira_jogador_menu import cor_nota
         s = self.screen
-        caixa = pygame.Rect(WIDTH - 420, 12, 330, 52)       # ao lado do botão de pausa
+        caixa = pygame.Rect(WIDTH - 384, 10, 324, 52)       # entre o marcador e o botão de pausa
         painel_hud = pygame.Surface(caixa.size, pygame.SRCALPHA)
         pygame.draw.rect(painel_hud, (8, 12, 26, 215), painel_hud.get_rect(), border_radius=10)
         pygame.draw.rect(painel_hud, (*self.kit_casa["principal"], 255), painel_hud.get_rect(), 2, border_radius=10)
