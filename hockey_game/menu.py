@@ -102,22 +102,20 @@ class BotaoMenu:
 
         surf.blit(_fundo_botao(r.size, self.cor, k, raio), (r.x, r.y))
 
-        # Ícone dentro de um círculo (mais pequeno nos botões baixos, como o SAIR, para não sair
-        # para fora do botão)
-        rc = min(25, r.height // 2 - 5)
-        cx, cy = r.x + 15 + rc, r.centery
+        # Ícone dentro de um círculo
+        cx, cy = r.x + 40, r.centery
         cor_circ = misturar(escurecer(self.cor, 0.3), (255, 255, 255), k)
-        pygame.draw.circle(surf, misturar(cor_circ, (0, 0, 0), 0.5), (cx, cy + 2), rc)
-        pygame.draw.circle(surf, cor_circ, (cx, cy), rc)
-        pygame.draw.circle(surf, clarear(self.cor, 0.5), (cx, cy), rc, 2)
+        pygame.draw.circle(surf, misturar(cor_circ, (0, 0, 0), 0.5), (cx, cy + 2), 25)
+        pygame.draw.circle(surf, cor_circ, (cx, cy), 25)
+        pygame.draw.circle(surf, clarear(self.cor, 0.5), (cx, cy), 25, 2)
         cor_ic = misturar((255, 255, 255), self.cor, k)
-        ic = icone(self.nome_icone, round(26 * rc / 25), cor_ic)
+        ic = icone(self.nome_icone, 26, cor_ic)
         surf.blit(ic, ic.get_rect(center=(cx, cy)))
 
         # Textos
         cor_tit = misturar((225, 232, 250), (255, 255, 255), k)
         cor_desc = misturar((130, 150, 195), (235, 240, 255), k)
-        x_txt = cx + rc + 17
+        x_txt = r.x + 82
         if self.descricao:
             texto(surf, self.titulo, 24, cor_tit, (x_txt, cy - 10), ancora="midleft")
             texto(surf, self.descricao, 14, cor_desc, (x_txt, cy + 15), ancora="midleft", negrito=False)
@@ -385,9 +383,8 @@ class MenuPrincipal:
         else:
             self.lista.draw(s)
 
-        if self.t >= 0.7:     # só depois de os botões chegarem ao lugar (senão fica por cima do SAIR)
-            texto(s, "↑ ↓  escolher     ENTER  confirmar", 12, (120, 145, 195),
-                  (WIDTH // 2, 652), negrito=False)
+        texto(s, "↑ ↓  escolher     ENTER  confirmar", 12, (120, 145, 195),
+              (WIDTH // 2, 652), negrito=False)
         # Rodapé
         pygame.draw.line(s, (40, 60, 105), (WIDTH // 2 - 220, HEIGHT - 42), (WIDTH // 2 + 220, HEIGHT - 42), 1)
         texto(s, "Projeto PAP  •  Vasco Andreia e Rafael Silveira  •  2026/2027", 13, (110, 130, 175),

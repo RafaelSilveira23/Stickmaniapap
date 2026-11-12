@@ -304,10 +304,7 @@ def sprite_equipamento(kit: dict, tamanho: int, t: float = 0.0, virar: bool = Fa
         from cores import escurecer_stick
         _cache_preview[chave] = escurecer_stick(("preview", base, virar), frames)
     pequenos = recolorir_frames(("preview", base, virar), _cache_preview[chave], kit)
-    # Os frames 1 e 3 são de frente e o 2 é de lado: passar pelos três seguidos fazia o jogador
-    # "virar-se" a cada 0,4 s e parecia um erro. Agora fica no frame 1 e de vez em quando olha
-    # para a frente (frame 3) durante meio segundo, como um jogador à espera.
-    idx = 2 if (t % 2.6) >= 2.0 else 0
+    idx = int(t * 2.5) % len(pequenos)
     chave_amp = (id(pequenos[idx]), tamanho)
     if chave_amp not in _cache_ampliado:
         _cache_ampliado[chave_amp] = pygame.transform.scale(pequenos[idx], (tamanho, tamanho))
