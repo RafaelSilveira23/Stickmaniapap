@@ -8,6 +8,7 @@ from graficos import sombra_suave
 from settings import *
 from animation import AnimationController, load_animation_from_names
 from cores import recolorir_frames, escurecer_stick
+import comando
 
 # ---------- Constantes ----------
 PLAYER_SPEED   = 200
@@ -229,7 +230,7 @@ class Player(pygame.sprite.Sprite):
     # ------------------------------------------------------------------ #
 
     def _input_humano(self):
-        keys = pygame.key.get_pressed()
+        keys = comando.teclas()          # teclado + comando
         vx, vy = 0.0, 0.0
 
         if self.teclas == "wasd":

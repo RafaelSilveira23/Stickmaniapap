@@ -4,7 +4,7 @@ Planeamento do projeto da PAP, de setembro de 2026 a junho de 2027. O GitHub des
 a partir do código Mermaid abaixo. As barras escuras são tarefas concluídas, as realçadas estão
 em curso e as claras estão planeadas.
 
-**Divisão de tarefas:** o projeto é feito em dupla. Cada tarefa diz entre parênteses quem a fez (Vasco Andreia: 17 tarefas; Rafael da Hora Silveira: 10; os dois: 12). Na imagem do relatório ([`09_gantt.png`](diagramas/09_gantt.png)) a cor de cada barra mostra quem fez a tarefa.
+**Divisão de tarefas:** o projeto é feito em dupla. Cada tarefa diz entre parênteses quem a fez (Vasco Andreia: 18 tarefas; Rafael da Hora Silveira: 10; os dois: 12). Na imagem do relatório ([`09_gantt.png`](diagramas/09_gantt.png)) a cor de cada barra mostra quem fez a tarefa.
 
 > Este ficheiro é gerado pelo script [`docs/diagramas/gerar_gantt.py`](diagramas/gerar_gantt.py),
 > o mesmo que faz a imagem do relatório ([`09_gantt.png`](diagramas/09_gantt.png)): os dois têm
@@ -19,7 +19,7 @@ gantt
     todayMarker off
     section Análise e planeamento
     Anteprojeto, requisitos e escolha das tecnologias (Os dois) :done, t1, 2026-09-15, 2026-10-10
-    section Desenvolvimento (versões 1 a 31)
+    section Desenvolvimento (versões 1 a 32)
     Protótipo - rinque, jogadores, bola e física (Rafael) :done, t2, 2026-10-01, 2026-10-10
     Interface do mockup, símbolos e seleção de equipas (Vasco) :done, t3, 2026-10-06, 2026-10-15
     IA com três níveis de dificuldade (Vasco) :done, t4, 2026-10-11, 2026-10-20
@@ -53,13 +53,14 @@ gantt
     Cânticos dos clubes (feitos por código) (Vasco) :done, t32, 2027-03-29, 2027-04-04
     2.ª divisão, Taça Europeia e clubes espanhóis (Os dois) :done, t33, 2027-04-05, 2027-04-18
     Interface - marcador, painel e estatísticas (Vasco) :done, t34, 2027-04-19, 2027-04-25
+    Jogar com um comando (Xbox ou PlayStation) (Vasco) :done, t35, 2027-04-26, 2027-05-02
     section Novas funcionalidades
-    Estatísticas da partida e modo de 2 jogadores (Os dois) :t35, 2026-11-16, 2026-12-31
-    Mais estatísticas e transferências (Os dois) :t36, 2027-01-07, 2027-03-31
+    Estatísticas da partida e modo de 2 jogadores (Os dois) :t36, 2026-11-16, 2026-12-31
+    Mais estatísticas e transferências (Os dois) :t37, 2027-01-07, 2027-03-31
     section Validação e entrega
-    Testes com colegas, correção de erros, sprites (Os dois) :t37, 2027-03-01, 2027-04-30
-    Relatório final, manual e apresentação (Os dois) :active, t38, 2027-04-01, 2027-05-31
-    Defesa da PAP (Os dois) :t39, 2027-06-01, 2027-06-30
+    Testes com colegas, correção de erros, sprites (Os dois) :t38, 2027-03-01, 2027-04-30
+    Relatório final, manual e apresentação (Os dois) :active, t39, 2027-04-01, 2027-05-31
+    Defesa da PAP (Os dois) :t40, 2027-06-01, 2027-06-30
 ```
 
 ## Tarefas
@@ -67,41 +68,42 @@ gantt
 | N.º | Fase | Tarefa | Quem fez | Início | Fim | Estado |
 |---|---|---|---|---|---|---|
 | 1 | Análise e planeamento | Anteprojeto, requisitos e escolha das tecnologias | **Os dois** | 15/09/2026 | 10/10/2026 | Concluído |
-| 2 | Desenvolvimento (versões 1 a 31) | Protótipo: rinque, jogadores, bola e física | **Rafael da Hora Silveira** | 01/10/2026 | 10/10/2026 | Concluído |
-| 3 | Desenvolvimento (versões 1 a 31) | Interface do mockup, símbolos e seleção de equipas | **Vasco Andreia** | 06/10/2026 | 15/10/2026 | Concluído |
-| 4 | Desenvolvimento (versões 1 a 31) | IA com três níveis de dificuldade | **Vasco Andreia** | 11/10/2026 | 20/10/2026 | Concluído |
-| 5 | Desenvolvimento (versões 1 a 31) | Mira de remate e faltas | **Rafael da Hora Silveira** | 11/10/2026 | 20/10/2026 | Concluído |
-| 6 | Desenvolvimento (versões 1 a 31) | Animações, balizas, câmara e bancadas | **Rafael da Hora Silveira** | 16/10/2026 | 24/10/2026 | Concluído |
-| 7 | Desenvolvimento (versões 1 a 31) | Correção das colisões | **Rafael da Hora Silveira** | 21/10/2026 | 28/10/2026 | Concluído |
-| 8 | Desenvolvimento (versões 1 a 31) | IA tática e guarda-redes | **Vasco Andreia** | 21/10/2026 | 28/10/2026 | Concluído |
-| 9 | Desenvolvimento (versões 1 a 31) | Correção da bola no stick e da ordem de desenho | **Rafael da Hora Silveira** | 25/10/2026 | 31/10/2026 | Concluído |
-| 10 | Desenvolvimento (versões 1 a 31) | Modo carreira: campeonato e calendário | **Os dois** | 01/11/2026 | 08/11/2026 | Concluído |
-| 11 | Desenvolvimento (versões 1 a 31) | Base de dados SQLite | **Vasco Andreia** | 01/11/2026 | 08/11/2026 | Concluído |
-| 12 | Desenvolvimento (versões 1 a 31) | Menu novo, definições e ecrã inteiro | **Vasco Andreia** | 04/11/2026 | 11/11/2026 | Concluído |
-| 13 | Desenvolvimento (versões 1 a 31) | Gráficos do rinque e do pavilhão | **Rafael da Hora Silveira** | 04/11/2026 | 11/11/2026 | Concluído |
-| 14 | Desenvolvimento (versões 1 a 31) | Sons criados por síntese | **Vasco Andreia** | 08/11/2026 | 15/11/2026 | Concluído |
-| 15 | Desenvolvimento (versões 1 a 31) | Simulação dos jogos e ecrãs da carreira | **Os dois** | 08/11/2026 | 15/11/2026 | Concluído |
-| 16 | Desenvolvimento (versões 1 a 31) | Planteis reais, marcadores e melhores marcadores | **Os dois** | 11/11/2026 | 18/11/2026 | Concluído |
-| 17 | Desenvolvimento (versões 1 a 31) | Estilo arcade (golos e impactos) | **Os dois** | 15/11/2026 | 21/11/2026 | Concluído |
-| 18 | Desenvolvimento (versões 1 a 31) | Remate na primeira pessoa e modo teste | **Vasco Andreia** | 18/11/2026 | 24/11/2026 | Concluído |
-| 19 | Desenvolvimento (versões 1 a 31) | Remate em movimento, defesas e bloqueio | **Vasco Andreia** | 21/11/2026 | 27/11/2026 | Concluído |
-| 20 | Desenvolvimento (versões 1 a 31) | Ecrã do remate (pavilhão, placas, stick) | **Vasco Andreia** | 24/11/2026 | 30/11/2026 | Concluído |
-| 21 | Desenvolvimento (versões 1 a 31) | Defesas no remate: perspetiva e sprites HD | **Vasco Andreia** | 27/11/2026 | 03/12/2026 | Concluído |
-| 22 | Desenvolvimento (versões 1 a 31) | Carreira de jogador (só o meu jogador) | **Vasco Andreia** | 04/12/2026 | 18/12/2026 | Concluído |
-| 23 | Desenvolvimento (versões 1 a 31) | Vida do jogador: escolhas, eventos e atividades | **Vasco Andreia** | 14/12/2026 | 31/12/2026 | Concluído |
-| 24 | Desenvolvimento (versões 1 a 31) | Menus: pausa, fim de jogo e transições | **Vasco Andreia** | 28/12/2026 | 10/01/2027 | Concluído |
-| 25 | Desenvolvimento (versões 1 a 31) | Vida: pessoas, consequências e conquistas | **Vasco Andreia** | 11/01/2027 | 24/01/2027 | Concluído |
-| 26 | Desenvolvimento (versões 1 a 31) | Otimização, arranque sem consola e limpeza | **Os dois** | 25/01/2027 | 31/01/2027 | Concluído |
-| 27 | Desenvolvimento (versões 1 a 31) | Modo online: jogar contra um amigo pela internet | **Rafael da Hora Silveira** | 01/02/2027 | 14/02/2027 | Concluído |
-| 28 | Desenvolvimento (versões 1 a 31) | Versão para o browser (site) e online com código | **Rafael da Hora Silveira** | 15/02/2027 | 28/02/2027 | Concluído |
-| 29 | Desenvolvimento (versões 1 a 31) | Aplicação para Windows, instalador e servidor online | **Rafael da Hora Silveira** | 01/03/2027 | 14/03/2027 | Concluído |
-| 30 | Desenvolvimento (versões 1 a 31) | Guarda-redes no ecrã do remate (animação) | **Vasco Andreia** | 15/03/2027 | 21/03/2027 | Concluído |
-| 31 | Desenvolvimento (versões 1 a 31) | Stickada no online e servidor na Europa | **Rafael da Hora Silveira** | 22/03/2027 | 28/03/2027 | Concluído |
-| 32 | Desenvolvimento (versões 1 a 31) | Cânticos dos clubes (feitos por código) | **Vasco Andreia** | 29/03/2027 | 04/04/2027 | Concluído |
-| 33 | Desenvolvimento (versões 1 a 31) | 2.ª divisão, Taça Europeia e clubes espanhóis | **Os dois** | 05/04/2027 | 18/04/2027 | Concluído |
-| 34 | Desenvolvimento (versões 1 a 31) | Interface: marcador, painel e estatísticas | **Vasco Andreia** | 19/04/2027 | 25/04/2027 | Concluído |
-| 35 | Novas funcionalidades | Estatísticas da partida e modo de 2 jogadores | **Os dois** | 16/11/2026 | 31/12/2026 | Planeado |
-| 36 | Novas funcionalidades | Mais estatísticas e transferências | **Os dois** | 07/01/2027 | 31/03/2027 | Planeado |
-| 37 | Validação e entrega | Testes com colegas, correção de erros, sprites | **Os dois** | 01/03/2027 | 30/04/2027 | Planeado |
-| 38 | Validação e entrega | Relatório final, manual e apresentação | **Os dois** | 01/04/2027 | 31/05/2027 | Em curso |
-| 39 | Validação e entrega | Defesa da PAP | **Os dois** | 01/06/2027 | 30/06/2027 | Planeado |
+| 2 | Desenvolvimento (versões 1 a 32) | Protótipo: rinque, jogadores, bola e física | **Rafael da Hora Silveira** | 01/10/2026 | 10/10/2026 | Concluído |
+| 3 | Desenvolvimento (versões 1 a 32) | Interface do mockup, símbolos e seleção de equipas | **Vasco Andreia** | 06/10/2026 | 15/10/2026 | Concluído |
+| 4 | Desenvolvimento (versões 1 a 32) | IA com três níveis de dificuldade | **Vasco Andreia** | 11/10/2026 | 20/10/2026 | Concluído |
+| 5 | Desenvolvimento (versões 1 a 32) | Mira de remate e faltas | **Rafael da Hora Silveira** | 11/10/2026 | 20/10/2026 | Concluído |
+| 6 | Desenvolvimento (versões 1 a 32) | Animações, balizas, câmara e bancadas | **Rafael da Hora Silveira** | 16/10/2026 | 24/10/2026 | Concluído |
+| 7 | Desenvolvimento (versões 1 a 32) | Correção das colisões | **Rafael da Hora Silveira** | 21/10/2026 | 28/10/2026 | Concluído |
+| 8 | Desenvolvimento (versões 1 a 32) | IA tática e guarda-redes | **Vasco Andreia** | 21/10/2026 | 28/10/2026 | Concluído |
+| 9 | Desenvolvimento (versões 1 a 32) | Correção da bola no stick e da ordem de desenho | **Rafael da Hora Silveira** | 25/10/2026 | 31/10/2026 | Concluído |
+| 10 | Desenvolvimento (versões 1 a 32) | Modo carreira: campeonato e calendário | **Os dois** | 01/11/2026 | 08/11/2026 | Concluído |
+| 11 | Desenvolvimento (versões 1 a 32) | Base de dados SQLite | **Vasco Andreia** | 01/11/2026 | 08/11/2026 | Concluído |
+| 12 | Desenvolvimento (versões 1 a 32) | Menu novo, definições e ecrã inteiro | **Vasco Andreia** | 04/11/2026 | 11/11/2026 | Concluído |
+| 13 | Desenvolvimento (versões 1 a 32) | Gráficos do rinque e do pavilhão | **Rafael da Hora Silveira** | 04/11/2026 | 11/11/2026 | Concluído |
+| 14 | Desenvolvimento (versões 1 a 32) | Sons criados por síntese | **Vasco Andreia** | 08/11/2026 | 15/11/2026 | Concluído |
+| 15 | Desenvolvimento (versões 1 a 32) | Simulação dos jogos e ecrãs da carreira | **Os dois** | 08/11/2026 | 15/11/2026 | Concluído |
+| 16 | Desenvolvimento (versões 1 a 32) | Planteis reais, marcadores e melhores marcadores | **Os dois** | 11/11/2026 | 18/11/2026 | Concluído |
+| 17 | Desenvolvimento (versões 1 a 32) | Estilo arcade (golos e impactos) | **Os dois** | 15/11/2026 | 21/11/2026 | Concluído |
+| 18 | Desenvolvimento (versões 1 a 32) | Remate na primeira pessoa e modo teste | **Vasco Andreia** | 18/11/2026 | 24/11/2026 | Concluído |
+| 19 | Desenvolvimento (versões 1 a 32) | Remate em movimento, defesas e bloqueio | **Vasco Andreia** | 21/11/2026 | 27/11/2026 | Concluído |
+| 20 | Desenvolvimento (versões 1 a 32) | Ecrã do remate (pavilhão, placas, stick) | **Vasco Andreia** | 24/11/2026 | 30/11/2026 | Concluído |
+| 21 | Desenvolvimento (versões 1 a 32) | Defesas no remate: perspetiva e sprites HD | **Vasco Andreia** | 27/11/2026 | 03/12/2026 | Concluído |
+| 22 | Desenvolvimento (versões 1 a 32) | Carreira de jogador (só o meu jogador) | **Vasco Andreia** | 04/12/2026 | 18/12/2026 | Concluído |
+| 23 | Desenvolvimento (versões 1 a 32) | Vida do jogador: escolhas, eventos e atividades | **Vasco Andreia** | 14/12/2026 | 31/12/2026 | Concluído |
+| 24 | Desenvolvimento (versões 1 a 32) | Menus: pausa, fim de jogo e transições | **Vasco Andreia** | 28/12/2026 | 10/01/2027 | Concluído |
+| 25 | Desenvolvimento (versões 1 a 32) | Vida: pessoas, consequências e conquistas | **Vasco Andreia** | 11/01/2027 | 24/01/2027 | Concluído |
+| 26 | Desenvolvimento (versões 1 a 32) | Otimização, arranque sem consola e limpeza | **Os dois** | 25/01/2027 | 31/01/2027 | Concluído |
+| 27 | Desenvolvimento (versões 1 a 32) | Modo online: jogar contra um amigo pela internet | **Rafael da Hora Silveira** | 01/02/2027 | 14/02/2027 | Concluído |
+| 28 | Desenvolvimento (versões 1 a 32) | Versão para o browser (site) e online com código | **Rafael da Hora Silveira** | 15/02/2027 | 28/02/2027 | Concluído |
+| 29 | Desenvolvimento (versões 1 a 32) | Aplicação para Windows, instalador e servidor online | **Rafael da Hora Silveira** | 01/03/2027 | 14/03/2027 | Concluído |
+| 30 | Desenvolvimento (versões 1 a 32) | Guarda-redes no ecrã do remate (animação) | **Vasco Andreia** | 15/03/2027 | 21/03/2027 | Concluído |
+| 31 | Desenvolvimento (versões 1 a 32) | Stickada no online e servidor na Europa | **Rafael da Hora Silveira** | 22/03/2027 | 28/03/2027 | Concluído |
+| 32 | Desenvolvimento (versões 1 a 32) | Cânticos dos clubes (feitos por código) | **Vasco Andreia** | 29/03/2027 | 04/04/2027 | Concluído |
+| 33 | Desenvolvimento (versões 1 a 32) | 2.ª divisão, Taça Europeia e clubes espanhóis | **Os dois** | 05/04/2027 | 18/04/2027 | Concluído |
+| 34 | Desenvolvimento (versões 1 a 32) | Interface: marcador, painel e estatísticas | **Vasco Andreia** | 19/04/2027 | 25/04/2027 | Concluído |
+| 35 | Desenvolvimento (versões 1 a 32) | Jogar com um comando (Xbox ou PlayStation) | **Vasco Andreia** | 26/04/2027 | 02/05/2027 | Concluído |
+| 36 | Novas funcionalidades | Estatísticas da partida e modo de 2 jogadores | **Os dois** | 16/11/2026 | 31/12/2026 | Planeado |
+| 37 | Novas funcionalidades | Mais estatísticas e transferências | **Os dois** | 07/01/2027 | 31/03/2027 | Planeado |
+| 38 | Validação e entrega | Testes com colegas, correção de erros, sprites | **Os dois** | 01/03/2027 | 30/04/2027 | Planeado |
+| 39 | Validação e entrega | Relatório final, manual e apresentação | **Os dois** | 01/04/2027 | 31/05/2027 | Em curso |
+| 40 | Validação e entrega | Defesa da PAP | **Os dois** | 01/06/2027 | 30/06/2027 | Planeado |

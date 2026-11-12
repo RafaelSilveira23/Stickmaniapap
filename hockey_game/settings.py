@@ -34,6 +34,6 @@ AREA_H          = 250  # altura da grande área
 BALIZA_OFFSET   = 115  # distância da linha de golo à tabela (permite patinar atrás!)
 
 # ---------- HUD Inferior (Mini-mapa, Cartão e Controlos) ----------
-VERSAO_JOGO     = "31"                  # mostrada no menu principal e nas definições
+VERSAO_JOGO     = "32"                  # mostrada no menu principal e nas definições
 HUD_BAIXO_Y     = 536
 HUD_BAIXO_H     = HEIGHT - HUD_BAIXO_Y    # = 184

@@ -45,6 +45,7 @@ from rede import Servidor, VERSAO
 from remate_pov import MEIA_BOCA, RematePOV, decisao_para_rede, decisao_da_rede
 from sons import som
 from team import EQUIPAS_LISTA
+import comando
 
 ESTADOS_POR_SEGUNDO = 30
 DIFICULDADE_ONLINE = "normal"   # colegas e guarda-redes das duas equipas jogam ao mesmo nível
@@ -537,7 +538,7 @@ class OnlineMixin:
         """(dx, dy, sprint) das teclas que se estão a carregar (0 se o jogo está parado)."""
         if self.pausado or self.fim_jogo:
             return 0, 0, False
-        k = pygame.key.get_pressed()
+        k = comando.teclas()             # teclado + comando
         dx = int(k[pygame.K_RIGHT] or k[pygame.K_d]) - int(k[pygame.K_LEFT] or k[pygame.K_a])
         dy = int(k[pygame.K_DOWN] or k[pygame.K_s]) - int(k[pygame.K_UP] or k[pygame.K_w])
         return dx, dy, bool(k[pygame.K_LSHIFT] or k[pygame.K_RSHIFT])

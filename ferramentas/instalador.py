@@ -19,7 +19,7 @@ import threading
 import zipfile
 
 NOME = "StickMania"
-VERSAO = "31"
+VERSAO = "32"
 EDITOR = "Rafael da Hora Silveira e Vasco Andreia (PAP)"
 CHAVE_REGISTO = r"Software\Microsoft\Windows\CurrentVersion\Uninstall\StickMania"
 SEM_JANELA = 0x08000000                     # CREATE_NO_WINDOW (o PowerShell não abre consola)

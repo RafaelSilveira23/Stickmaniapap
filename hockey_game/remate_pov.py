@@ -30,6 +30,8 @@ tempo de reação, velocidade de mergulho, alcance (menor nos cantos de cima) e 
 o lado do remate. Depois o jogo 2D continua com a bola no sítio certo.
 """
 import math
+
+import comando
 import os
 import random
 
@@ -521,7 +523,7 @@ class RematePOV:
         if self.estado == "mirar" and self.espectador:
             self.u_gr = self.u_gr0 + max(-12.0, min(12.0, self.u * 0.15))
         elif self.estado == "mirar":
-            teclas = pygame.key.get_pressed()
+            teclas = comando.teclas()    # teclado + stick do comando
             du = (teclas[pygame.K_RIGHT] or teclas[pygame.K_d]) - (teclas[pygame.K_LEFT] or teclas[pygame.K_a])
             dh = (teclas[pygame.K_UP] or teclas[pygame.K_w]) - (teclas[pygame.K_DOWN] or teclas[pygame.K_s])
             self.u = max(-58.0, min(58.0, self.u + du * self.sinal_u * 70 * dt))

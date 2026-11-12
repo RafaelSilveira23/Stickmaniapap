@@ -53,7 +53,7 @@ DONO_32 = {
     "Marcadores": C, "Força das equipas no jogo": C,
     "Base de dados": V,
     "Menu principal e definições": V, "Escolha das equipas por divisão": V,
-    "Marcador e painel do jogo": V, "Estatísticas da partida": V, "Menu principal com mais espaço": V,
+    "Marcador e painel do jogo": V, "Estatísticas da partida": V, "Menu principal com mais espaço": V, "Jogar com um comando": V,
     "Gráficos": R,
     "Sons": V, "Sons no jogo": V, "Cânticos dos clubes": V, "Cânticos no jogo": V,
     "Estilo arcade": C, "Tempo de jogo e ecrã a tremer": C,

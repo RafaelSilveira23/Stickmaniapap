@@ -26,6 +26,7 @@ from carreira_menu import EcraCarreiraEscolha, EcraCampeonato
 from carreira_jogador import CarreiraJogador, CAMINHO_BD_JOGADOR, atributos as atributos_jogador, calcular_nota
 from carreira_jogador_menu import EcraCriarJogador, EcraCarreiraJogador
 from online import OnlineMixin
+import comando
 
 DURACAO_PARTE = 60 * 5   # 5 minutos por parte
 DIFICULDADE_EQUIPA_HUMANA = "normal"   # nível dos colegas e do GR do jogador humano
@@ -495,6 +496,13 @@ class Game(OnlineMixin):
         self.estado = "controlos"
 
     def handle_events(self):
+        # Comando: os botões passam a teclas (ver comando.py). Tem de ser antes de ler os eventos.
+        if self.estado == "jogo" and self.remate_pov is not None:
+            comando.processar("pov")
+        elif self.estado == "jogo" and not self.pausado and not self.fim_jogo:
+            comando.processar("jogo")
+        else:
+            comando.processar("menu")
         # F11 funciona em qualquer ecrã (os outros eventos voltam para a fila, pela mesma ordem)
         teclas = pygame.event.get(pygame.KEYDOWN)
         if any(e.key == pygame.K_F11 for e in teclas):
@@ -750,7 +758,8 @@ class Game(OnlineMixin):
                 elif event.key == pygame.K_z:
                     if self.modo_jogador and not self.jogador_humano.tem_bola:
                         self._pedir_bola()
-                    elif self.tipo_passe == "z":     # no modo "clique" o passe é feito com o rato
+                    elif self.tipo_passe == "z" or getattr(event, "comando", False):
+                        # no modo "clique" o passe é feito com o rato (mas o botão A do comando passa sempre)
                         self._acao_passe()
                 elif event.key == pygame.K_x:
                     self._acao_remate()

@@ -12,6 +12,7 @@ import pygame
 import fontes
 from settings import *
 from team import carregar_logo_equipa, obter_info_equipa
+import comando
 from cores import cor_texto_sobre, cor_visivel_em_escuro, clarear, escurecer, misturar
 
 COR_DOURADO = (255, 205, 60)
@@ -352,7 +353,8 @@ class HUDController:
     # ------------------------------------------------------------------ #
 
     def _draw_action_buttons(self, screen: pygame.Surface, game=None):
-        keys = pygame.key.get_pressed()
+        keys = comando.teclas()
+        com_comando = comando.ligado()
         passe_clique = getattr(game, "tipo_passe", "tecla") == "clique"
 
         for chave, btn in self.btn_rects.items():
@@ -374,7 +376,10 @@ class HUDController:
             # Nome da ação e a tecla, numa "tecla" desenhada
             t_lbl = self.font_btn.render(btn["label"], True, (240, 245, 255))
             screen.blit(t_lbl, (cx - t_lbl.get_width() // 2, cy + raio + 8))
-            atalho = "CLIQUE" if chave == "passe" and passe_clique else btn["atalho"]
+            if com_comando:     # com um comando ligado mostra os botões dele
+                atalho = {"remate": "B", "passe": "A", "acelerar": "RB", "defender": "X"}.get(chave, btn["atalho"])
+            else:
+                atalho = "CLIQUE" if chave == "passe" and passe_clique else btn["atalho"]
             t_key = self.font_key.render(atalho, True, (200, 215, 245))
             tecla = pygame.Rect(0, 0, max(26, t_key.get_width() + 14), 18)
             tecla.midtop = (cx, cy + raio + 27)

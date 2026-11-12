@@ -16,6 +16,7 @@ import random
 import pygame
 import fontes
 from settings import WIDTH, HEIGHT, VERSAO_JOGO
+import comando
 from team import EQUIPAS_LISTA, COMPETICOES, competicao_da_equipa, obter_info_equipa, carregar_logo_equipa
 from ai import DIFICULDADES
 from cores import (definir_equipamentos, cor_linhas_campo, cor_visivel_em_escuro,
@@ -471,6 +472,27 @@ CONTROLOS = [
     ]),
 ]
 
+# Com um comando ligado, o ecrã das definições mostra os botões dele (nomes da Xbox)
+CONTROLOS_COMANDO = [
+    ("MOVIMENTO", [
+        ("Stick esquerdo  /  Setas", "Mover o jogador"),
+        ("RB  /  RT", "Sprint (correr mais rápido)"),
+        ("X  /  Y  /  LB", "Trocar de jogador (carreira de jogador: pedir a bola)"),
+    ]),
+    ("COM A BOLA", [
+        ("A", "Passe"),
+        ("B", "Remate na primeira pessoa"),
+        ("Stick esquerdo", "Apontar à baliza (no remate)"),
+        ("Manter B", "Força do remate (larga para rematar)"),
+    ]),
+    ("JOGO E MENUS", [
+        ("START", "Pausa"),
+        ("BACK", "Pausa (no ecrã do remate, cancela o remate)"),
+        ("A  /  B", "Confirmar  /  voltar, nos menus"),
+        ("LB  /  RB", "Mudar de separador, nos menus"),
+    ]),
+]
+
 
 def _interruptor(surf, centro, ligado: bool, k_foco: float):
     """Interruptor (ligado/desligado) como nos telemóveis."""
@@ -667,9 +689,11 @@ class EcraControlos:
         # ── Painel dos controlos ─────────────────────────────────────────
         caixa = self.rect_painel_teclas
         painel(s, caixa, alpha=228)
-        texto(s, "CONTROLOS", 18, COR_TEXTO, (caixa.left + 30, caixa.top + 28), ancora="midleft")
+        com_comando = comando.ligado()
+        texto(s, "CONTROLOS  •  COMANDO" if com_comando else "CONTROLOS", 18, COR_TEXTO,
+              (caixa.left + 30, caixa.top + 28), ancora="midleft")
         y = caixa.top + 62
-        for secao, linhas in CONTROLOS:
+        for secao, linhas in (CONTROLOS_COMANDO if com_comando else CONTROLOS):
             texto(s, secao, 13, COR_DESTAQUE, (caixa.left + 30, y), ancora="midleft")
             pygame.draw.line(s, (40, 65, 120), (caixa.left + 130, y), (caixa.right - 30, y), 1)
             y += 27
