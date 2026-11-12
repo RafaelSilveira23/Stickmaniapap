@@ -147,6 +147,7 @@ Para testar no próprio PC: `python servidor/servidor.py` (porta 8765) e, antes 
   desenhada ("DEFESA!", "POSTE!", "ROUBO!"), rasto da bola e contorno nos jogadores (`hockey_game/efeitos.py`)
 - **Sons** criados por síntese no código (sem ficheiros de fora): apito, tacadas, tabelas, postes,
   defesas, golo com buzina e público; volume dos efeitos e do público nas Definições
+- **Interface do jogo**: marcador ao centro como na televisão (emblemas, nomes, faltas, golos e relógio), painel de baixo com mini-mapa, cartão do jogador e teclas das ações, e **estatísticas da partida** (remates, defesas, posse de bola e faltas) na pausa e no fim do jogo
 - **Cânticos dos clubes**: cada clube tem um cântico original, composto no código (`hockey_game/canticos.py`):
   a bancada canta uma melodia a várias vozes, grita o nome do clube e bate palmas, com o ritmo e o
   instrumento do clube (bombos e metais no FC Porto, fanfarra no Benfica, concertina no Barcelos, guitarra
