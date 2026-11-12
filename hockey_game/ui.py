@@ -445,10 +445,20 @@ class HUDController:
         # Ícone de Apito / Alerta
         cx_ico = bx + 36
         cy_ico = by + bh // 2
-        pygame.draw.circle(screen, cor_borda, (cx_ico, cy_ico), 18)
-        f_ico = fontes.SysFont("Arial", 18, bold=True)
-        t_ico = f_ico.render("!", True, (10, 16, 32))
-        screen.blit(t_ico, (cx_ico - t_ico.get_width() // 2, cy_ico - t_ico.get_height() // 2))
+        cartao = getattr(game, "_falta_cartao", None)
+        if cartao:
+            # Cartão azul ou vermelho, ligeiramente inclinado
+            img = pygame.Surface((24, 32), pygame.SRCALPHA)
+            cor_cartao = {"azul": (60, 140, 255), "amarelo": (250, 205, 40)}.get(cartao, (230, 45, 45))
+            pygame.draw.rect(img, cor_cartao, img.get_rect(), border_radius=3)
+            pygame.draw.rect(img, (255, 255, 255), img.get_rect(), 2, border_radius=3)
+            img = pygame.transform.rotate(img, -12)
+            screen.blit(img, img.get_rect(center=(cx_ico, cy_ico)))
+        else:
+            pygame.draw.circle(screen, cor_borda, (cx_ico, cy_ico), 18)
+            f_ico = fontes.SysFont("Arial", 18, bold=True)
+            t_ico = f_ico.render("!", True, (10, 16, 32))
+            screen.blit(t_ico, (cx_ico - t_ico.get_width() // 2, cy_ico - t_ico.get_height() // 2))
 
         # Título da Falta
         f_tit = fontes.SysFont("Arial", 17, bold=True)

@@ -26,6 +26,7 @@ from carreira_menu import EcraCarreiraEscolha, EcraCampeonato
 from carreira_jogador import CarreiraJogador, CAMINHO_BD_JOGADOR, atributos as atributos_jogador, calcular_nota
 from carreira_jogador_menu import EcraCriarJogador, EcraCarreiraJogador
 from online import OnlineMixin
+from faltas import FaltasMixin
 import comando
 
 DURACAO_PARTE = 60 * 5   # 5 minutos por parte
@@ -44,7 +45,7 @@ FORMACAO = [
 CAMINHO_DEFINICOES = os.path.join(PASTA_SAVES, "definicoes.json")
 
 
-class Game(OnlineMixin):
+class Game(OnlineMixin, FaltasMixin):
     def __init__(self):
         pygame.init()
         definicoes = self._ler_definicoes()
@@ -154,6 +155,7 @@ class Game(OnlineMixin):
         self._msg_falta      = ""
         self._msg_falta_sub  = ""
         self._falta_tipo     = "livre"     # "livre", "livre_direto", "penalti"
+        self._faltas_reiniciar()           # bolas paradas e cartões (faltas.py)
 
         # ── Dificuldade da IA ──────────────────────────────────────────
         self.dificuldade     = "normal"    # "facil", "normal", "dificil"
@@ -1233,8 +1235,14 @@ class Game(OnlineMixin):
                 self._msg_timer -= dt_real
             return
 
-        # Cronómetro
-        self.tempo_restante -= dt
+        # Penálti / livre direto a preparar: o jogo está parado (faltas.py)
+        if self._bola_parada is not None and self._atualizar_bola_parada(dt):
+            return
+
+        # Cronómetro (pára nas bolas paradas, como no hóquei a sério)
+        if self._bola_parada is None:
+            self.tempo_restante -= dt
+            self._atualizar_suspensos(dt)       # jogadores fora por cartão
         if self.tempo_restante <= 0:
             self._fim_de_parte()
             return
@@ -1276,11 +1284,17 @@ class Game(OnlineMixin):
                 agente.jogador.set_target(0.0, 0.0)
         else:
             for agente in self.agentes_vermelhos:
+                if self._agente_espera(agente):      # vai marcar o livre: espera um instante
+                    agente.jogador.set_target(0.0, 0.0)
+                    continue
                 colegas = [j for j in lista_verm if j != agente.jogador]
                 agente.update(dt, self.bola, colegas, lista_azul)
 
         # IA Azul (colegas de equipa)
         for agente in self.agentes_azul:
+            if self._agente_espera(agente):
+                agente.jogador.set_target(0.0, 0.0)
+                continue
             colegas_com_humano = [j for j in lista_azul if j != agente.jogador]
             agente.update(dt, self.bola, colegas_com_humano, lista_verm)
 
@@ -1319,7 +1333,9 @@ class Game(OnlineMixin):
                 j.afastar_de(gr.pos_x, gr.pos_y, RAIO_GR_CORPO)
 
         if falta_detetada and self.jogo_ativo and self._reposicao_pendente is None:
-            self.assinalar_falta(falta_detetada["infrator"], falta_detetada["vitima"], falta_detetada.get("pos"))
+            self.assinalar_falta(falta_detetada["infrator"], falta_detetada["vitima"], falta_detetada.get("pos"),
+                                 falta_detetada.get("gravidade", "normal"))
+        self._restricoes_livre()               # num livre, os adversários ficam afastados
 
         # Atualizar bola (com física de tabelas e balizas)
         # Guarda-redes primeiro (posicionam-se), depois a bola (que já testa as defesas deles)
@@ -1404,6 +1420,7 @@ class Game(OnlineMixin):
         self._falta_ativa    = False
         self._falta_timer    = 0.0
         self._falta_cooldown = 0.0
+        self._faltas_reiniciar()
 
         # Atualizar o ringue com o emblema oficial da equipa da casa
         self.rink.definir_equipa_casa(self.equipa_casa_id)
@@ -1457,10 +1474,14 @@ class Game(OnlineMixin):
         self._msg_texto = f"Dificuldade da IA: {nomes.get(nivel, nivel.upper())}"
         self._msg_timer = 2.0
 
-    def assinalar_falta(self, infrator, vitima, pos=None):
-        """Assinala falta com apito oficial, registo no placar e reposição de posse."""
-        if self._falta_cooldown > 0 or not self.jogo_ativo:
+    def assinalar_falta(self, infrator, vitima, pos=None, gravidade: str = "normal"):
+        """
+        Assinala falta com apito oficial, registo no placar e reposição de posse.
+        gravidade ("normal", "grave" ou "violenta") decide se há cartão (ver faltas.py).
+        """
+        if self._falta_cooldown > 0 or not self.jogo_ativo or self._bola_parada is not None:
             return
+        self._falta_cartao = None
 
         self._falta_cooldown = 3.2
         self._falta_timer    = 2.2
@@ -1496,6 +1517,10 @@ class Game(OnlineMixin):
                 is_penalti = True
 
         is_livre_direto = (total_faltas >= 10 and (total_faltas == 10 or total_faltas % 5 == 0))
+        # Cartão (faltas.py). Como nas regras, um cartão azul ou vermelho dá livre direto
+        cartao = self._decidir_cartao(infrator, gravidade, is_penalti) if self._faltas_completas() else None
+        por_cartao = cartao in ("azul", "vermelho") and not is_penalti and not is_livre_direto
+        is_livre_direto = is_livre_direto or por_cartao
 
         if is_penalti:
             self._falta_tipo = "penalti"
@@ -1504,9 +1529,14 @@ class Game(OnlineMixin):
             pos_bola = (r.linha_golo_esq_x + 95 if vitima.equipa == 'azul' else r.linha_golo_dir_x - 95, cy)
         elif is_livre_direto:
             self._falta_tipo = "livre_direto"
-            self._msg_falta = f"{total_faltas}.ª FALTA DE EQUIPA  •  LIVRE DIRETO!"
-            self._msg_falta_sub = f"Livre Direto para {info_vitima['nome']} (limite de 10 faltas atingido)"
-            pos_bola = (cx - 150 if vitima.equipa == 'azul' else cx + 150, cy)
+            if por_cartao:
+                self._msg_falta = f"CARTÃO {cartao.upper()}  •  LIVRE DIRETO!"
+                self._msg_falta_sub = f"Livre Direto para {info_vitima['nome']}"
+            else:
+                self._msg_falta = f"{total_faltas}.ª FALTA DE EQUIPA  •  LIVRE DIRETO!"
+                self._msg_falta_sub = f"Livre Direto para {info_vitima['nome']} (limite de 10 faltas atingido)"
+            # Marca de livre direto: em frente à baliza, mais longe do que a de penálti
+            pos_bola = (r.linha_golo_esq_x + 135 if vitima.equipa == 'azul' else r.linha_golo_dir_x - 135, cy)
         else:
             self._falta_tipo = "livre"
             self._msg_falta = f"FALTA!  LIVRE: {info_vitima['nome'].upper()}"
@@ -1555,6 +1585,10 @@ class Game(OnlineMixin):
                     j.pos_y = pos_bola[1] + ny * 105
                     j.rect.center = (round(j.pos_x), round(j.pos_y))
                     j.set_target(0.0, 0.0)
+
+        # Livre com o jogo parado, penálti / livre direto a sério e cartões (faltas.py)
+        if self._faltas_completas():
+            self._depois_da_falta(infrator, vitima, cartao, pos_bola)
 
     def _cancelar_mira(self):
         self._mira_ativa = False
@@ -1960,6 +1994,8 @@ class Game(OnlineMixin):
         som.cantico_golo(self.equipa_casa_id if equipa == "azul" else self.equipa_fora_id)
         if self.online == "anfitriao":
             self._rede_x.append(["golo", equipa, nome])      # o convidado também faz a festa
+        self._bola_parada = None
+        self._faltas_golo(equipa)              # quem sofreu o golo recupera o jogador do cartão azul
         # Recomeça com a bola a equipa que sofreu o golo
         saida = "vermelho" if equipa == "azul" else "azul"
         if self.efeitos.ativo:
@@ -2029,6 +2065,7 @@ class Game(OnlineMixin):
         self.gr_vermelho.pos_y = float(self.rink.rect.centery)
 
     def _fim_de_parte(self):
+        self._bola_parada = None
         if self.parte == 1:
             self.parte = 2
             self.tempo_restante = float(DURACAO_PARTE)
@@ -2208,6 +2245,7 @@ class Game(OnlineMixin):
         # 6. Mira e marcador superior
         self._draw_mira()
         self.hud.draw_top_bar(self.screen, self)
+        self._desenhar_suspensos(self.screen)
         self.hud.draw_foul_banner(self.screen, self)
 
         # 7. Painel Inferior (Mini-mapa, Cartão de Jogador e Controlos)

@@ -422,7 +422,7 @@ class Player(pygame.sprite.Sprite):
         elif self.tem_bola:
             portador, defensor = self, outro
         else:
-            return None
+            return self._falta_sem_bola(outro, nx, ny, bola)
 
         # Proteções: quem acabou de ganhar a bola fica uns instantes protegido,
         # e quem acabou de a perder (ou falhou um desarme) não pode tentar logo outra vez.
@@ -448,15 +448,22 @@ class Player(pygame.sprite.Sprite):
             v_def_vec = pygame.math.Vector2(defensor.vel_x, defensor.vel_y).normalize()
             carga_por_tras = portador.vetor_direcao.dot(v_def_vec) > 0.55
 
-        # Falta? Só em choques fortes (muito menos do que antes)
+        # Falta? Cargas por trás e choques fortes (a carga por trás é a falta mais comum)
         deve_cair = False
         if portador._imunidade_queda_timer <= 0:
-            if carga_por_tras and forca_choque > 110:
-                deve_cair = random.random() < 0.40
-            elif is_sprint and forca_choque > 180:
-                deve_cair = random.random() < 0.22
-            elif forca_choque > 300:
-                deve_cair = random.random() < 0.25
+            if carga_por_tras and forca_choque > 100:
+                deve_cair = random.random() < 0.55
+            elif is_sprint and forca_choque > 170:
+                deve_cair = random.random() < 0.30
+            elif forca_choque > 280:
+                deve_cair = random.random() < 0.35
+        # Gravidade (decide o cartão): por trás e a correr = violenta; por trás ou muito forte = grave
+        if carga_por_tras and is_sprint and forca_choque > 230:
+            gravidade = "violenta"
+        elif (carga_por_tras and forca_choque > 140) or forca_choque > 320:
+            gravidade = "grave"
+        else:
+            gravidade = "normal"
 
         if deve_cair:
             portador.sofrer_queda(bola, dir_impacto)
@@ -467,16 +474,21 @@ class Player(pygame.sprite.Sprite):
                 "infrator": defensor,
                 "vitima": portador,
                 "queda": True,
+                "gravidade": gravidade, "origem": "carga",
                 "pos": (portador.pos_x, portador.pos_y)
             }
 
         # Probabilidade de ganhar a bola: depende da defesa de um e da velocidade/controlo do outro
-        p = 0.42 + (defensor.stat_defesa - 0.5 * portador.stat_velocidade - 30) / 100
+        # (antes um choque dava quase sempre a bola ao defensor; agora a maioria falha)
+        p = 0.24 + (defensor.stat_defesa - 0.5 * portador.stat_velocidade - 30) / 120
         if defensor.humano:
-            p += 0.18          # o jogador humano consegue desarmar com mais facilidade
+            p += 0.10          # o jogador humano consegue desarmar um pouco melhor
         if is_sprint:
+            p += 0.05
+        # Desarme de frente (o defensor está à frente do portador) é mais fácil do que de lado/trás
+        if portador.vetor_direcao.length_squared() > 0 and portador.vetor_direcao.dot(-dir_impacto) > 0.5:
             p += 0.08
-        p = max(0.15, min(0.85, p))
+        p = max(0.08, min(0.55, p))
 
         if random.random() < p:
             # Desarme: a bola salta para o lado do defensor, que fica com ela
@@ -485,10 +497,47 @@ class Player(pygame.sprite.Sprite):
             defensor._cooldown_desarme = 0.0
         else:
             # Falhou: o portador segura a bola e o defensor perde uns instantes
-            defensor._bloqueio_desarme = 0.5
-            portador._cooldown_desarme = 0.35
+            defensor._bloqueio_desarme = 0.9
+            portador._cooldown_desarme = 0.6
             defensor._desestabilizado_timer = 0.25
+            # Desarme falhado e com força: bateu no stick ou nas pernas do adversário = falta
+            if forca_choque > 160 and random.random() < 0.12:
+                return {"tipo": "falta", "infrator": defensor, "vitima": portador, "queda": False,
+                        "gravidade": "normal", "origem": "desarme", "pos": (portador.pos_x, portador.pos_y)}
         return None
+
+    def _falta_sem_bola(self, outro: "Player", nx: float, ny: float, bola) -> dict | None:
+        """
+        Choque forte entre adversários sem a bola, perto dela (a disputar a bola ou a marcar):
+        quem vai contra o outro com mais velocidade pode fazer falta (empurrão ou rasteira).
+        """
+        if bola is None or bola.dono is not None:
+            return None
+        if min(math.hypot(self.pos_x - bola.pos_x, self.pos_y - bola.pos_y),
+               math.hypot(outro.pos_x - bola.pos_x, outro.pos_y - bola.pos_y)) > 160:
+            return None
+        # Velocidade de cada um na direção do outro (n aponta do "outro" para "self")
+        v_self = -(self.vel_x * nx + self.vel_y * ny)
+        v_outro = outro.vel_x * nx + outro.vel_y * ny
+        if max(v_self, v_outro) < 250:
+            return None
+        infrator, vitima = (self, outro) if v_self > v_outro else (outro, self)
+        if vitima._imunidade_queda_timer > 0 or infrator._bloqueio_desarme > 0:
+            return None
+        # Só é falta se for por trás (a vítima vai para o mesmo lado do empurrão): um choque de
+        # frente ou de lado, a disputar a bola, é jogo limpo
+        direcao = pygame.math.Vector2(vitima.pos_x - infrator.pos_x, vitima.pos_y - infrator.pos_y)
+        por_tras = (vitima.vetor_direcao.length_squared() > 0 and direcao.length_squared() > 0
+                    and vitima.vetor_direcao.dot(direcao.normalize()) > 0.55)
+        if not por_tras or random.random() >= 0.25:
+            return None
+        vitima.sofrer_queda(None, direcao)
+        vitima._imunidade_queda_timer = 2.5
+        infrator._bloqueio_desarme = 0.8
+        return {"tipo": "falta", "infrator": infrator, "vitima": vitima, "queda": True,
+                "gravidade": ("violenta" if max(v_self, v_outro) > 340 else
+                              "grave" if max(v_self, v_outro) > 270 else "normal"), "origem": "sem_bola",
+                "pos": (vitima.pos_x, vitima.pos_y)}
 
     # ------------------------------------------------------------------ #
     # Interação com a bola                                                 #
