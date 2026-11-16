@@ -1122,6 +1122,8 @@ class Game(OnlineMixin, FaltasMixin):
 
     def _selecionar_jogador_proximo(self):
         """TAB / C: passa o controlo para o jogador azul mais perto da bola."""
+        if self._bola_parada is not None:
+            return                 # no livre quem tem a bola é que bate a falta
         melhor = None
         melhor_dist = float("inf")
         for j in self.equipa_azul:

@@ -21,6 +21,7 @@ import random
 
 import pygame
 
+import comando
 from ball import REMATE_FORCA
 from remate_pov import RematePOV, MEIA_BOCA
 from sons import som
@@ -79,9 +80,18 @@ class FaltasMixin:
         if marcador is None:
             return
         if self._falta_tipo == "livre":
+            self._afastar_adversarios(pos_bola, infrator.equipa)
+            # Quem bate fica virado para o colega mais perto (o anel mostra logo a quem vai o passe)
+            colegas = [c for c in (self.equipa_azul if marcador.equipa == "azul" else self.equipa_vermelha)
+                       if c is not marcador]
+            if colegas:
+                c = min(colegas, key=lambda c: math.hypot(c.pos_x - marcador.pos_x, c.pos_y - marcador.pos_y))
+                v = pygame.math.Vector2(c.pos_x - marcador.pos_x, c.pos_y - marcador.pos_y)
+                if v.length_squared() > 0:
+                    marcador.vetor_direcao = v.normalize()
+                    marcador._olhar_para(marcador.vetor_direcao)
             self._bola_parada = {"tipo": "livre", "marcador": marcador, "pos": tuple(pos_bola), "t": 0.0,
-                                 "defesa": infrator.equipa,
-                                 "espera": 0.0 if marcador.humano else random.uniform(0.8, 1.4)}
+                                 "defesa": infrator.equipa, "espera": random.uniform(1.0, 1.6)}
         else:
             self._posicionar_para_penalti(marcador, pos_bola)
             self._bola_parada = {"tipo": self._falta_tipo, "marcador": marcador, "pos": tuple(pos_bola),
@@ -202,18 +212,8 @@ class FaltasMixin:
         return (bp is not None and bp["tipo"] == "livre" and agente.jogador is bp["marcador"]
                 and bp["t"] < bp["espera"])
 
-    def _atualizar_bola_parada(self, dt: float) -> bool:
-        """
-        Corre antes do resto do jogo. Devolve True se o jogo está parado neste frame
-        (penálti / livre direto a preparar), e o resto do update não corre.
-        """
-        bp = self._bola_parada
-        bp["t"] += dt
-        if bp["tipo"] == "livre":
-            return False
-
-        # Penálti ou livre direto: todos parados, à espera do apito
-        marcador = bp["marcador"]
+    def _congelar(self, dt: float, marcador):
+        """Jogo parado: ninguém se mexe (o marcador fica com a bola)."""
         for j in self.todos_jogadores:
             humano = j.humano
             j.humano = False
@@ -225,6 +225,92 @@ class FaltasMixin:
         self.gr_vermelho.update(dt, self.bola)
         if marcador.tem_bola:
             self.bola.seguir_jogador(marcador)
+            marcador._cooldown_desarme = max(marcador._cooldown_desarme, 0.5)
+
+    def _apontar_marcador(self, marcador):
+        """No livre o teu jogador não anda, mas as setas / o stick viram-no (para escolher o colega do passe)."""
+        k = comando.teclas()
+        dx = (k[pygame.K_RIGHT] or k[pygame.K_d]) - (k[pygame.K_LEFT] or k[pygame.K_a])
+        dy = (k[pygame.K_DOWN] or k[pygame.K_s]) - (k[pygame.K_UP] or k[pygame.K_w])
+        if dx or dy:
+            marcador.vetor_direcao = pygame.math.Vector2(dx, dy).normalize()
+            marcador._olhar_para(marcador.vetor_direcao)
+
+    def _livre_ia(self, marcador):
+        """A IA bate o livre: remata se estiver perto da baliza (às vezes), senão passa para a frente."""
+        gx = self.rink.linha_golo_esq_x if marcador.equipa == "azul" else self.rink.linha_golo_dir_x
+        cy = self.rink.rect.centery
+        para_baliza = pygame.math.Vector2(gx - marcador.pos_x, cy - marcador.pos_y)
+        if para_baliza.length() < 330 and random.random() < 0.45:
+            u = random.choice((-1, 1)) * random.uniform(*CANTO_PENALTI_IA) * MEIA_BOCA
+            alvo = pygame.math.Vector2(gx - marcador.pos_x, cy + u - marcador.pos_y)
+            if self.stats_jogo is not None:
+                self.stats_jogo[marcador.equipa]["remates"] += 1
+            marcador.fazer_remate_com_forca(self.bola, alvo, REMATE_FORCA * random.uniform(0.95, 1.1))
+        else:
+            # Passe para um colega: de preferência o que está mais à frente (mais perto da baliza)
+            colegas = [c for c in (self.equipa_azul if marcador.equipa == "azul" else self.equipa_vermelha)
+                       if c is not marcador and 50 < math.hypot(c.pos_x - marcador.pos_x, c.pos_y - marcador.pos_y) < 480]
+            if not colegas:
+                self._acao_passe(marcador)
+                return
+            def avanco(c):
+                return (para_baliza.length() - math.hypot(gx - c.pos_x, cy - c.pos_y)) + random.uniform(-60, 60)
+            alvo = max(colegas, key=avanco)
+            direcao = pygame.math.Vector2(alvo.pos_x - marcador.pos_x, alvo.pos_y - marcador.pos_y).normalize()
+            marcador.fazer_passe(self.bola, direcao)
+            self.bola.marcar_recetor(alvo)
+
+    def _bloquear_marcador(self, marcador):
+        """Quem bateu o livre não pode voltar a tocar na bola logo a seguir (como nas regras)."""
+        if self.bola.dono is None:
+            self.bola._cooldown_dono = marcador
+            self.bola._cooldown_timer = max(self.bola._cooldown_timer, 1.0)
+
+    def _colega_do_livre(self, eu):
+        """O colega que vai receber o passe (o mesmo critério do _acao_passe), para o mostrar no ecrã."""
+        direcao = self._direcao_vec(eu)
+        melhor, melhor_score = None, -1.0
+        for j in (self.equipa_azul if eu.equipa == "azul" else self.equipa_vermelha):
+            if j is eu:
+                continue
+            to_j = pygame.math.Vector2(j.pos_x - eu.pos_x, j.pos_y - eu.pos_y)
+            dist = to_j.length()
+            if 30 < dist < 500:
+                dot = direcao.dot(to_j.normalize())
+                if dot > 0.35 and dot * (1.0 - dist / 1200.0) > melhor_score:
+                    melhor, melhor_score = j, dot * (1.0 - dist / 1200.0)
+        return melhor
+
+    def _atualizar_bola_parada(self, dt: float) -> bool:
+        """
+        Corre antes do resto do jogo. Devolve True se o jogo está parado neste frame
+        (livre à espera de ser batido, penálti / livre direto a preparar): o resto do update não corre.
+        """
+        bp = self._bola_parada
+        bp["t"] += dt
+        marcador = bp["marcador"]
+
+        if bp["tipo"] == "livre":
+            # A bola já foi jogada (passe ou remate): o jogo recomeça
+            if self.bola.dono is not marcador:
+                self._bola_parada = None
+                self._bloquear_marcador(marcador)
+                return False
+            self._congelar(dt, marcador)
+            if marcador is self.jogador_humano and marcador.humano:
+                # O jogador escolhe: passe (Z / A / clique) ou stickada (X / B) - ver handle_events
+                self._apontar_marcador(marcador)
+                return True
+            if bp["t"] >= bp["espera"]:
+                som.tocar("apito_curto")
+                self._livre_ia(marcador)
+                self._bola_parada = None
+                self._bloquear_marcador(marcador)
+            return True
+
+        # Penálti ou livre direto: todos parados, à espera do apito
+        self._congelar(dt, marcador)
         if bp["t"] < PREPARAR_S:
             return True
 
@@ -262,21 +348,15 @@ class FaltasMixin:
         return True
 
     def _restricoes_livre(self):
-        """Depois de os jogadores se mexerem: num livre, os adversários ficam afastados da bola."""
-        bp = self._bola_parada
-        if bp is None or bp["tipo"] != "livre":
-            return
-        px, py = bp["pos"]
-        marcador = bp["marcador"]
-        if marcador.tem_bola and bp["t"] < bp["espera"]:
-            marcador.pos_x, marcador.pos_y = px, py
-            marcador.vel_x = marcador.vel_y = 0.0
-            marcador.rect.center = (round(px), round(py))
-            self.bola.seguir_jogador(marcador)
-        marcador._cooldown_desarme = max(marcador._cooldown_desarme, 0.3)
+        """(Antes o livre era com o jogo a andar; agora o jogo fica parado até o livre ser batido.)"""
+        return
+
+    def _afastar_adversarios(self, pos, equipa_defesa: str):
+        """No apito de um livre: os adversários ficam a DIST_LIVRE da bola."""
+        px, py = pos
         r = self.rink.rect
         for j in self.todos_jogadores:
-            if j.equipa != bp["defesa"]:
+            if j.equipa != equipa_defesa:
                 continue
             d = math.hypot(j.pos_x - px, j.pos_y - py)
             if d < DIST_LIVRE:
@@ -287,18 +367,49 @@ class FaltasMixin:
                 j.pos_x = max(r.left + 20, min(r.right - 20, px + nx * DIST_LIVRE))
                 j.pos_y = max(r.top + 20, min(r.bottom - 20, py + ny * DIST_LIVRE))
                 j.rect.center = (round(j.pos_x), round(j.pos_y))
-        # O livre acaba quando a bola é jogada (sai do sítio ou muda de dono) ou ao fim de um tempo
-        bola = self.bola
-        if (bola.dono is not marcador or math.hypot(bola.pos_x - px, bola.pos_y - py) > 30
-                or bp["t"] > LIMITE_LIVRE_S):
-            self._bola_parada = None
+                j.vel_x = j.vel_y = 0.0
 
     # ------------------------------------------------------------------ #
     # Desenho                                                              #
     # ------------------------------------------------------------------ #
 
+    def _desenhar_livre(self, screen):
+        """Livre do jogador: as opções (passar ou stickar) e o colega que vai receber o passe."""
+        bp = self._bola_parada
+        if (bp is None or bp["tipo"] != "livre" or bp["marcador"] is not self.jogador_humano
+                or not bp["marcador"].humano):
+            return
+        from componentes import texto
+        eu = bp["marcador"]
+        cam = self.rink.camera
+        clique = self.tipo_passe == "clique" and not comando.ligado()
+        if not clique:
+            alvo = self._colega_do_livre(eu)
+            if alvo is not None:
+                sx, sy = cam.projetar(alvo.pos_x, alvo.pos_y)
+                k = cam.escala(alvo.pos_y)
+                anel = pygame.Rect(0, 0, round(54 * k), round(20 * k))
+                anel.center = (round(sx), round(sy))
+                pygame.draw.ellipse(screen, (255, 220, 60), anel, 3)
+        if comando.ligado():
+            opcoes = "A  passar     B  stickada     stick  escolher o colega"
+        elif clique:
+            opcoes = "CLIQUE num colega  passar     X  stickada"
+        else:
+            opcoes = "Z  passar     X  stickada     setas  escolher o colega"
+        caixa = pygame.Rect(0, 0, 560, 50)
+        caixa.midbottom = (screen.get_width() // 2, self.rink.rect.bottom - 6)
+        fundo = pygame.Surface(caixa.size, pygame.SRCALPHA)
+        pygame.draw.rect(fundo, (10, 16, 34, 225), fundo.get_rect(), border_radius=12)
+        pygame.draw.rect(fundo, (245, 205, 55, 255), fundo.get_rect(), 2, border_radius=12)
+        screen.blit(fundo, caixa)
+        texto(screen, "LIVRE  •  o jogo está parado até bateres a falta", 13, (255, 225, 90),
+              (caixa.centerx, caixa.top + 15))
+        texto(screen, opcoes, 13, (230, 238, 255), (caixa.centerx, caixa.top + 35), negrito=False)
+
     def _desenhar_suspensos(self, screen):
         """Por baixo do marcador: quem está fora por cartão e quanto tempo falta."""
+        self._desenhar_livre(screen)
         if not self._suspensos:
             return
         from componentes import texto
