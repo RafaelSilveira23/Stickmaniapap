@@ -107,7 +107,9 @@ class Ball(pygame.sprite.Sprite):
             limitada (como se o stick a arrastasse);
           - quando alguém apanha a bola, ela DESLIZA até ao stick em vez de aparecer lá.
         """
-        if hasattr(jogador, "vetor_direcao") and jogador.vetor_direcao.length_squared() > 0:
+        if getattr(jogador, "ang_bola_forcado", None) is not None:
+            ang_alvo = jogador.ang_bola_forcado          # finta: o stick leva a bola para um lado
+        elif hasattr(jogador, "vetor_direcao") and jogador.vetor_direcao.length_squared() > 0:
             ang_alvo = math.atan2(jogador.vetor_direcao.y, jogador.vetor_direcao.x)
         else:
             ang_alvo = {"direita": 0.0, "esquerda": math.pi,
@@ -121,7 +123,7 @@ class Ball(pygame.sprite.Sprite):
 
         # Rodar até ao ângulo pretendido (no máximo ~14 rad/s)
         dif = (ang_alvo - self._ang_stick + math.pi) % (2 * math.pi) - math.pi
-        passo = 0.24
+        passo = getattr(jogador, "passo_bola", None) or 0.24
         self._ang_stick += max(-passo, min(passo, dif))
 
         tx = jogador.pos_x + math.cos(self._ang_stick) * OFFSET_BOLA

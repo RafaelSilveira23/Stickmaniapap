@@ -51,6 +51,7 @@ class HUDController:
             ("remate",   "Remate", "X",     (220, 60, 60)),
             ("passe",    "Passe",  "Z",     (40, 140, 240)),
             ("acelerar", "Sprint", "SHIFT", (40, 200, 100)),
+            ("finta",    "Finta",  "V",     (170, 90, 240)),
             ("defender", "Trocar", "C",     (230, 160, 30)),
         ]
         raio = 28
@@ -366,6 +367,7 @@ class HUDController:
             ativo = ((chave == "remate" and keys[pygame.K_x]) or
                      (chave == "passe" and keys[pygame.K_z]) or
                      (chave == "acelerar" and (keys[pygame.K_LSHIFT] or keys[pygame.K_RSHIFT])) or
+                     (chave == "finta" and keys[pygame.K_v]) or
                      (chave == "defender" and (keys[pygame.K_c] or keys[pygame.K_SPACE] or keys[pygame.K_TAB])))
 
             pygame.draw.circle(screen, (4, 6, 14), (cx + 1, cy + 3), raio)                 # sombra
@@ -377,7 +379,7 @@ class HUDController:
             t_lbl = self.font_btn.render(btn["label"], True, (240, 245, 255))
             screen.blit(t_lbl, (cx - t_lbl.get_width() // 2, cy + raio + 8))
             if com_comando:     # com um comando ligado mostra os botões dele
-                atalho = {"remate": "B", "passe": "A", "acelerar": "RB", "defender": "X"}.get(chave, btn["atalho"])
+                atalho = {"remate": "B", "passe": "A", "acelerar": "RB", "defender": "X", "finta": "Y"}.get(chave, btn["atalho"])
             else:
                 atalho = "CLIQUE" if chave == "passe" and passe_clique else btn["atalho"]
             t_key = self.font_key.render(atalho, True, (200, 215, 245))
@@ -406,6 +408,11 @@ class HUDController:
             # Dupla seta de velocidade >>
             pygame.draw.polygon(screen, cor, [(cx - 9, cy - 8), (cx - 1, cy), (cx - 9, cy + 8)])
             pygame.draw.polygon(screen, cor, [(cx + 2, cy - 8), (cx + 10, cy), (cx + 2, cy + 8)])
+        elif tipo == "finta":
+            # Finta: caminho em ziguezague com uma seta no fim
+            pontos = [(cx - 11, cy + 8), (cx - 4, cy - 4), (cx + 2, cy + 5), (cx + 9, cy - 8)]
+            pygame.draw.lines(screen, cor, False, pontos, 3)
+            pygame.draw.polygon(screen, cor, [(cx + 12, cy - 12), (cx + 12, cy - 3), (cx + 4, cy - 9)])
         elif tipo == "defender":
             # Trocar de jogador: duas setas em sentidos contrários
             pygame.draw.line(screen, cor, (cx - 10, cy - 5), (cx + 6, cy - 5), 3)

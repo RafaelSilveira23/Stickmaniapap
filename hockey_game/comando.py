@@ -12,7 +12,7 @@ Botões (nomes do comando da Xbox; no da PlayStation: A = X, B = O, X = quadrado
   Nos menus:  stick / setas = escolher,  A ou START = confirmar,  B ou BACK = voltar,
               LB / RB = mudar de separador
   No jogo:    stick / setas = mexer,  A = passe (ou pedir a bola),  B = rematar,
-              X / Y / LB = trocar de jogador,  RB / RT / LT = acelerar,  START = pausa
+              Y = finta,  X / LB = trocar de jogador,  RB / RT / LT = acelerar,  START = pausa
   No remate:  stick = apontar,  B ou A (manter e largar) = força,  BACK = cancelar
 """
 import pygame
@@ -31,7 +31,7 @@ REPETIR_PASSO = 0.12
 MAPA = {
     "menu": {"a": pygame.K_RETURN, "start": pygame.K_RETURN, "b": pygame.K_ESCAPE,
              "back": pygame.K_ESCAPE, "lb": pygame.K_q, "rb": pygame.K_e},
-    "jogo": {"a": pygame.K_z, "b": pygame.K_x, "x": pygame.K_c, "y": pygame.K_c, "lb": pygame.K_c,
+    "jogo": {"a": pygame.K_z, "b": pygame.K_x, "x": pygame.K_c, "y": pygame.K_v, "lb": pygame.K_c,
              "rb": pygame.K_LSHIFT, "rt": pygame.K_LSHIFT, "lt": pygame.K_LSHIFT,
              "start": pygame.K_ESCAPE, "back": pygame.K_ESCAPE},
     "pov": {"a": pygame.K_RETURN, "b": pygame.K_x, "back": pygame.K_ESCAPE},

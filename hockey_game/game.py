@@ -27,6 +27,7 @@ from carreira_jogador import CarreiraJogador, CAMINHO_BD_JOGADOR, atributos as a
 from carreira_jogador_menu import EcraCriarJogador, EcraCarreiraJogador
 from online import OnlineMixin
 from faltas import FaltasMixin
+from fintas import FintasMixin
 import comando
 
 DURACAO_PARTE = 60 * 5   # 5 minutos por parte
@@ -45,7 +46,7 @@ FORMACAO = [
 CAMINHO_DEFINICOES = os.path.join(PASTA_SAVES, "definicoes.json")
 
 
-class Game(OnlineMixin, FaltasMixin):
+class Game(OnlineMixin, FaltasMixin, FintasMixin):
     def __init__(self):
         pygame.init()
         definicoes = self._ler_definicoes()
@@ -156,6 +157,7 @@ class Game(OnlineMixin, FaltasMixin):
         self._msg_falta_sub  = ""
         self._falta_tipo     = "livre"     # "livre", "livre_direto", "penalti"
         self._faltas_reiniciar()           # bolas paradas e cartões (faltas.py)
+        self._fintas_reiniciar()           # fintas (fintas.py)
 
         # ── Dificuldade da IA ──────────────────────────────────────────
         self.dificuldade     = "normal"    # "facil", "normal", "dificil"
@@ -765,6 +767,8 @@ class Game(OnlineMixin, FaltasMixin):
                         self._acao_passe()
                 elif event.key == pygame.K_x:
                     self._acao_remate()
+                elif event.key == pygame.K_v:
+                    self._pedir_finta_humano()       # finta (fintas.py)
                 elif event.key in (pygame.K_TAB, pygame.K_c, pygame.K_SPACE):
                     if self.modo_jogador:
                         self._pedir_bola()           # só controlas o teu jogador: pede a bola
@@ -806,6 +810,8 @@ class Game(OnlineMixin, FaltasMixin):
                     self._acao_passe()
                 elif chave == "remate":
                     self._acao_remate()
+                elif chave == "finta":
+                    self._pedir_finta_humano()
                 elif chave in ("defender", "acelerar"):
                     self._selecionar_jogador_proximo()
                 return True
@@ -1300,6 +1306,9 @@ class Game(OnlineMixin, FaltasMixin):
             colegas_com_humano = [j for j in lista_azul if j != agente.jogador]
             agente.update(dt, self.bola, colegas_com_humano, lista_verm)
 
+        # A IA finta às vezes quando um defesa lhe fecha o caminho (fintas.py)
+        self._fintas_ia(dt)
+
         # Atualizar todos os jogadores (com colisão contra as balizas do campo)
         for j in self.todos_jogadores:
             if self.pausado and j is self.jogador_humano:
@@ -1423,6 +1432,7 @@ class Game(OnlineMixin, FaltasMixin):
         self._falta_timer    = 0.0
         self._falta_cooldown = 0.0
         self._faltas_reiniciar()
+        self._fintas_reiniciar()
 
         # Atualizar o ringue com o emblema oficial da equipa da casa
         self.rink.definir_equipa_casa(self.equipa_casa_id)
@@ -2248,6 +2258,7 @@ class Game(OnlineMixin, FaltasMixin):
         self._draw_mira()
         self.hud.draw_top_bar(self.screen, self)
         self._desenhar_suspensos(self.screen)
+        self._desenhar_fintas(self.screen)
         self.hud.draw_foul_banner(self.screen, self)
 
         # 7. Painel Inferior (Mini-mapa, Cartão de Jogador e Controlos)

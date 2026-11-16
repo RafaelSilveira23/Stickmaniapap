@@ -461,6 +461,7 @@ CONTROLOS = [
     ("COM A BOLA", [
         ("Z  /  Clique no colega", "Passe (escolhe o tipo nas definições)"),
         ("X", "Remate na primeira pessoa"),
+        ("V  (+ setas)", "Finta: engana para um lado e corta para o outro"),
         ("Rato  /  Setas", "Apontar à baliza (no remate)"),
         ("Manter X  /  Clique", "Força do remate (larga para rematar)"),
     ]),
@@ -477,11 +478,12 @@ CONTROLOS_COMANDO = [
     ("MOVIMENTO", [
         ("Stick esquerdo  /  Setas", "Mover o jogador"),
         ("RB  /  RT", "Sprint (correr mais rápido)"),
-        ("X  /  Y  /  LB", "Trocar de jogador (carreira de jogador: pedir a bola)"),
+        ("X  /  LB", "Trocar de jogador (carreira de jogador: pedir a bola)"),
     ]),
     ("COM A BOLA", [
         ("A", "Passe"),
         ("B", "Remate na primeira pessoa"),
+        ("Y  (+ stick)", "Finta: engana para um lado e corta para o outro"),
         ("Stick esquerdo", "Apontar à baliza (no remate)"),
         ("Manter B", "Força do remate (larga para rematar)"),
     ]),

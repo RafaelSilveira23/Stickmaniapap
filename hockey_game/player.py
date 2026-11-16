@@ -19,6 +19,11 @@ _MARGEM_X, _MARGEM_Y = 8, 4
 TAMANHO_TELA   = (PLAYER_SIZE[0] + 2 * _MARGEM_X, PLAYER_SIZE[1] + 2 * _MARGEM_Y)
 PICK_UP_DIST   = 30
 ACELERACAO     = 2000
+
+# Finta (ver fintas.py): engano para um lado, depois corte forte para o outro
+FINTA_ENGANO   = 0.13     # s
+FINTA_CORTE    = 0.30     # s
+FINTA_RECARGA  = 1.2      # s até poder fintar outra vez
 SEP_JOGADORES  = 38
 _RAIO_CORPO    = 14     # "raio" do jogador para as colisões com as balizas
 
@@ -116,6 +121,13 @@ def sombra_oval(largura: int, altura: int, alpha: int = 70) -> pygame.Surface:
 
 
 class Player(pygame.sprite.Sprite):
+    # Finta (valores por omissão; cada jogador muda os seus)
+    _finta = None             # dict com a finta a decorrer, ou None
+    _finta_cd = 0.0           # recarga
+    _acel_mult = 1.0          # aceleração extra durante a finta (o corte é explosivo)
+    ang_bola_forcado = None   # ângulo da bola à volta do jogador durante a finta
+    passo_bola = None         # rapidez com que o stick arrasta a bola (rad por frame)
+
     """
     Jogador de campo.
     A velocidade usa inércia: não muda instantaneamente, acelera/trava gradualmente.
@@ -219,6 +231,7 @@ class Player(pygame.sprite.Sprite):
 
         if self.humano and not self.remoto:
             self._input_humano()
+        self._atualizar_finta(dt)        # durante a finta o movimento é o da finta
 
         self._aplicar_inercia(dt)
         self._mover(dt, rink_rect, rink)
@@ -278,7 +291,7 @@ class Player(pygame.sprite.Sprite):
 
     def _aplicar_inercia(self, dt: float):
         """Suaviza a mudança de velocidade com taxa fixa por segundo tanto para humanos como IA."""
-        taxa = ACELERACAO * dt   # px/s * dt = px/frame
+        taxa = ACELERACAO * dt * self._acel_mult   # px/s * dt = px/frame
 
         if self._estado_action in ("remate", "colisao"):
             self.vel_x = _lerp_fixo(self.vel_x, 0.0,            taxa * 0.8)
@@ -603,6 +616,70 @@ class Player(pygame.sprite.Sprite):
             direcao_vec = pygame.math.Vector2(1, 0)
         self._olhar_para(direcao_vec)
         bola.libertar(direcao_vec.normalize() * forca, dono_anterior=self)
+
+    # ------------------------------------------------------------------ #
+    # Finta                                                                #
+    # ------------------------------------------------------------------ #
+
+    def direcao_finta(self):
+        """(frente, lado): para onde vai o jogador e o vetor perpendicular (para a esquerda dele)."""
+        v = pygame.math.Vector2(self.vel_x, self.vel_y)
+        if v.length() > 40:
+            frente = v.normalize()
+        elif self.vetor_direcao.length_squared() > 0:
+            frente = pygame.math.Vector2(self.vetor_direcao).normalize()
+        else:
+            frente = pygame.math.Vector2(-1 if self.equipa == "azul" else 1, 0)
+        return frente, pygame.math.Vector2(-frente.y, frente.x)
+
+    def comecar_finta(self, lado: int) -> bool:
+        """lado: +1 ou -1 (o corte final vai para esse lado). Devolve False se não pode fintar."""
+        if (not self.tem_bola or self._finta is not None or self._finta_cd > 0
+                or self._estado_action in ("colisao", "remate")):
+            return False
+        frente, perp = self.direcao_finta()
+        base = max(math.hypot(self.vel_x, self.vel_y), PLAYER_SPEED * 0.9)
+        self._finta = {"t": 0.0, "lado": lado, "frente": frente, "perp": perp, "base": base}
+        self._finta_cd = FINTA_RECARGA
+        return True
+
+    def cancelar_finta(self):
+        self._finta = None
+        self._acel_mult = 1.0
+        self.ang_bola_forcado = None
+        self.passo_bola = None
+
+    def _atualizar_finta(self, dt: float):
+        if self._finta_cd > 0:
+            self._finta_cd = max(0.0, self._finta_cd - dt)
+        f = self._finta
+        if f is None:
+            return
+        if not self.tem_bola:
+            self.cancelar_finta()
+            return
+        f["t"] += dt
+        fr, pp, lado, b = f["frente"], f["perp"], f["lado"], f["base"]
+        a0 = math.atan2(fr.y, fr.x)
+        if f["t"] < FINTA_ENGANO:
+            # Engano: o corpo e a bola vão para o lado contrário ao do corte
+            alvo = fr * (b * 0.6) - pp * (lado * b * 0.55)
+            self._acel_mult = 1.5
+            self.ang_bola_forcado = a0 - lado * 1.15
+            self.passo_bola = 0.35
+        elif f["t"] < FINTA_ENGANO + FINTA_CORTE:
+            # Corte: arranque forte para o outro lado, o stick arrasta a bola de um lado ao outro
+            alvo = fr * (b * 0.85) + pp * (lado * b * 1.05)
+            self._acel_mult = 2.2
+            self.ang_bola_forcado = a0 + lado * 0.85
+            self.passo_bola = 0.5
+        else:
+            self.cancelar_finta()       # a partir daqui é a inércia normal (sai na diagonal)
+            return
+        self._target_vx, self._target_vy = alvo.x, alvo.y
+        if alvo.length_squared() > 0:
+            self.vetor_direcao = alvo.normalize()
+            self._olhar_para(self.vetor_direcao)
 
     def desarme_limpo(self, bola=None, direcao_impacto=None):
         """Desarme ou perda de posse normal: o jogador NÃO cai ao chão e continua a patinar."""

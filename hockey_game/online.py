@@ -209,7 +209,7 @@ class OnlineMixin:
                     self._input_seq_remoto = n
             elif t == "acao" and msg.get("a") == "pov":
                 self._online_abrir_pov("convidado")       # o convidado quer rematar (stickada)
-            elif t == "acao" and msg.get("a") in ("passe", "trocar"):
+            elif t == "acao" and msg.get("a") in ("passe", "trocar", "finta"):
                 self._acoes_remotas.append((msg["a"], None, None))
             elif t == "pov" and self._pov_espectador():
                 self.remate_pov.definir_mira(msg["u"], msg["h"], msg["f"], msg["c"], msg.get("p"))
@@ -312,6 +312,8 @@ class OnlineMixin:
                 self._acao_passe(self.jogador_remoto)
             elif a == "trocar":
                 self._trocar_remoto_proximo()
+            elif a == "finta":
+                self._pedir_finta(self.jogador_remoto, dx, dy)
         self._acoes_remotas.clear()
         self._auto_selecionar_remoto()
 
@@ -755,6 +757,8 @@ class OnlineMixin:
             self._acao_passe()
         elif acao == "trocar":
             self._selecionar_jogador_proximo()
+        elif acao == "finta":
+            self._pedir_finta_humano()
 
     def _online_eventos_jogo(self):
         for event in pygame.event.get():
@@ -806,6 +810,8 @@ class OnlineMixin:
                     self._online_acao("passe")
                 elif k == pygame.K_x:
                     self._online_pedir_remate()          # stickada (remate na primeira pessoa)
+                elif k == pygame.K_v:
+                    self._online_acao("finta")
                 elif k in (pygame.K_TAB, pygame.K_c, pygame.K_SPACE):
                     self._online_acao("trocar")
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
