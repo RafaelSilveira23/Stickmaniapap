@@ -769,6 +769,8 @@ class Game(OnlineMixin, FaltasMixin, FintasMixin):
                     self._acao_remate()
                 elif event.key == pygame.K_v:
                     self._pedir_finta_humano()       # finta (fintas.py)
+                elif event.key == pygame.K_f:
+                    self._pedir_finta_humano("roleta")
                 elif event.key in (pygame.K_TAB, pygame.K_c, pygame.K_SPACE):
                     if self.modo_jogador:
                         self._pedir_bola()           # só controlas o teu jogador: pede a bola
@@ -812,6 +814,8 @@ class Game(OnlineMixin, FaltasMixin, FintasMixin):
                     self._acao_remate()
                 elif chave == "finta":
                     self._pedir_finta_humano()
+                elif chave == "roleta":
+                    self._pedir_finta_humano("roleta")
                 elif chave in ("defender", "acelerar"):
                     self._selecionar_jogador_proximo()
                 return True

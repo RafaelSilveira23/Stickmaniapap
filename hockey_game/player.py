@@ -24,6 +24,7 @@ ACELERACAO     = 2000
 FINTA_ENGANO   = 0.13     # s
 FINTA_CORTE    = 0.30     # s
 FINTA_RECARGA  = 1.2      # s até poder fintar outra vez
+FINTA_ROLETA   = 0.55     # s que dura a roleta (uma volta completa com a bola)
 SEP_JOGADORES  = 38
 _RAIO_CORPO    = 14     # "raio" do jogador para as colisões com as balizas
 
@@ -632,14 +633,18 @@ class Player(pygame.sprite.Sprite):
             frente = pygame.math.Vector2(-1 if self.equipa == "azul" else 1, 0)
         return frente, pygame.math.Vector2(-frente.y, frente.x)
 
-    def comecar_finta(self, lado: int) -> bool:
-        """lado: +1 ou -1 (o corte final vai para esse lado). Devolve False se não pode fintar."""
+    def comecar_finta(self, lado: int, tipo: str = "corte") -> bool:
+        """
+        lado: +1 ou -1 (o corte, ou o arco da roleta, vai para esse lado).
+        tipo: "corte" (engano + corte) ou "roleta" (uma volta completa com a bola colada ao stick).
+        Devolve False se não pode fintar.
+        """
         if (not self.tem_bola or self._finta is not None or self._finta_cd > 0
                 or self._estado_action in ("colisao", "remate")):
             return False
         frente, perp = self.direcao_finta()
         base = max(math.hypot(self.vel_x, self.vel_y), PLAYER_SPEED * 0.9)
-        self._finta = {"t": 0.0, "lado": lado, "frente": frente, "perp": perp, "base": base}
+        self._finta = {"t": 0.0, "lado": lado, "frente": frente, "perp": perp, "base": base, "tipo": tipo}
         self._finta_cd = FINTA_RECARGA
         return True
 
@@ -661,6 +666,9 @@ class Player(pygame.sprite.Sprite):
         f["t"] += dt
         fr, pp, lado, b = f["frente"], f["perp"], f["lado"], f["base"]
         a0 = math.atan2(fr.y, fr.x)
+        if f.get("tipo") == "roleta":
+            self._atualizar_roleta(f, fr, pp, lado, b, a0)
+            return
         if f["t"] < FINTA_ENGANO:
             # Engano: o corpo e a bola vão para o lado contrário ao do corte
             alvo = fr * (b * 0.6) - pp * (lado * b * 0.55)
@@ -680,6 +688,29 @@ class Player(pygame.sprite.Sprite):
         if alvo.length_squared() > 0:
             self.vetor_direcao = alvo.normalize()
             self._olhar_para(self.vetor_direcao)
+
+    def _atualizar_roleta(self, f, fr, pp, lado, b, a0):
+        """
+        Roleta: o jogador dá uma volta completa sobre si próprio. A rotação começa e acaba devagar
+        (curva em cosseno); o corpo faz um arco para o lado (sai e volta à linha) enquanto continua
+        para a frente, e a bola roda colada ao stick, sempre do lado de fora da volta.
+        """
+        s = f["t"] / FINTA_ROLETA
+        if s >= 1.0:
+            self.cancelar_finta()
+            return
+        ease = 0.5 - 0.5 * math.cos(math.pi * s)          # 0 -> 1, devagar no início e no fim
+        theta = lado * 2 * math.pi * ease                   # ângulo da volta
+        alvo = fr * (b * 0.7) + pp * (lado * b * 0.75 * math.sin(2 * math.pi * s))
+        self._target_vx, self._target_vy = alvo.x, alvo.y
+        self._acel_mult = 1.8
+        cara = pygame.math.Vector2(math.cos(a0 + theta), math.sin(a0 + theta))
+        self.vetor_direcao = cara
+        self._olhar_para(cara)
+        self.ang_bola_forcado = a0 + theta
+        self.passo_bola = 0.45
+        # O corpo fica entre a bola e o defesa: é difícil roubar a bola durante a volta
+        self._cooldown_desarme = max(self._cooldown_desarme, 0.12)
 
     def desarme_limpo(self, bola=None, direcao_impacto=None):
         """Desarme ou perda de posse normal: o jogador NÃO cai ao chão e continua a patinar."""

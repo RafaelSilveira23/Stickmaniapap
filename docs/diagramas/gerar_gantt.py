@@ -38,7 +38,7 @@ TAREFAS = [
     ("Análise e planeamento", None, None, None, None, None),
     ("", "Anteprojeto, requisitos e escolha das tecnologias", date(2026, 9, 15), date(2026, 10, 10), "Concluído", DOIS),
 
-    ("Desenvolvimento (versões 1 a 35)", None, None, None, None, None),
+    ("Desenvolvimento (versões 1 a 36)", None, None, None, None, None),
     ("", "Protótipo: rinque, jogadores, bola e física", date(2026, 10, 1), date(2026, 10, 10), "Concluído", RAFAEL),
     ("", "Interface do mockup, símbolos e seleção de equipas", date(2026, 10, 6), date(2026, 10, 15), "Concluído", VASCO),
     ("", "IA com três níveis de dificuldade", date(2026, 10, 11), date(2026, 10, 20), "Concluído", VASCO),
@@ -74,7 +74,7 @@ TAREFAS = [
     ("", "Interface: marcador, painel e estatísticas", date(2027, 4, 19), date(2027, 4, 25), "Concluído", VASCO),
     ("", "Jogar com um comando (Xbox ou PlayStation)", date(2027, 4, 26), date(2027, 5, 2), "Concluído", VASCO),
     ("", "Faltas: livres, penáltis, livres diretos e cartões", date(2027, 5, 3), date(2027, 5, 12), "Concluído", VASCO),
-    ("", "Fintas com física (engano e corte)", date(2027, 5, 13), date(2027, 5, 19), "Concluído", VASCO),
+    ("", "Fintas com física: corte e roleta", date(2027, 5, 13), date(2027, 5, 23), "Concluído", VASCO),
 
     ("Novas funcionalidades", None, None, None, None, None),
     ("", "Estatísticas da partida e modo de 2 jogadores", date(2026, 11, 16), date(2026, 12, 31), "Planeado", DOIS),

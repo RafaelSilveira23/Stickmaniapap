@@ -26,6 +26,8 @@ from sons import som
 FINTA_ALCANCE = 120          # defesas a menos disto (e à frente) contam para a finta
 FINTA_DIST_IDEAL = (45, 95)  # a finta resulta melhor com o defesa a esta distância
 FINTA_PERTO = 40             # mais perto do que isto é arriscado (pode perder a bola)
+ROLETA_ALCANCE = 80          # a roleta só conta para defesas mesmo perto
+ROLETA_DIST_IDEAL = (30, 65) # a roleta resulta melhor com o defesa já em cima
 
 
 class FintasMixin:
@@ -37,14 +39,17 @@ class FintasMixin:
     # Pedir uma finta                                                      #
     # ------------------------------------------------------------------ #
 
-    def _pedir_finta_humano(self):
-        """Tecla V / botão Y do comando: o lado é o das setas (se apontarem para o lado)."""
+    def _pedir_finta_humano(self, tipo: str = "corte"):
+        """
+        Tecla V / Y do comando (corte) ou F / LB do comando (roleta).
+        O lado é o das setas (se apontarem para o lado).
+        """
         k = comando.teclas()
         dx = (k[pygame.K_RIGHT] or k[pygame.K_d]) - (k[pygame.K_LEFT] or k[pygame.K_a])
         dy = (k[pygame.K_DOWN] or k[pygame.K_s]) - (k[pygame.K_UP] or k[pygame.K_w])
-        self._pedir_finta(self.jogador_humano, dx, dy)
+        self._pedir_finta(self.jogador_humano, dx, dy, tipo)
 
-    def _pedir_finta(self, j, dx: float = 0.0, dy: float = 0.0) -> bool:
+    def _pedir_finta(self, j, dx: float = 0.0, dy: float = 0.0, tipo: str = "corte") -> bool:
         if (j is None or not j.tem_bola or not self.jogo_ativo or self.remate_pov is not None
                 or getattr(self, "_bola_parada", None) is not None):
             return False
@@ -66,11 +71,53 @@ class FintasMixin:
                 lado = -1 if s > 0 else 1
             else:
                 lado = random.choice((-1, 1))
-        if not j.comecar_finta(lado):
+        if not j.comecar_finta(lado, tipo):
             return False
         som.tocar("passe", 0.25)          # o stick a arrastar a bola
-        self._finta_nos_defesas(j, adversarios)
+        if tipo == "roleta":
+            self._roleta_nos_defesas(j, adversarios)
+        else:
+            self._finta_nos_defesas(j, adversarios)
         return True
+
+    def _roleta_nos_defesas(self, j, adversarios):
+        """
+        Roleta: resulta com o defesa já perto (ele é ultrapassado pela volta). Com o defesa
+        longe não engana ninguém, mas também quase nunca se perde a bola (o corpo protege-a).
+        """
+        frente, perp, lado = j._finta["frente"], j._finta["perp"], j._finta["lado"]
+        enganou = False
+        for d in adversarios:
+            v = pygame.math.Vector2(d.pos_x - j.pos_x, d.pos_y - j.pos_y)
+            dist = v.length()
+            if dist > ROLETA_ALCANCE or dist < 1 or frente.dot(v / dist) < 0.1:
+                continue
+            p = 0.40 + (getattr(j, "stat_velocidade", 80) - getattr(d, "stat_defesa", 70)) / 150
+            if ROLETA_DIST_IDEAL[0] <= dist <= ROLETA_DIST_IDEAL[1]:
+                p += 0.18
+            else:
+                p -= 0.15
+            if d.humano:
+                p -= 0.10
+            p = max(0.10, min(0.85, p))
+            if random.random() < p:
+                # Fica para trás: a volta passa por ele e ele perde o equilíbrio
+                d.vel_x += -perp.x * lado * 80 - frente.x * 60
+                d.vel_y += -perp.y * lado * 80 - frente.y * 60
+                d._desestabilizado_timer = max(d._desestabilizado_timer, 0.65)
+                d._bloqueio_desarme = max(d._bloqueio_desarme, 0.9)
+                enganou = True
+            elif dist < FINTA_PERTO and random.random() < 0.25:
+                # Colado e não foi enganado: mete o stick no meio da volta
+                j.cancelar_finta()
+                j.desarme_limpo(self.bola, pygame.math.Vector2(v.x, v.y))
+                d._cooldown_desarme = 0.0
+                self._pop_finta("DESARME!", j, (255, 150, 70))
+                return
+        if enganou:
+            j._cooldown_desarme = max(j._cooldown_desarme, 0.5)
+            self._pop_finta("ROLETA!", j, (255, 140, 200))
+            som.tocar("publico_uh", 0.55)
 
     @staticmethod
     def _defesa_a_frente(j, adversarios, frente):
@@ -138,7 +185,11 @@ class FintasMixin:
         if d is None:
             return
         dist = math.hypot(d.pos_x - dono.pos_x, d.pos_y - dono.pos_y)
-        if not (FINTA_DIST_IDEAL[0] <= dist <= FINTA_DIST_IDEAL[1] + 10):
+        if ROLETA_DIST_IDEAL[0] <= dist < FINTA_DIST_IDEAL[0] + 10:
+            tipo = "roleta"               # defesa já em cima: a volta protege a bola
+        elif dist <= FINTA_DIST_IDEAL[1] + 10:
+            tipo = "corte"
+        else:
             return
         # O defesa está a vir na direção de quem tem a bola?
         para_dono = pygame.math.Vector2(dono.pos_x - d.pos_x, dono.pos_y - d.pos_y) / dist
@@ -146,7 +197,7 @@ class FintasMixin:
         if fecho < 40:
             return
         if random.random() < dt * 0.7 * getattr(dono, "stat_velocidade", 80) / 85:
-            if self._pedir_finta(dono):
+            if self._pedir_finta(dono, tipo=tipo):
                 dono._finta_cd = 3.0      # a IA não finta sempre (o jogador pode voltar a fintar em 1,2 s)
 
     # ------------------------------------------------------------------ #

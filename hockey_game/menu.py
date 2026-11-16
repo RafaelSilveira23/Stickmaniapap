@@ -462,14 +462,13 @@ CONTROLOS = [
         ("Z  /  Clique no colega", "Passe (escolhe o tipo nas definições)"),
         ("X", "Remate na primeira pessoa"),
         ("V  (+ setas)", "Finta: engana para um lado e corta para o outro"),
+        ("F", "Roleta: dá uma volta com a bola e passa pelo defesa"),
         ("Rato  /  Setas", "Apontar à baliza (no remate)"),
         ("Manter X  /  Clique", "Força do remate (larga para rematar)"),
     ]),
     ("JOGO", [
         ("ESC  /  P", "Pausa (no ecrã do remate, ESC cancela o remate)"),
         ("F4", "Mudar a dificuldade da IA"),
-        ("F11", "Ecrã inteiro"),
-        ("F3", "Modo de depuração (FPS)"),
     ]),
 ]
 
@@ -478,12 +477,13 @@ CONTROLOS_COMANDO = [
     ("MOVIMENTO", [
         ("Stick esquerdo  /  Setas", "Mover o jogador"),
         ("RB  /  RT", "Sprint (correr mais rápido)"),
-        ("X  /  LB", "Trocar de jogador (carreira de jogador: pedir a bola)"),
+        ("X", "Trocar de jogador (carreira de jogador: pedir a bola)"),
     ]),
     ("COM A BOLA", [
         ("A", "Passe"),
         ("B", "Remate na primeira pessoa"),
         ("Y  (+ stick)", "Finta: engana para um lado e corta para o outro"),
+        ("LB", "Roleta: dá uma volta com a bola e passa pelo defesa"),
         ("Stick esquerdo", "Apontar à baliza (no remate)"),
         ("Manter B", "Força do remate (larga para rematar)"),
     ]),
@@ -695,7 +695,10 @@ class EcraControlos:
         texto(s, "CONTROLOS  •  COMANDO" if com_comando else "CONTROLOS", 18, COR_TEXTO,
               (caixa.left + 30, caixa.top + 28), ancora="midleft")
         y = caixa.top + 62
-        for secao, linhas in (CONTROLOS_COMANDO if com_comando else CONTROLOS):
+        lista = CONTROLOS_COMANDO if com_comando else CONTROLOS
+        # Com muitas linhas ficam mais juntas, para caberem no painel
+        passo_linha = 29 if sum(len(l) for _s, l in lista) <= 11 else 25
+        for secao, linhas in lista:
             texto(s, secao, 13, COR_DESTAQUE, (caixa.left + 30, y), ancora="midleft")
             pygame.draw.line(s, (40, 65, 120), (caixa.left + 130, y), (caixa.right - 30, y), 1)
             y += 27
@@ -709,7 +712,7 @@ class EcraControlos:
                 pygame.draw.rect(s, (90, 130, 210), tecla_r, 1, border_radius=6)
                 s.blit(img, img.get_rect(center=tecla_r.center))
                 texto(s, descricao, 14, (210, 225, 250), (caixa.left + 270, y), ancora="midleft", negrito=False)
-                y += 29
+                y += passo_linha
             y += 6
 
         # ── Painel do ecrã e do som ──────────────────────────────────────
