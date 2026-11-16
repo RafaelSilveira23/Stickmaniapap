@@ -147,6 +147,7 @@ Para testar no próprio PC: `python servidor/servidor.py` (porta 8765) e, antes 
   desenhada ("DEFESA!", "POSTE!", "ROUBO!"), rasto da bola e contorno nos jogadores (`hockey_game/efeitos.py`)
 - **Sons** criados por síntese no código (sem ficheiros de fora): apito, tacadas, tabelas, postes,
   defesas, golo com buzina e público; volume dos efeitos e do público nas Definições
+- **Guarda-redes melhorado**: sai da baliza para tapar o ângulo, tem inércia, atira-se à bola (estirada) e fica no chão depois, e afasta bolas soltas
 - **Fintas**: corte (V / Y no comando), engano para um lado e corte para o outro, e **roleta** (F / LB no comando), uma volta com a bola colada ao stick; os defesas podem ficar para trás
 - **Faltas a sério**: livre com o jogo parado até ser batido (escolhes passar ou fazer a stickada), penálti e livre direto batidos contra o guarda-redes, cartões amarelo (aviso), azul (30 s fora) e vermelho (expulso), e menos roubos de bola nos choques
 - **Jogar com um comando** (Xbox, PlayStation ou compatível): stick para mexer, A passe, B remate, X trocar, RB sprint, START pausa; também nos menus e no remate na primeira pessoa

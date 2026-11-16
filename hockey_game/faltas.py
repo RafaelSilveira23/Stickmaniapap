@@ -223,9 +223,35 @@ class FaltasMixin:
             j.humano = humano
         self.gr_azul.update(dt, self.bola)
         self.gr_vermelho.update(dt, self.bola)
+        self._separar_parados()
         if marcador.tem_bola:
             self.bola.seguir_jogador(marcador)
             marcador._cooldown_desarme = max(marcador._cooldown_desarme, 0.5)
+
+    def _separar_parados(self):
+        """
+        Com o jogo parado, ninguém fica em cima de ninguém (ao afastar os adversários para a
+        distância do livre, dois deles podiam ir parar ao mesmo sítio). Só mexe nas posições:
+        não é um choque, por isso não há desarmes nem faltas.
+        """
+        from player import SEP_JOGADORES
+        todos = list(self.todos_jogadores)
+        r = self.rink.rect
+        for _ in range(3):
+            for i in range(len(todos)):
+                for k in range(i + 1, len(todos)):
+                    a, b = todos[i], todos[k]
+                    dx, dy = a.pos_x - b.pos_x, a.pos_y - b.pos_y
+                    d = math.hypot(dx, dy)
+                    if d >= SEP_JOGADORES:
+                        continue
+                    if d < 0.1:
+                        dx, dy, d = 1.0, 0.0, 1.0
+                    m = (SEP_JOGADORES - d) / 2
+                    for j, sinal in ((a, 1), (b, -1)):
+                        j.pos_x = max(r.left + 20, min(r.right - 20, j.pos_x + sinal * dx / d * m))
+                        j.pos_y = max(r.top + 20, min(r.bottom - 20, j.pos_y + sinal * dy / d * m))
+                        j.rect.center = (round(j.pos_x), round(j.pos_y))
 
     def _apontar_marcador(self, marcador):
         """No livre o teu jogador não anda, mas as setas / o stick viram-no (para escolher o colega do passe)."""

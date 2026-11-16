@@ -978,6 +978,7 @@ class Game(OnlineMixin, FaltasMixin, FintasMixin):
             b.vel.update(o * 60, 0)
             self._golo(marca)
         elif r == "defesa":
+            gr.repor()
             gr.pos_y = cy + res["u_gr"]
             b.pos_x, b.pos_y = gx - o * 26, cy + res["u_gr"] + lado * 8
             b.vel.update(-o * v * 0.3, random.uniform(-1, 1) * v * 0.2)
@@ -2076,9 +2077,9 @@ class Game(OnlineMixin, FaltasMixin, FintasMixin):
             j._estado_action = None
         dono._cooldown_desarme = 1.0
 
-        # Repor guarda-redes
-        self.gr_azul.pos_y     = float(self.rink.rect.centery)
-        self.gr_vermelho.pos_y = float(self.rink.rect.centery)
+        # Repor guarda-redes (no centro da baliza, de pé)
+        self.gr_azul.repor()
+        self.gr_vermelho.repor()
 
     def _fim_de_parte(self):
         self._bola_parada = None

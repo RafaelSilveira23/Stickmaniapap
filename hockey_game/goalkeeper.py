@@ -2,10 +2,13 @@
 """goalkeeper.py - Guarda-redes com sprites próprios e IA de defesa.
 
 Diferenças em relação ao Player de campo:
-  - Só se move verticalmente (eixo Y), dentro dos limites da baliza
-  - Tem animações próprias: parado, mover_cima/baixo/esquerda/direita, defender_01/02
-  - Não apanha a bola nem remata — só bloqueia
-  - A IA segue a bola verticalmente e tenta interpor-se
+  - Move-se em frente à baliza: sai um pouco da linha para tapar o ângulo (fica na linha entre
+    a bola e o meio da baliza) e encosta-se ao poste quando a bola está de lado
+  - Tem inércia (acelera e trava), como os jogadores
+  - Atira-se à bola (estirada) quando o remate vai para onde ele não chega a andar; durante a
+    estirada chega mais longe, mas depois fica uns instantes no chão
+  - Afasta a bola quando ela fica solta e devagar mesmo à frente dele
+  - Não apanha a bola nem remata
 """
 import os
 import math
@@ -24,6 +27,13 @@ GR_ACCEL    = 2400     # aceleração (px/s²)
 
 # Distância a que o GR reage à bola e entra em modo "defender"
 GR_ALERTA   = 220
+
+# Estirada (mergulho para o lado)
+ESTIRADA_DUR    = 0.32     # s a voar para o lado
+ESTIRADA_VEL    = 1.5      # vezes a velocidade normal
+ESTIRADA_ALCANCE = 6       # px a mais de alcance durante a estirada (corpo esticado)
+NO_CHAO_DUR     = 0.55     # s no chão depois da estirada (quase não se mexe)
+AFASTAR_VEL     = 380      # px/s com que afasta uma bola solta à frente dele
 
 
 def _pasta_gr():
@@ -98,12 +108,21 @@ class Goalkeeper(pygame.sprite.Sprite):
             self._y_min = baliza_rect.centery - 10
             self._y_max = baliza_rect.centery + 10
 
-        # Posição inicial: centro da baliza
+        # Posição inicial: centro da baliza, em cima da linha
+        self.pos_x0 = float(pos_x_fixo)            # x da linha (o GR nunca vai para trás disto)
+        self.cy0 = float(baliza_rect.centery)
+        self.frente = 1 if lado == "esq" else -1   # para que lado é o campo
         self.pos_x = float(pos_x_fixo)
         self.pos_y = float(baliza_rect.centery)
 
+        self.vel_x  = 0.0
         self.vel_y  = 0.0
+        self._target_x = self.pos_x
         self._target_y = self.pos_y
+        self._mergulho = None       # estirada a decorrer: {"t", "lado"}
+        self._no_chao = 0.0         # tempo que ainda fica no chão
+        self._lado_chao = 0         # para que lado caiu (para a animação)
+        self._afastar_cd = 0.0
 
         self.rect = self.image.get_rect(center=(round(self.pos_x), round(self.pos_y)))
 
@@ -122,14 +141,16 @@ class Goalkeeper(pygame.sprite.Sprite):
         # speed: velocidade máxima | reacao: atraso (s) | raio: alcance do corpo e do stick (px)
         # antecipacao: que parte da trajetória do remate o GR consegue prever (0 a 1)
         if nivel == "facil":
-            self.speed, self.reacao, self.raio_defesa, self.antecipacao = 170, 0.22, 16, 0.52
+            self.speed, self.reacao, self.raio_defesa, self.antecipacao = 170, 0.22, 13, 0.52
             self.alerta_dist = 175
         elif nivel == "dificil":
-            self.speed, self.reacao, self.raio_defesa, self.antecipacao = 280, 0.11, 18, 0.70
+            self.speed, self.reacao, self.raio_defesa, self.antecipacao = 260, 0.13, 15, 0.64
             self.alerta_dist = 280
         else:
-            self.speed, self.reacao, self.raio_defesa, self.antecipacao = 230, 0.16, 17, 0.56
+            self.speed, self.reacao, self.raio_defesa, self.antecipacao = 230, 0.16, 15, 0.56
             self.alerta_dist = 220
+        # saida: quanto sai da linha (px) | p_estirada: probabilidade de se atirar quando é preciso
+        self.saida, self.p_estirada = {"facil": (10, 0.4), "dificil": (24, 0.8)}.get(nivel, (18, 0.6))
 
     # ================================================================== #
     # Update principal (chamado pelo game.py)                             #
@@ -139,7 +160,24 @@ class Goalkeeper(pygame.sprite.Sprite):
         self._tempo += dt
         self._ia_decidir(bola)
         self._mover(dt)
+        self._afastar_bola(bola, dt)
         self._atualizar_animacao(dt, bola)
+
+    def raio_atual(self) -> float:
+        """Alcance do corpo e do stick: maior durante a estirada, menor no chão."""
+        if self._mergulho is not None:
+            return self.raio_defesa + ESTIRADA_ALCANCE
+        if self._no_chao > 0:
+            return self.raio_defesa - 4
+        return self.raio_defesa
+
+    def repor(self):
+        """No centro da baliza, de pé (início de jogo, depois de um golo)."""
+        self.pos_x, self.pos_y = self.pos_x0, self.cy0
+        self.vel_x = self.vel_y = 0.0
+        self._mergulho = None
+        self._no_chao = 0.0
+        self._historico.clear()
 
     # ------------------------------------------------------------------ #
     # IA do guarda-redes                                                   #
@@ -147,60 +185,137 @@ class Goalkeeper(pygame.sprite.Sprite):
 
     def _ia_decidir(self, bola):
         """
-        Define _target_y: o GR tenta alinhar-se verticalmente com a bola.
-        Não sai dos limites da baliza.
+        Escolhe para onde o GR vai (_target_x, _target_y) e se se atira à bola.
+        O GR não é perfeito: reage à bola de há 'reacao' segundos.
         """
-        # O GR não é perfeito: reage à posição da bola de há 'reacao' segundos.
         self._historico.append((self._tempo, bola.pos_x, bola.pos_y, bola.vel.x, bola.vel.y))
         while len(self._historico) > 1 and self._historico[1][0] <= self._tempo - self.reacao:
             self._historico.pop(0)
         _, bx, by, bvx, bvy = self._historico[0]
-        y_visto = by
-        # Remate em direção à baliza: o GR calcula onde a bola vai cruzar a linha de golo,
-        #   y_cruz = y + vy * (x_GR - x) / vx
-        # mas só antecipa PARTE do caminho ('antecipacao'): um remate feito direto para ele é
-        # sempre defendido; um remate bem colocado no canto pode entrar se ele não chegar a tempo.
-        para_mim = (bvx < -150) if self.lado == "esq" else (bvx > 150)
-        centro = (self._y_min + self._y_max) / 2
-        if para_mim and bola.dono is None:
-            y_cruz = by + bvy * (self.pos_x - bx) / bvx
-            y_visto = by + (y_cruz - by) * self.antecipacao
-        else:
-            # Bola longe: fica mais perto do meio da baliza (cobre melhor os dois lados)
-            dist = math.hypot(bola.pos_x - self.pos_x, bola.pos_y - self.pos_y)
-            if dist > self.alerta_dist:
-                y_visto = centro + (y_visto - centro) * 0.5
-        self._target_y = max(self._y_min, min(self._y_max, y_visto))
+        if self._mergulho is not None or self._no_chao > 0:
+            return                                   # no ar ou no chão não decide nada
 
-        # Remate a vir para a baliza e já perto: estica-se para a bola
-        if para_mim and bola.dono is None and \
-                math.hypot(bola.pos_x - self.pos_x, bola.pos_y - self.pos_y) < self.alerta_dist:
-            self._defender_timer = max(self._defender_timer, 0.25)
+        o = self.frente
+        frente_bola = (bx - self.pos_x0) * o          # distância da bola à linha, para o campo
+        dist = math.hypot(bx - self.pos_x0, by - self.cy0)
+
+        # 1) Posição de base: na linha entre a bola e o meio da baliza, um pouco fora da linha.
+        #    Sai mais com a bola à média distância e de frente (tapa o ângulo); com a bola muito
+        #    perto fica na linha (para ter tempo de reagir) e com ela longe fica ao centro.
+        if frente_bola <= 4:
+            # Bola atrás da linha de golo: encostado ao poste do lado da bola
+            tx, ty = self.pos_x0, (self._y_max if by > self.cy0 else self._y_min)
+        else:
+            ang = math.atan2(by - self.cy0, frente_bola)
+            perto = max(0.0, min(1.0, (dist - 60) / 120))
+            longe = max(0.0, min(1.0, (560 - dist) / 260))
+            p = self.saida * perto * longe * max(0.0, math.cos(ang))
+            tx = self.pos_x0 + o * p * math.cos(ang)
+            # Para o lado: acompanha a bola (até ao poste) e, fora da linha, um pouco mais
+            ty = self.cy0 + (by - self.cy0) * (0.4 if dist < self.alerta_dist else 0.25) + p * math.sin(ang)
+
+        # 2) Remate a vir para a baliza: vai para onde a bola vai cruzar (só antecipa parte)
+        para_mim = (bvx * o < -150) and bola.dono is None
+        if para_mim:
+            t_chegada = (self.pos_x - bx) / bvx if bvx else 9.0
+            y_cruz = by + bvy * t_chegada
+            ty = by + (y_cruz - by) * self.antecipacao
+            tx = self.pos_x                           # num remate já não sai nem recua
+            self._talvez_estirada(y_cruz, t_chegada)
+            if dist < self.alerta_dist:
+                self._defender_timer = max(self._defender_timer, 0.25)
+
+        margem = abs(tx - self.pos_x0) * 0.6           # fora da linha pode ir um pouco mais ao lado
+        self._target_x = tx
+        self._target_y = max(self._y_min - margem, min(self._y_max + margem, ty))
+
+    def _talvez_estirada(self, y_cruz: float, t_chegada: float):
+        """Atira-se para o lado se a bola vai passar fora do alcance e não há tempo para lá chegar a andar."""
+        if not (0.03 < t_chegada < 0.45):
+            return
+        falta = y_cruz - self.pos_y
+        alcance_andar = self.raio_defesa + self.speed * max(0.0, t_chegada - 0.05) * 0.6
+        if abs(falta) <= alcance_andar:
+            return                                    # chega lá a andar
+        if abs(falta) > self.raio_defesa + ESTIRADA_ALCANCE + self.speed * ESTIRADA_VEL * ESTIRADA_DUR:
+            return                                    # nem a voar lá chega (vai para fora)
+        if random.random() > self.p_estirada:
+            return
+        self._mergulho = {"t": 0.0, "lado": 1 if falta > 0 else -1}
+        self._defender_timer = ESTIRADA_DUR + NO_CHAO_DUR
 
     # ------------------------------------------------------------------ #
-    # Movimento vertical com inércia                                       #
+    # Movimento com inércia                                                #
     # ------------------------------------------------------------------ #
 
     def _mover(self, dt: float):
-        dy = self._target_y - self.pos_y
-        taxa = GR_ACCEL * dt
-
-        if abs(dy) <= taxa:
-            self.pos_y = self._target_y
-            self.vel_y = 0.0
+        self._afastar_cd = max(0.0, self._afastar_cd - dt)
+        if self._mergulho is not None:
+            # Estirada: voa para o lado, muito depressa, e desce até ao chão
+            m = self._mergulho
+            m["t"] += dt
+            self.vel_y = m["lado"] * self.speed * ESTIRADA_VEL
+            self.vel_x *= 0.8
+            if m["t"] >= ESTIRADA_DUR:
+                self._mergulho = None
+                self._no_chao = NO_CHAO_DUR
+                self._lado_chao = m["lado"]
+        elif self._no_chao > 0:
+            # No chão: trava e quase não se mexe até se levantar
+            self._no_chao = max(0.0, self._no_chao - dt)
+            self.vel_x *= 0.75
+            self.vel_y *= 0.75
         else:
-            # Aceleração proporcional à distância (mais rápido quando longe)
-            vel_desejada = math.copysign(
-                min(self.speed, abs(dy) * 4),   # proporcional mas limitada
-                dy
-            )
-            self.vel_y = vel_desejada
+            # Velocidade desejada proporcional à distância ao alvo (abranda ao chegar),
+            # e a velocidade real muda no máximo GR_ACCEL por segundo (inércia)
+            dx, dy = self._target_x - self.pos_x, self._target_y - self.pos_y
+            d = math.hypot(dx, dy)
+            if d > 0.5:
+                v = min(self.speed, d * 7)
+                vdx, vdy = dx / d * v, dy / d * v
+            else:
+                vdx = vdy = 0.0
+            taxa = GR_ACCEL * dt
+            ddx, ddy = vdx - self.vel_x, vdy - self.vel_y
+            dd = math.hypot(ddx, ddy)
+            if dd > taxa:
+                ddx, ddy = ddx / dd * taxa, ddy / dd * taxa
+            self.vel_x += ddx
+            self.vel_y += ddy
 
+        self.pos_x += self.vel_x * dt
         self.pos_y += self.vel_y * dt
-
-        # Clamp aos limites
-        self.pos_y = max(self._y_min, min(self._y_max, self.pos_y))
+        # Nunca para dentro da baliza nem demasiado longe dela
+        o = self.frente
+        fora = (self.pos_x - self.pos_x0) * o
+        if fora < 0:
+            self.pos_x, self.vel_x = self.pos_x0, 0.0
+        elif fora > self.saida + 4:
+            self.pos_x = self.pos_x0 + o * (self.saida + 4)
+            self.vel_x = 0.0
+        margem = max(0.0, fora) * 0.6
+        estirada = 12 if (self._mergulho is not None or self._no_chao > 0) else 0
+        lo, hi = self._y_min - margem - estirada, self._y_max + margem + estirada
+        if self.pos_y < lo or self.pos_y > hi:
+            self.pos_y = max(lo, min(hi, self.pos_y))
+            self.vel_y = 0.0
         self.rect.center = (round(self.pos_x), round(self.pos_y))
+
+    def _afastar_bola(self, bola, dt: float):
+        """Bola solta e devagar mesmo à frente do GR: ele afasta-a para o lado (não a deixa ali)."""
+        if bola.dono is not None or self._afastar_cd > 0 or self._mergulho is not None:
+            return
+        if bola.vel.length() > 120:
+            return
+        dx, dy = bola.pos_x - self.pos_x, bola.pos_y - self.pos_y
+        if math.hypot(dx, dy) > self.raio_atual() + 12 or dx * self.frente < -4:
+            return
+        lado = 1 if dy >= 0 else -1
+        v = pygame.math.Vector2(self.frente * 0.75, lado * 0.66).normalize() * AFASTAR_VEL
+        bola.vel.update(v.x, v.y)
+        bola._evento("passe", AFASTAR_VEL)
+        self._afastar_cd = 0.8
+        self._defender_timer = max(self._defender_timer, 0.3)
 
     # ------------------------------------------------------------------ #
     # Animação                                                             #
@@ -215,7 +330,9 @@ class Goalkeeper(pygame.sprite.Sprite):
         self._pronto = dist < (self.alerta_dist * 1.2 if self._pronto else self.alerta_dist)
 
         # Prioridade: defesa > pronto (agachado, mesmo a deslizar) > a deslizar > parado
-        if self._defender_timer > 0:
+        if self._mergulho is not None or self._no_chao > 0:
+            self._anim.estado = "defender"
+        elif self._defender_timer > 0:
             self._anim.estado = "defender"
         elif self._pronto:
             self._anim.estado = "pronto"
@@ -235,10 +352,15 @@ class Goalkeeper(pygame.sprite.Sprite):
         bob = -round(abs(math.sin(self._fase)) * 2)
         # Ao defender, inclina-se para o lado da bola; a inclinação muda aos poucos
         alvo = 0.0
-        if self._anim.estado == "defender":
+        if self._mergulho is not None or self._no_chao > 0:
+            # Estirada: o corpo deita-se para o lado do mergulho (e fica deitado no chão)
+            lado = self._mergulho["lado"] if self._mergulho is not None else self._lado_chao
+            inclinacao = 62 if self._mergulho is not None else 75
+            alvo = -lado * inclinacao if self.lado == "esq" else lado * inclinacao
+        elif self._anim.estado == "defender":
             dy = max(-1.0, min(1.0, (bola.pos_y - self.pos_y) / 40))
             alvo = -dy * 14 if self.lado == "esq" else dy * 14
-        self._angulo += (alvo - self._angulo) * min(1.0, dt * 14)
+        self._angulo += (alvo - self._angulo) * min(1.0, dt * (22 if self._mergulho is not None else 14))
         if abs(self._angulo) < 0.3:
             self._angulo = 0.0
 
@@ -276,7 +398,7 @@ class Goalkeeper(pygame.sprite.Sprite):
         if bola.dono is not None:
             return False
 
-        raio_colisao = self.raio_defesa + 5   # corpo/stick do GR + raio da bola
+        raio_colisao = self.raio_atual() + 5   # corpo/stick do GR + raio da bola
         ax, ay = pos_anterior if pos_anterior is not None else (bola.pos_x, bola.pos_y)
         bx, by = bola.pos_x, bola.pos_y
         sx, sy = bx - ax, by - ay

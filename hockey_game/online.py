@@ -396,6 +396,9 @@ class OnlineMixin:
                    round(p.vetor_direcao.y, 2), p._estado_action or "", round(p._action_timer, 2),
                    int(p.tem_bola), int(p.selecionado), int(p._sprint_ativo)] for p in lista],
             "g": [[r(g.pos_y), r(g.vel_y), round(g._defender_timer, 2)] for g in (self.gr_azul, self.gr_vermelho)],
+            # (campo extra: x do GR e estirada; um jogo mais antigo ignora-o)
+            "gx": [[r(g.pos_x), (g._mergulho["lado"] if g._mergulho else 0), round(g._no_chao, 2), g._lado_chao]
+                   for g in (self.gr_azul, self.gr_vermelho)],
             "b": [r(b.pos_x), r(b.pos_y), r(b.vel.x), r(b.vel.y), indice.get(b.dono, -1)],
             "p": [self.golos_azul, self.golos_vermelho, self.faltas_azul, self.faltas_vermelho,
                   r(self.tempo_restante), self.parte],
@@ -472,6 +475,10 @@ class OnlineMixin:
                 p.vetor_direcao.update(dx, dy)
         for g, (y, vy, t_def) in zip((self.gr_azul, self.gr_vermelho), msg["g"]):
             g._rede_y, g.vel_y, g._defender_timer = y, vy, t_def
+        for g, (x, mergulho, chao, lado_chao) in zip((self.gr_azul, self.gr_vermelho), msg.get("gx", [])):
+            g._rede_x = x
+            g._mergulho = {"t": 0.0, "lado": mergulho} if mergulho else None
+            g._no_chao, g._lado_chao = chao, lado_chao
         bx, by, bvx, bvy, dono = msg["b"]
         b = self.bola
         b.vel.update(bvx, bvy)
@@ -636,6 +643,8 @@ class OnlineMixin:
         for g in (self.gr_azul, self.gr_vermelho):
             if hasattr(g, "_rede_y"):
                 g.pos_y += (g._rede_y - g.pos_y) * k
+                if hasattr(g, "_rede_x"):
+                    g.pos_x += (g._rede_x - g.pos_x) * k
                 g._atualizar_animacao(dt, self.bola)
         b = self.bola
         if b._rede is None:
