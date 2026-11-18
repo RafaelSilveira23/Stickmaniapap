@@ -53,14 +53,17 @@ DONO_32 = {
     "Marcadores": C, "Força das equipas no jogo": C,
     "Base de dados": V,
     "Menu principal e definições": V, "Escolha das equipas por divisão": V,
-    "Marcador e painel do jogo": V, "Estatísticas da partida": V, "Menu principal com mais espaço": V, "Jogar com um comando": V, "Faltas, bolas paradas e cartões": V, "Cartões": V, "Mais faltas e menos roubos de bola": V, "Livre parado até ser batido": V, "Fintas": V, "Roleta": V, "Guarda-redes melhorado": V,
+    "Marcador e painel do jogo": V, "Estatísticas da partida": C, "Menu principal com mais espaço": V,
+    "Jogar com um comando": R, "Faltas, bolas paradas e cartões": C, "Cartões": C,
+    "Mais faltas e menos roubos de bola": R, "Livre parado até ser batido": C, "Fintas": R, "Roleta": R,
+    "Guarda-redes melhorado": R,
     "Gráficos": R,
     "Sons": V, "Sons no jogo": V, "Cânticos dos clubes": V, "Cânticos no jogo": V,
     "Estilo arcade": C, "Tempo de jogo e ecrã a tremer": C,
-    "Remate na primeira pessoa": V, "Perspetiva na primeira pessoa": V, "Guarda-redes no remate": V,
-    "Modo teste": V, "Remate em movimento": V, "Defesas no ecrã": V, "Defesas do tamanho certo": V,
-    "Bloqueio do remate": V, "Aspeto do ecrã do remate": V, "Stick e bola": V, "Animação da stickada": V,
-    "Animação do guarda-redes no remate": V,
+    "Remate na primeira pessoa": R, "Perspetiva na primeira pessoa": R, "Guarda-redes no remate": R,
+    "Modo teste": R, "Remate em movimento": R, "Defesas no ecrã": R, "Defesas do tamanho certo": R,
+    "Bloqueio do remate": R, "Aspeto do ecrã do remate": R, "Stick e bola": R, "Animação da stickada": R,
+    "Animação do guarda-redes no remate": R,
     "Carreira de jogador": V, "Nota e evolução": V, "Base de dados da carreira de jogador": V,
     "A vida do jogador": V, "Eventos e atividades": V, "Como a vida mexe no hóquei": V,
     "Pessoas e relações": V, "Escolhas com consequências": V, "Bens e conquistas": V,
@@ -72,45 +75,47 @@ DONO_32 = {
     "Stickada no jogo online": R, "Servidor na Europa": R,
 }
 # Figuras da secção 3.2 (número no relatório conjunto)
-DONO_FIG = {10: C, 11: C, 12: C, 13: C, 14: V, 15: V, 16: V, 17: V, 18: C, 19: V,
-            **{n: V for n in range(20, 30)}, **{n: R for n in range(30, 34)}}
+DONO_FIG = {10: C, 11: C, 12: C, 13: C, 14: R, 15: R, 16: R, 17: R, 18: C, 19: V,
+            **{n: V for n in range(20, 28)}, 28: C, 29: C, **{n: R for n in range(30, 34)}}
 # Parágrafos da secção 3.4
 DONO_34 = {
     "Perspetiva sem mudar a física": R, "Balizas desenhadas no código": R, "Desempenho": R,
     "Pontaria com o rato": R, "Sprites": R, "Cabelo igual em todos os frames": R,
     "Bola presa e jogadores colados": R,
     "Colisões e IA com comportamentos estranhos": C, "Bola e guarda-redes": C,
-    "Porquê SQLite": V, "Regras do modo carreira": C, "Porquê eliminatórias de um só jogo": C, "Porquê sons sintetizados": V, "Porquê cânticos feitos por código": V, "Flash branco no remate": V,
+    "Porquê SQLite": V, "Regras do modo carreira": C, "Porquê eliminatórias de um só jogo": C, "Porquê sons sintetizados": V, "Porquê cânticos feitos por código": V, "Flash branco no remate": R,
     "Quatro jogadores de campo": C, "Afinar a simulação com dados": C,
     "Porquê um anfitrião com autoridade": R, "Porquê uma aplicação com um servidor próprio": R, "Quem decide a stickada no online": R,
 }
 
 # Tabela da divisão de tarefas (secção 5.4)
 DIVISAO = [
-    ("Inteligência artificial e guarda-redes", "ai.py, goalkeeper.py", V),
+    ("Inteligência artificial dos jogadores", "ai.py", V),
     ("Menus e interface", "menu.py, ui.py, componentes.py, graficos.py", V),
     ("Sons e cânticos dos clubes", "sons.py, canticos.py", V),
     ("Base de dados (SQLite)", "carreira.py, carreira_jogador.py (parte da base de dados)", V),
     ("Carreira de jogador e vida do jogador", "carreira_jogador.py, carreira_jogador_menu.py, vida.py", V),
-    ("Remate na primeira pessoa e modo teste", "remate_pov.py, pavilhao_pov.py", V),
+    ("Remate na primeira pessoa e modo teste", "remate_pov.py, pavilhao_pov.py", R),
     ("Física da bola e dos jogadores, regras", "ball.py, player.py, baliza.py", R),
+    ("Fintas, guarda-redes (movimento e estiradas) e comando", "fintas.py, goalkeeper.py, comando.py", R),
     ("Gráficos, sprites e câmara em perspetiva", "camera.py, rink.py, animation.py", R),
     ("Jogo online, servidor e aplicação para Windows",
      "rede.py, online.py, online_menu.py, servidor/servidor.py, construir_app.py, instalador.py", R),
     ("Ciclo principal do jogo", "game.py, settings.py", C),
     ("Modo carreira", "carreira.py, carreira_menu.py, team.py", C),
     ("Estilo arcade", "efeitos.py", C),
+    ("Faltas, cartões, bolas paradas e estatísticas da partida", "faltas.py", C),
     ("Análise, diagramas, testes e relatório", "docs/, ferramentas/", C),
 ]
 QUEM = {V: "Vasco Andreia", R: "Rafael da Hora Silveira", C: "Os dois"}
 
 # O que cada um fez, em poucas palavras (para a secção 3.2.1)
 LISTA = {
-    V: "a inteligência artificial dos jogadores e dos guarda-redes, a base de dados, os menus e a "
-       "interface, os sons, o remate na primeira pessoa com o modo teste e a carreira de jogador com a "
-       "vida do jogador",
-    R: "a física da bola e dos jogadores, os gráficos com a câmara em perspetiva, o jogo online com o "
-       "servidor do jogo (jogo aleatório e salas privadas) e a aplicação para Windows com o instalador",
+    V: "a inteligência artificial dos jogadores, a base de dados, os menus e a interface, os sons e os "
+       "cânticos dos clubes e a carreira de jogador com a vida do jogador",
+    R: "a física da bola e dos jogadores, as fintas, o guarda-redes, os gráficos com a câmara em "
+       "perspetiva, o remate na primeira pessoa com o modo teste, o comando, o jogo online com o servidor "
+       "do jogo (jogo aleatório e salas privadas) e a aplicação para Windows com o instalador",
 }
 
 # Resumo do trabalho de cada um, para o relatório do colega (secção 3.2.3)
@@ -121,6 +126,15 @@ RESUMO = {
          "velocidade pretendida, chocam uns com os outros sem se sobreporem e, quando um defensor choca "
          "com quem tem a bola, pode desarmá-lo, com uma probabilidade que depende dos atributos dos dois. "
          "O código está em ball.py e player.py."),
+        ("Fintas, guarda-redes e comando.", "Com a bola pode-se fintar: engana-se para um lado e corta-se "
+         "para o outro, ou dá-se uma volta com a bola colada ao stick (roleta). O guarda-redes sai um pouco "
+         "da baliza para tapar o ângulo, acelera e trava aos poucos e atira-se à bola quando não chega lá a "
+         "andar. O jogo também se pode jogar com um comando da Xbox ou da PlayStation (fintas.py, "
+         "goalkeeper.py e comando.py)."),
+        ("Remate na primeira pessoa.", "Ao carregar em X com a bola, a câmara passa para os olhos do "
+         "jogador: aponta-se a qualquer ponto da baliza e escolhe-se a força, e os defesas que estão à "
+         "frente podem bloquear o remate (remate_pov.py). O modo teste deixa treinar o remate contra o "
+         "guarda-redes."),
         ("Gráficos e câmara.", "A física é calculada num campo plano visto de cima e a câmara (camera.py) "
          "só muda o desenho, mostrando o rinque em perspetiva, como numa transmissão de televisão. Os "
          "jogadores e a bola são desenhados por ordem de profundidade, as cores dos equipamentos são "
@@ -137,12 +151,10 @@ RESUMO = {
          "no browser, mas o grupo preferiu uma aplicação instalada."),
     ],
     V: [
-        ("Inteligência artificial e guarda-redes.", "Cada jogador da IA tem um papel (avançado, médio ou "
-         "defesa) e, a cada momento, escolhe entre atacar, defender, apoiar ou ir buscar a bola; antes de "
-         "passar ou rematar vê se há alguém no caminho. Os três níveis de dificuldade mudam a velocidade, a "
-         "rapidez a reagir e a pontaria. O guarda-redes sai um pouco da baliza para tapar o ângulo, reage "
-         "com um pequeno atraso e atira-se à bola quando não chega lá a andar, por isso não é perfeito. O "
-         "código está em ai.py e goalkeeper.py."),
+        ("Inteligência artificial.", "Cada jogador da IA tem um papel (avançado, médio ou defesa) e, a "
+         "cada momento, escolhe entre atacar, defender, apoiar ou ir buscar a bola; antes de passar ou "
+         "rematar vê se há alguém no caminho. Os três níveis de dificuldade mudam a velocidade, a rapidez a "
+         "reagir e a pontaria. O código está em ai.py."),
         ("Base de dados.", "O modo carreira e a carreira de jogador guardam tudo numa base de dados "
          "SQLite (classificação, jogos, marcadores e o jogador criado); a classificação é lida ordenada "
          "por pontos, diferença de golos e golos marcados."),
@@ -152,10 +164,6 @@ RESUMO = {
          "jogo mostram o jogo desfocado por trás e há transições suaves entre ecrãs. Os 14 sons (apito, "
          "tacadas, tabela, poste, público e buzina do golo) são criados por síntese em sons.py, a partir "
          "de ondas sinusoidais e ruído, sem ficheiros de fora."),
-        ("Remate na primeira pessoa.", "Ao carregar em X com a bola, a câmara passa para os olhos do "
-         "jogador: aponta-se a qualquer ponto da baliza e escolhe-se a força, e os defesas que estão à "
-         "frente podem bloquear o remate (remate_pov.py). O modo teste deixa treinar o remate só contra o "
-         "guarda-redes."),
         ("Carreira de jogador.", "O utilizador cria o seu jogador e joga a época só com ele, com uma nota "
          "em cada jogo e propostas de outros clubes no fim. Fora do rinque tem uma vida (vida.py): forma, "
          "moral, confiança do treinador, fama, estudos e dinheiro, eventos com escolhas e consequências, "
@@ -164,20 +172,20 @@ RESUMO = {
 }
 
 CONTRIBUTO = {
-    V: "No StickMania, o Vasco Andreia programou a inteligência artificial dos jogadores e dos "
-       "guarda-redes, a base de dados, os menus e a interface, os sons, o remate na primeira pessoa com o "
-       "modo teste e a carreira de jogador com a vida do jogador. Nestas partes, as maiores dificuldades "
-       "foram pôr a IA a jogar de forma credível sem ser perfeita (tempo de reação e erros do "
-       "guarda-redes), a perspetiva e o bloqueio dos defesas no ecrã do remate, e criar os sons só com "
-       "matemática. O modo carreira, o estilo arcade, a análise, os testes e o relatório foram feitos em "
-       "conjunto com o Rafael da Hora Silveira.",
+    V: "No StickMania, o Vasco Andreia programou a inteligência artificial dos jogadores, a base de "
+       "dados, os menus e a interface, os sons e os cânticos dos clubes e a carreira de jogador com a vida "
+       "do jogador. Nestas partes, as maiores dificuldades foram pôr a IA a jogar de forma credível sem ser "
+       "perfeita e criar os sons e os cânticos só com o código. O modo carreira, as faltas e os cartões, o "
+       "estilo arcade, a análise, os testes e o relatório foram feitos em conjunto com o Rafael da Hora "
+       "Silveira.",
     R: "No StickMania, o Rafael da Hora Silveira programou a física da bola e dos jogadores (atrito, "
-       "ressaltos, colisões e desarmes), os gráficos, os sprites e a câmara em perspetiva, o jogo online "
-       "com o servidor do jogo (jogo aleatório, jogadores online e salas privadas) e a aplicação para "
-       "Windows com o instalador. Nestas partes, as maiores dificuldades foram as colisões (a bola a "
-       "atravessar as tabelas e os jogadores colados uns aos outros), a câmara em perspetiva sem mudar a "
-       "física e pôr dois computadores a ver o mesmo jogo pela internet. O modo carreira, o estilo arcade, a análise, os testes e o relatório foram feitos em "
-       "conjunto com o Vasco Andreia.",
+       "ressaltos, choques e desarmes), as fintas e o guarda-redes, os gráficos e a câmara em perspetiva, o "
+       "remate na primeira pessoa com o modo teste, o comando, o jogo online com o servidor do jogo e a "
+       "aplicação para Windows com o instalador. Nestas partes, as maiores dificuldades foram os choques "
+       "entre jogadores, a perspetiva e o bloqueio dos defesas no ecrã do remate, afinar o guarda-redes para "
+       "não defender demais nem de menos, e pôr dois computadores a ver o mesmo jogo pela internet. O modo "
+       "carreira, as faltas e os cartões, o estilo arcade, a análise, os testes e o relatório foram feitos "
+       "em conjunto com o Vasco Andreia.",
 }
 
 
