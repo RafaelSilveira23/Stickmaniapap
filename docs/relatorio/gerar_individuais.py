@@ -138,10 +138,11 @@ RESUMO = {
     ],
     V: [
         ("Inteligência artificial e guarda-redes.", "Cada jogador da IA tem um papel (avançado, médio ou "
-         "defesa) e em cada frame escolhe entre atacar, defender, apoiar ou perseguir; antes de passar ou "
-         "rematar verifica se a linha está livre. Os três níveis de dificuldade mudam a velocidade, o "
-         "tempo de reação e a pontaria. O guarda-redes move-se sobre a linha de golo e reage ao que viu "
-         "há alguns décimos de segundo, por isso não é perfeito. O código está em ai.py e goalkeeper.py."),
+         "defesa) e, a cada momento, escolhe entre atacar, defender, apoiar ou ir buscar a bola; antes de "
+         "passar ou rematar vê se há alguém no caminho. Os três níveis de dificuldade mudam a velocidade, a "
+         "rapidez a reagir e a pontaria. O guarda-redes sai um pouco da baliza para tapar o ângulo, reage "
+         "com um pequeno atraso e atira-se à bola quando não chega lá a andar, por isso não é perfeito. O "
+         "código está em ai.py e goalkeeper.py."),
         ("Base de dados.", "O modo carreira e a carreira de jogador guardam tudo numa base de dados "
          "SQLite (classificação, jogos, marcadores e o jogador criado); a classificação é lida ordenada "
          "por pontos, diferença de golos e golos marcados."),
@@ -250,9 +251,11 @@ def gerar(aluno):
     modelo_h3 = procurar(d, "2.3.1  Técnicas")
 
     # Capa, resumo e intervenientes
+    capas = 0
     for p in d.paragraphs[:60]:
         if p.text.strip() in ("Rafael da Hora Silveira", "Rafael da Hora Silveira e Vasco Andreia"):
-            dupla = "Vasco" in p.text
+            capas += 1
+            dupla = capas == 2               # só a subcapa diz com quem foi feito o projeto
             p.runs[0].text = a["nome"]
             for r in p.runs[1:]:
                 r.text = ""
@@ -388,7 +391,7 @@ def gerar(aluno):
     novo_paragrafo(idx_tab, idx_tab._p, ["Tabela 99 – Divisão de tarefas"])
 
     # Conclusão: contributo individual
-    concl = procurar(d, "O projeto permitiu aplicar")
+    concl = procurar(d, "O projeto permitiu-nos aplicar")
     novo_paragrafo(modelo_txt, concl._p, ["Contributo individual. ", CONTRIBUTO[aluno]])
 
     renumerar(d, "Figura")
