@@ -48,18 +48,18 @@ DONO_32 = {
     "Física da bola": R, "Bola no stick": R, "Movimento e colisões dos jogadores": R, "Desarmes": R,
     "Inteligência artificial": V, "Guarda-redes": V, "Defesas sem falhas": V,
     "Ordem de desenho": R, "Câmara em perspetiva": R, "Equipamentos das equipas": R, "Animações": R,
-    "Modo carreira": C, "Calendário": C, "Duas divisões, subidas e descidas": C, "Taça Europeia": C,
-    "Ecrã da época": C, "Clubes novos e planteis": C, "Jogos simulados": C, "Probabilidades e forma": C, "Planteis": C,
-    "Marcadores": C, "Força das equipas no jogo": C,
+    "Modo carreira": V, "Calendário": V, "Duas divisões, subidas e descidas": V, "Taça Europeia": V,
+    "Ecrã da época": V, "Clubes novos e planteis": V, "Jogos simulados": V, "Probabilidades e forma": V, "Planteis": V,
+    "Marcadores": V, "Força das equipas no jogo": V,
     "Base de dados": V,
     "Menu principal e definições": V, "Escolha das equipas por divisão": V,
-    "Marcador e painel do jogo": V, "Estatísticas da partida": C, "Menu principal com mais espaço": V,
-    "Jogar com um comando": R, "Faltas, bolas paradas e cartões": C, "Cartões": C,
-    "Mais faltas e menos roubos de bola": R, "Livre parado até ser batido": C, "Fintas": R, "Roleta": R,
+    "Marcador e painel do jogo": V, "Estatísticas da partida": V, "Menu principal com mais espaço": V,
+    "Jogar com um comando": R, "Faltas, bolas paradas e cartões": R, "Cartões": R,
+    "Mais faltas e menos roubos de bola": R, "Livre parado até ser batido": R, "Fintas": R, "Roleta": R,
     "Guarda-redes melhorado": R,
     "Gráficos": R,
     "Sons": V, "Sons no jogo": V, "Cânticos dos clubes": V, "Cânticos no jogo": V,
-    "Estilo arcade": C, "Tempo de jogo e ecrã a tremer": C,
+    "Estilo arcade": R, "Tempo de jogo e ecrã a tremer": R,
     "Remate na primeira pessoa": R, "Perspetiva na primeira pessoa": R, "Guarda-redes no remate": R,
     "Modo teste": R, "Remate em movimento": R, "Defesas no ecrã": R, "Defesas do tamanho certo": R,
     "Bloqueio do remate": R, "Aspeto do ecrã do remate": R, "Stick e bola": R, "Animação da stickada": R,
@@ -68,23 +68,23 @@ DONO_32 = {
     "A vida do jogador": V, "Eventos e atividades": V, "Como a vida mexe no hóquei": V,
     "Pessoas e relações": V, "Escolhas com consequências": V, "Bens e conquistas": V,
     "Menus com o mesmo estilo": V, "Transições entre ecrãs": V,
-    "Otimização": C, "Arranque sem consola": C, "Limpeza do repositório": C,
+    "Otimização": R, "Arranque sem consola": R, "Limpeza do repositório": C,
     "Jogo online": R, "Anfitrião com autoridade": R, "Comunicação": R, "Diferenças no jogo online": R,
     "Servidor do jogo": R, "Emparelhamento aleatório e salas privadas": R,
     "Aplicação para Windows e instalador": R, "Da versão do browser à aplicação": R,
     "Stickada no jogo online": R, "Servidor na Europa": R,
 }
 # Figuras da secção 3.2 (número no relatório conjunto)
-DONO_FIG = {10: C, 11: C, 12: C, 13: C, 14: R, 15: R, 16: R, 17: R, 18: C, 19: V,
-            **{n: V for n in range(20, 28)}, 28: C, 29: C, **{n: R for n in range(30, 34)}}
+DONO_FIG = {10: V, 11: V, 12: V, 13: V, 14: R, 15: R, 16: R, 17: R, 18: R, 19: V,
+            **{n: V for n in range(20, 30)}, **{n: R for n in range(30, 34)}}
 # Parágrafos da secção 3.4
 DONO_34 = {
     "Perspetiva sem mudar a física": R, "Balizas desenhadas no código": R, "Desempenho": R,
     "Pontaria com o rato": R, "Sprites": R, "Cabelo igual em todos os frames": R,
     "Bola presa e jogadores colados": R,
-    "Colisões e IA com comportamentos estranhos": C, "Bola e guarda-redes": C,
-    "Porquê SQLite": V, "Regras do modo carreira": C, "Porquê eliminatórias de um só jogo": C, "Porquê sons sintetizados": V, "Porquê cânticos feitos por código": V, "Flash branco no remate": R,
-    "Quatro jogadores de campo": C, "Afinar a simulação com dados": C,
+    "Colisões e IA com comportamentos estranhos": C, "Bola e guarda-redes": R,
+    "Porquê SQLite": V, "Regras do modo carreira": V, "Porquê eliminatórias de um só jogo": V, "Porquê sons sintetizados": V, "Porquê cânticos feitos por código": V, "Flash branco no remate": R,
+    "Quatro jogadores de campo": V, "Afinar a simulação com dados": V,
     "Porquê um anfitrião com autoridade": R, "Porquê uma aplicação com um servidor próprio": R, "Quem decide a stickada no online": R,
 }
 
@@ -101,21 +101,23 @@ DIVISAO = [
     ("Gráficos, sprites e câmara em perspetiva", "camera.py, rink.py, animation.py", R),
     ("Jogo online, servidor e aplicação para Windows",
      "rede.py, online.py, online_menu.py, servidor/servidor.py, construir_app.py, instalador.py", R),
+    ("Modo carreira (divisões, Taça Europeia e simulação) e estatísticas da partida",
+     "carreira.py, carreira_menu.py, team.py", V),
+    ("Faltas, cartões e bolas paradas", "faltas.py", R),
+    ("Estilo arcade, otimização e arranque sem consola", "efeitos.py, fontes.py, main.py, jogar.vbs", R),
     ("Ciclo principal do jogo", "game.py, settings.py", C),
-    ("Modo carreira", "carreira.py, carreira_menu.py, team.py", C),
-    ("Estilo arcade", "efeitos.py", C),
-    ("Faltas, cartões, bolas paradas e estatísticas da partida", "faltas.py", C),
     ("Análise, diagramas, testes e relatório", "docs/, ferramentas/", C),
 ]
 QUEM = {V: "Vasco Andreia", R: "Rafael da Hora Silveira", C: "Os dois"}
 
 # O que cada um fez, em poucas palavras (para a secção 3.2.1)
 LISTA = {
-    V: "a inteligência artificial dos jogadores, a base de dados, os menus e a interface, os sons e os "
-       "cânticos dos clubes e a carreira de jogador com a vida do jogador",
-    R: "a física da bola e dos jogadores, as fintas, o guarda-redes, os gráficos com a câmara em "
-       "perspetiva, o remate na primeira pessoa com o modo teste, o comando, o jogo online com o servidor "
-       "do jogo (jogo aleatório e salas privadas) e a aplicação para Windows com o instalador",
+    V: "a inteligência artificial dos jogadores, o modo carreira com a base de dados, os menus e a "
+       "interface com as estatísticas da partida, os sons e os cânticos dos clubes e a carreira de jogador "
+       "com a vida do jogador",
+    R: "a física da bola e dos jogadores, as faltas e os cartões, as fintas, o guarda-redes, os gráficos "
+       "com a câmara em perspetiva, o estilo arcade, o remate na primeira pessoa com o modo teste, o comando, "
+       "o jogo online com o servidor do jogo e a aplicação para Windows com o instalador",
 }
 
 # Resumo do trabalho de cada um, para o relatório do colega (secção 3.2.3)
@@ -135,6 +137,10 @@ RESUMO = {
          "jogador: aponta-se a qualquer ponto da baliza e escolhe-se a força, e os defesas que estão à "
          "frente podem bloquear o remate (remate_pov.py). O modo teste deixa treinar o remate contra o "
          "guarda-redes."),
+        ("Faltas e estilo arcade.", "Depois de uma falta o jogo pára até ser batida: num livre escolhe-se "
+         "passar ou rematar, e no penálti e no livre direto remata-se contra o guarda-redes. Há cartões "
+         "amarelo, azul e vermelho. O estilo arcade dá mais energia ao jogo, com pausas curtas nos impactos, "
+         "o ecrã a tremer e a festa do golo (faltas.py e efeitos.py)."),
         ("Gráficos e câmara.", "A física é calculada num campo plano visto de cima e a câmara (camera.py) "
          "só muda o desenho, mostrando o rinque em perspetiva, como numa transmissão de televisão. Os "
          "jogadores e a bola são desenhados por ordem de profundidade, as cores dos equipamentos são "
@@ -155,6 +161,9 @@ RESUMO = {
          "cada momento, escolhe entre atacar, defender, apoiar ou ir buscar a bola; antes de passar ou "
          "rematar vê se há alguém no caminho. Os três níveis de dificuldade mudam a velocidade, a rapidez a "
          "reagir e a pontaria. O código está em ai.py."),
+        ("Modo carreira.", "Joga-se uma época com duas divisões, subidas e descidas e uma Taça Europeia "
+         "por eliminatórias; os outros jogos são simulados com resultados realistas, a partir da força de "
+         "cada clube (carreira.py e carreira_menu.py)."),
         ("Base de dados.", "O modo carreira e a carreira de jogador guardam tudo numa base de dados "
          "SQLite (classificação, jogos, marcadores e o jogador criado); a classificação é lida ordenada "
          "por pontos, diferença de golos e golos marcados."),
@@ -175,17 +184,16 @@ CONTRIBUTO = {
     V: "No StickMania, o Vasco Andreia programou a inteligência artificial dos jogadores, a base de "
        "dados, os menus e a interface, os sons e os cânticos dos clubes e a carreira de jogador com a vida "
        "do jogador. Nestas partes, as maiores dificuldades foram pôr a IA a jogar de forma credível sem ser "
-       "perfeita e criar os sons e os cânticos só com o código. O modo carreira, as faltas e os cartões, o "
-       "estilo arcade, a análise, os testes e o relatório foram feitos em conjunto com o Rafael da Hora "
-       "Silveira.",
+       "perfeita, simular os jogos do campeonato com resultados realistas e criar os sons e os cânticos só "
+       "com o código. O ciclo principal do jogo, a análise, os testes e o relatório foram feitos em conjunto "
+       "com o Rafael da Hora Silveira.",
     R: "No StickMania, o Rafael da Hora Silveira programou a física da bola e dos jogadores (atrito, "
        "ressaltos, choques e desarmes), as fintas e o guarda-redes, os gráficos e a câmara em perspetiva, o "
        "remate na primeira pessoa com o modo teste, o comando, o jogo online com o servidor do jogo e a "
        "aplicação para Windows com o instalador. Nestas partes, as maiores dificuldades foram os choques "
        "entre jogadores, a perspetiva e o bloqueio dos defesas no ecrã do remate, afinar o guarda-redes para "
-       "não defender demais nem de menos, e pôr dois computadores a ver o mesmo jogo pela internet. O modo "
-       "carreira, as faltas e os cartões, o estilo arcade, a análise, os testes e o relatório foram feitos "
-       "em conjunto com o Vasco Andreia.",
+       "não defender demais nem de menos, e pôr dois computadores a ver o mesmo jogo pela internet. O ciclo "
+       "principal do jogo, a análise, os testes e o relatório foram feitos em conjunto com o Vasco Andreia.",
 }
 
 
@@ -318,8 +326,9 @@ def gerar(aluno):
     for el in grupos[aluno]:
         cur.por(el)
     cur.par(modelo_h3, ["3.2.2  Trabalho feito em conjunto"])
-    cur.par(modelo_txt, ["Estas partes foram feitas pelos dois elementos do grupo: o ciclo principal do jogo, "
-                         "o modo carreira, o estilo arcade, a otimização e a organização do projeto."])
+    cur.par(modelo_txt, ["Só estas partes foram feitas pelos dois elementos do grupo: o ciclo principal do "
+                         "jogo e a organização do projeto. A análise, os testes e o relatório também foram feitos "
+                         "em conjunto."])
     for el in grupos[C]:
         cur.por(el)
     cur.par(modelo_h3, [f"3.2.3  Trabalho feito por {b['nome']} (resumo)"])
@@ -358,9 +367,9 @@ def gerar(aluno):
     n_gantt = re.match(r"Figura (\d+)", legenda_gantt).group(1)
     cur.par(modelo_txt, [
         "O projeto foi feito em dupla. O trabalho foi dividido por partes do jogo, cada uma com os seus "
-        "módulos, para cada elemento poder trabalhar sem estragar o trabalho do outro (Tabela 99). A base do "
-        "jogo, o modo carreira, o estilo arcade, a análise, os diagramas, os testes e o relatório foram feitos "
-        "pelos dois. As alterações de cada um foram juntadas no repositório do GitHub. O diagrama de Gantt "
+        "módulos, para cada elemento poder trabalhar sem estragar o trabalho do outro (Tabela 99). Quase todas "
+        "as partes foram feitas por um só elemento; só o ciclo principal do jogo, a análise, os diagramas, os "
+        "testes e o relatório foram feitos pelos dois. As alterações de cada um foram juntadas no repositório do GitHub. O diagrama de Gantt "
         f"(Figura {n_gantt}, na secção 5.1) também mostra quem fez cada tarefa e quando."])
     leg_modelo = procurar(d, "Tabela 10 – Cronograma", True)
     cur.par(leg_modelo, ["Tabela 99 – Divisão de tarefas entre os dois elementos do grupo"])
