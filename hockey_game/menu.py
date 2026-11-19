@@ -776,8 +776,10 @@ class EcraControlos:
 
 class TeamSelectMenu:
     def __init__(self, screen: pygame.Surface, casa_id: str = "fc_porto",
-                 fora_id: str = "riba_dave", dificuldade: str = "normal", arena: pygame.Surface | None = None):
+                 fora_id: str = "riba_dave", dificuldade: str = "normal", arena: pygame.Surface | None = None,
+                 dois_jogadores: bool = False):
         self.screen = screen
+        self.dois_jogadores = dois_jogadores   # jogador 2 com a equipa de fora (dois_jogadores.py)
         self.arena = arena                  # pavilhão do jogo (fundo desfocado, como no menu principal)
         self.casa_idx = EQUIPAS_LISTA.index(casa_id) if casa_id in EQUIPAS_LISTA else 0
         self.fora_idx = EQUIPAS_LISTA.index(fora_id) if fora_id in EQUIPAS_LISTA else 1
@@ -814,6 +816,11 @@ class TeamSelectMenu:
             Botao((cx - 222, 512, 140, 38), "FÁCIL", "facil", cor=(40, 180, 90), tamanho_texto=17),
             Botao((cx - 70, 512, 140, 38), "NORMAL", "normal", cor=(50, 140, 255), tamanho_texto=17),
             Botao((cx + 82, 512, 140, 38), "DIFÍCIL", "dificil", cor=(230, 70, 70), tamanho_texto=17),
+        ]
+        # Um ou dois jogadores (à esquerda da dificuldade)
+        self.botoes_jog = [
+            Botao((cx - 510, 512, 130, 38), "1 JOGADOR", "1", cor=(50, 140, 255), tamanho_texto=15),
+            Botao((cx - 374, 512, 130, 38), "2 JOGADORES", "2", cor=(230, 120, 40), tamanho_texto=15),
         ]
         self.btn_jogar = Botao((WIDTH // 2 - 160, 596, 320, 56), "INICIAR PARTIDA", "iniciar",
                                cor=(40, 190, 100), tamanho_texto=22, icone="►")
@@ -888,6 +895,8 @@ class TeamSelectMenu:
                 self.mudar_fora(-1)
             elif event.key in (pygame.K_DOWN, pygame.K_s):
                 self.mudar_fora(1)
+            elif event.key == pygame.K_j and self.botoes_jog:
+                self.dois_jogadores = not self.dois_jogadores
             elif event.key == pygame.K_TAB:
                 self.ciclar_dificuldade()
             elif event.key in (pygame.K_f, pygame.K_F1):
@@ -910,7 +919,11 @@ class TeamSelectMenu:
                     return "iniciar"
                 if self.btn_voltar.por_cima(mpos):
                     return "voltar"
-                for b in self.botoes_dif:
+                for b in self.botoes_jog:
+                    if b.por_cima(mpos):
+                        self.dois_jogadores = b.acao == "2"
+                        return None
+                for b in ([] if self.dois_jogadores else self.botoes_dif):
                     if b.por_cima(mpos):
                         self.dificuldade = b.acao
                         return None
@@ -965,9 +978,11 @@ class TeamSelectMenu:
         self.btn_voltar.draw(s, mpos)
 
         # Cartões principais
-        self._desenhar_card(self.rect_casa, "A TUA EQUIPA  •  CASA", info_casa, kit_casa,
-                            self.btn_casa_prev, self.btn_casa_next, virar=False)
-        self._desenhar_card(self.rect_fora, "ADVERSÁRIO  •  VISITANTE (IA)", info_fora, kit_fora,
+        dois = self.dois_jogadores
+        self._desenhar_card(self.rect_casa, "JOGADOR 1  •  CASA" if dois else "A TUA EQUIPA  •  CASA", info_casa,
+                            kit_casa, self.btn_casa_prev, self.btn_casa_next, virar=False)
+        self._desenhar_card(self.rect_fora, "JOGADOR 2  •  VISITANTE" if dois else "ADVERSÁRIO  •  VISITANTE (IA)",
+                            info_fora, kit_fora,
                             self.btn_fora_prev, self.btn_fora_next, virar=True)
 
         # VS + pré-visualização do ringue
@@ -988,18 +1003,35 @@ class TeamSelectMenu:
         for k, (eq_id, idx, r) in enumerate(self.grid_rects):
             self._desenhar_mini_card(eq_id, idx, r, mpos, k)
 
-        # Dificuldade
-        texto(s, "DIFICULDADE DA IA", 14, (200, 220, 255), (WIDTH // 2, 496))
-        for b in self.botoes_dif:
-            b.ativo = (b.acao == self.dificuldade)
+        # Jogadores e dificuldade
+        if self.botoes_jog:
+            texto(s, "JOGADORES  [J]", 14, (200, 220, 255),
+                  ((self.botoes_jog[0].rect.left + self.botoes_jog[1].rect.right) // 2, 496))
+        for b in self.botoes_jog:
+            b.ativo = (b.acao == "2") == dois
             b.draw(s, mpos)
-        desc = DIFICULDADES.get(self.dificuldade, {}).get("descricao", "")
-        texto(s, desc, 13, (160, 195, 240), (WIDTH // 2, 568), negrito=False)
+        if dois:
+            texto(s, "OS DOIS NO MESMO PC", 14, (200, 220, 255), (WIDTH // 2 + 110, 496))
+            texto(s, "Colegas e guarda-redes das duas equipas no nível normal", 13, (160, 195, 240),
+                  (WIDTH // 2 + 110, 531), negrito=False)
+            if comando.ligado():
+                ajuda = "O jogador 2 joga com o comando (o último ligado); o jogador 1 com o teclado ou o outro comando"
+            else:
+                ajuda = ("Sem comando: J1 com WASD, Z, X, C, V, F e SHIFT esq.  •  J2 com as setas, "
+                         "vírgula, ponto, hífen, CTRL dir., ENTER e SHIFT dir.")
+            texto(s, ajuda, 13, (255, 200, 140), (WIDTH // 2, 568), negrito=False)
+        else:
+            texto(s, "DIFICULDADE DA IA", 14, (200, 220, 255), (WIDTH // 2, 496))
+            for b in self.botoes_dif:
+                b.ativo = (b.acao == self.dificuldade)
+                b.draw(s, mpos)
+            desc = DIFICULDADES.get(self.dificuldade, {}).get("descricao", "")
+            texto(s, desc, 13, (160, 195, 240), (WIDTH // 2, 568), negrito=False)
 
         # Botão principal (pulsa ligeiramente para chamar a atenção)
         self.btn_jogar.draw(s, mpos, focado=(math.sin(self.anim_t * 3) > 0.6))
 
-        texto(s, "[A/D] casa   [W/S] visitante   [Q/E] divisão   [1-8] escolher casa   [TAB] dificuldade   "
+        texto(s, "[A/D] casa   [W/S] visitante   [Q/E] divisão   [1-8] escolher casa   [TAB] dificuldade   [J] jogadores   "
                  "[ENTER] começar   [ESC] voltar",
               12, (110, 140, 190), (WIDTH // 2, 682), negrito=False)
 

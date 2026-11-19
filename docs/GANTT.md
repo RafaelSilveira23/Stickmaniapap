@@ -4,7 +4,7 @@ Planeamento do projeto da PAP, de setembro de 2026 a junho de 2027. O GitHub des
 a partir do código Mermaid abaixo. As barras escuras são tarefas concluídas, as realçadas estão
 em curso e as claras estão planeadas.
 
-**Divisão de tarefas:** o projeto é feito em dupla. Cada tarefa diz entre parênteses quem a fez (Vasco Andreia: 16 tarefas; Rafael da Hora Silveira: 21; os dois: 6). Na imagem do relatório ([`09_gantt.png`](diagramas/09_gantt.png)) a cor de cada barra mostra quem fez a tarefa.
+**Divisão de tarefas:** o projeto é feito em dupla. Cada tarefa diz entre parênteses quem a fez (Vasco Andreia: 16 tarefas; Rafael da Hora Silveira: 22; os dois: 6). Na imagem do relatório ([`09_gantt.png`](diagramas/09_gantt.png)) a cor de cada barra mostra quem fez a tarefa.
 
 > Este ficheiro é gerado pelo script [`docs/diagramas/gerar_gantt.py`](diagramas/gerar_gantt.py),
 > o mesmo que faz a imagem do relatório ([`09_gantt.png`](diagramas/09_gantt.png)): os dois têm
@@ -57,13 +57,14 @@ gantt
     Faltas - livres, penáltis, livres diretos e cartões (Rafael) :done, t36, 2027-05-03, 2027-05-12
     Fintas com física - corte e roleta (Rafael) :done, t37, 2027-05-13, 2027-05-23
     Guarda-redes - saída, inércia e estiradas (Rafael) :done, t38, 2027-05-24, 2027-05-30
+    Dois jogadores no mesmo PC, site e Microsoft Store (Rafael) :done, t39, 2027-05-31, 2027-06-06
     section Novas funcionalidades
-    Estatísticas da partida e modo de 2 jogadores (Os dois) :t39, 2026-11-16, 2026-12-31
-    Mais estatísticas e transferências (Os dois) :t40, 2027-01-07, 2027-03-31
+    Repetição dos golos e tutorial (Os dois) :t40, 2026-11-16, 2026-12-31
+    Mais estatísticas e transferências (Os dois) :t41, 2027-01-07, 2027-03-31
     section Validação e entrega
-    Testes com colegas, correção de erros, sprites (Os dois) :t41, 2027-03-01, 2027-04-30
-    Relatório final, manual e apresentação (Os dois) :active, t42, 2027-04-01, 2027-05-31
-    Defesa da PAP (Os dois) :t43, 2027-06-01, 2027-06-30
+    Testes com colegas, correção de erros, sprites (Os dois) :t42, 2027-03-01, 2027-04-30
+    Relatório final, manual e apresentação (Os dois) :active, t43, 2027-04-01, 2027-05-31
+    Defesa da PAP (Os dois) :t44, 2027-06-01, 2027-06-30
 ```
 
 ## Tarefas
@@ -108,8 +109,9 @@ gantt
 | 36 | Desenvolvimento (versões 1 a 37) | Faltas: livres, penáltis, livres diretos e cartões | **Rafael da Hora Silveira** | 03/05/2027 | 12/05/2027 | Concluído |
 | 37 | Desenvolvimento (versões 1 a 37) | Fintas com física: corte e roleta | **Rafael da Hora Silveira** | 13/05/2027 | 23/05/2027 | Concluído |
 | 38 | Desenvolvimento (versões 1 a 37) | Guarda-redes: saída, inércia e estiradas | **Rafael da Hora Silveira** | 24/05/2027 | 30/05/2027 | Concluído |
-| 39 | Novas funcionalidades | Estatísticas da partida e modo de 2 jogadores | **Os dois** | 16/11/2026 | 31/12/2026 | Planeado |
-| 40 | Novas funcionalidades | Mais estatísticas e transferências | **Os dois** | 07/01/2027 | 31/03/2027 | Planeado |
-| 41 | Validação e entrega | Testes com colegas, correção de erros, sprites | **Os dois** | 01/03/2027 | 30/04/2027 | Planeado |
-| 42 | Validação e entrega | Relatório final, manual e apresentação | **Os dois** | 01/04/2027 | 31/05/2027 | Em curso |
-| 43 | Validação e entrega | Defesa da PAP | **Os dois** | 01/06/2027 | 30/06/2027 | Planeado |
+| 39 | Desenvolvimento (versões 1 a 37) | Dois jogadores no mesmo PC, site e Microsoft Store | **Rafael da Hora Silveira** | 31/05/2027 | 06/06/2027 | Concluído |
+| 40 | Novas funcionalidades | Repetição dos golos e tutorial | **Os dois** | 16/11/2026 | 31/12/2026 | Planeado |
+| 41 | Novas funcionalidades | Mais estatísticas e transferências | **Os dois** | 07/01/2027 | 31/03/2027 | Planeado |
+| 42 | Validação e entrega | Testes com colegas, correção de erros, sprites | **Os dois** | 01/03/2027 | 30/04/2027 | Planeado |
+| 43 | Validação e entrega | Relatório final, manual e apresentação | **Os dois** | 01/04/2027 | 31/05/2027 | Em curso |
+| 44 | Validação e entrega | Defesa da PAP | **Os dois** | 01/06/2027 | 30/06/2027 | Planeado |

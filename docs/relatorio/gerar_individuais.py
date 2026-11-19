@@ -56,7 +56,7 @@ DONO_32 = {
     "Marcador e painel do jogo": V, "Estatísticas da partida": V, "Menu principal com mais espaço": V,
     "Jogar com um comando": R, "Faltas, bolas paradas e cartões": R, "Cartões": R,
     "Mais faltas e menos roubos de bola": R, "Livre parado até ser batido": R, "Fintas": R, "Roleta": R,
-    "Guarda-redes melhorado": R,
+    "Guarda-redes melhorado": R, "Dois jogadores no mesmo computador": R, "Site do jogo e Microsoft Store": R,
     "Gráficos": R,
     "Sons": V, "Sons no jogo": V, "Cânticos dos clubes": V, "Cânticos no jogo": V,
     "Estilo arcade": R, "Tempo de jogo e ecrã a tremer": R,
@@ -97,7 +97,9 @@ DIVISAO = [
     ("Carreira de jogador e vida do jogador", "carreira_jogador.py, carreira_jogador_menu.py, vida.py", V),
     ("Remate na primeira pessoa e modo teste", "remate_pov.py, pavilhao_pov.py", R),
     ("Física da bola e dos jogadores, regras", "ball.py, player.py, baliza.py", R),
-    ("Fintas, guarda-redes (movimento e estiradas) e comando", "fintas.py, goalkeeper.py, comando.py", R),
+    ("Fintas, guarda-redes (movimento e estiradas), comando e dois jogadores",
+     "fintas.py, goalkeeper.py, comando.py, dois_jogadores.py", R),
+    ("Site do jogo e pacote da Microsoft Store", "site/, construir_msix.py", R),
     ("Gráficos, sprites e câmara em perspetiva", "camera.py, rink.py, animation.py", R),
     ("Jogo online, servidor e aplicação para Windows",
      "rede.py, online.py, online_menu.py, servidor/servidor.py, construir_app.py, instalador.py", R),
@@ -131,8 +133,8 @@ RESUMO = {
         ("Fintas, guarda-redes e comando.", "Com a bola pode-se fintar: engana-se para um lado e corta-se "
          "para o outro, ou dá-se uma volta com a bola colada ao stick (roleta). O guarda-redes sai um pouco "
          "da baliza para tapar o ângulo, acelera e trava aos poucos e atira-se à bola quando não chega lá a "
-         "andar. O jogo também se pode jogar com um comando da Xbox ou da PlayStation (fintas.py, "
-         "goalkeeper.py e comando.py)."),
+         "andar. O jogo também se pode jogar com um comando da Xbox ou da PlayStation e a dois no mesmo "
+         "computador (fintas.py, goalkeeper.py, comando.py e dois_jogadores.py)."),
         ("Remate na primeira pessoa.", "Ao carregar em X com a bola, a câmara passa para os olhos do "
          "jogador: aponta-se a qualquer ponto da baliza e escolhe-se a força, e os defesas que estão à "
          "frente podem bloquear o remate (remate_pov.py). O modo teste deixa treinar o remate contra o "

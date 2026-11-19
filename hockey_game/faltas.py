@@ -150,6 +150,7 @@ class FaltasMixin:
                 return False
             novo = min(colegas, key=lambda c: math.hypot(c.pos_x - j.pos_x, c.pos_y - j.pos_y))
             self._trocar_humano(novo)
+        self._dois_cartao(j)                     # o jogador 2 passa a controlar um colega
         agentes = self.agentes_azul if j.equipa == "azul" else self.agentes_vermelhos
         agente = next((a for a in agentes if a.jogador is j), None)
         if agente is not None:
@@ -328,6 +329,8 @@ class FaltasMixin:
                 # O jogador escolhe: passe (Z / A / clique) ou stickada (X / B) - ver handle_events
                 self._apontar_marcador(marcador)
                 return True
+            if self._dois_bola_parada(marcador) == "livre":
+                return True                      # o jogador 2 escolhe (dois_jogadores.py)
             if bp["t"] >= bp["espera"]:
                 som.tocar("apito_curto")
                 self._livre_ia(marcador)
@@ -353,6 +356,8 @@ class FaltasMixin:
                                             limite_tempo=6.0, cor_linhas=self.rink.cor_linhas, defensores=[],
                                             velocidade=(0.0, 0.0), placar=self._placar_pov())
                 return True
+        if self._dois_bola_parada(marcador) == "penalti":
+            return True                          # o jogador 2 bate (dois_jogadores.py)
         # IA: o resultado decide-se como na stickada (a física pura quase nunca deixava marcar:
         # a baliza é estreita e o guarda-redes, ao centro, tapava-a) e aplica-se no jogo 2D
         p_golo = (0.48 if bp["tipo"] == "penalti" else 0.38) + (getattr(marcador, "stat_remate", 80) - 80) / 200

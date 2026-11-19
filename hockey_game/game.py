@@ -28,6 +28,7 @@ from carreira_jogador_menu import EcraCriarJogador, EcraCarreiraJogador
 from online import OnlineMixin
 from faltas import FaltasMixin
 from fintas import FintasMixin
+from dois_jogadores import DoisJogadoresMixin
 import comando
 
 DURACAO_PARTE = 60 * 5   # 5 minutos por parte
@@ -46,7 +47,7 @@ FORMACAO = [
 CAMINHO_DEFINICOES = os.path.join(PASTA_SAVES, "definicoes.json")
 
 
-class Game(OnlineMixin, FaltasMixin, FintasMixin):
+class Game(OnlineMixin, FaltasMixin, FintasMixin, DoisJogadoresMixin):
     def __init__(self):
         pygame.init()
         definicoes = self._ler_definicoes()
@@ -158,6 +159,8 @@ class Game(OnlineMixin, FaltasMixin, FintasMixin):
         self._falta_tipo     = "livre"     # "livre", "livre_direto", "penalti"
         self._faltas_reiniciar()           # bolas paradas e cartões (faltas.py)
         self._fintas_reiniciar()           # fintas (fintas.py)
+        self._dois_reiniciar()             # dois jogadores no mesmo PC (dois_jogadores.py)
+        self._escolha_2j = False           # última escolha no ecrã das equipas
 
         # ── Dificuldade da IA ──────────────────────────────────────────
         self.dificuldade     = "normal"    # "facil", "normal", "dificil"
@@ -502,11 +505,13 @@ class Game(OnlineMixin, FaltasMixin, FintasMixin):
     def handle_events(self):
         # Comando: os botões passam a teclas (ver comando.py). Tem de ser antes de ler os eventos.
         if self.estado == "jogo" and self.remate_pov is not None:
-            comando.processar("pov")
+            comando.processar("pov", so_j2=self.dois_jogadores and self._pov_j2 and self._j2_comando)
         elif self.estado == "jogo" and not self.pausado and not self.fim_jogo:
             comando.processar("jogo")
         else:
             comando.processar("menu")
+        if self.dois_jogadores and self.estado == "jogo":
+            self._dois_ler()                     # o jogador 2 (dois_jogadores.py)
         # F11 funciona em qualquer ecrã (os outros eventos voltam para a fila, pela mesma ordem)
         teclas = pygame.event.get(pygame.KEYDOWN)
         if any(e.key == pygame.K_F11 for e in teclas):
@@ -664,7 +669,10 @@ class Game(OnlineMixin, FaltasMixin, FintasMixin):
                     self._online_comecar(*self.menu.get_equipas())
                 elif res == "iniciar":
                     c_id, f_id = self.menu.get_equipas()
+                    self._escolha_2j = self.menu.dois_jogadores
                     self.iniciar_partida(c_id, f_id, dificuldade=self.menu.get_dificuldade())
+                    if self._escolha_2j:
+                        self._dois_comecar()
                 elif res == "voltar" and self.online:
                     self.abrir_online()             # sai do jogo online
                 elif res == "voltar":
@@ -688,7 +696,7 @@ class Game(OnlineMixin, FaltasMixin, FintasMixin):
                 if acao == "continuar":
                     self.pausado = False
                 elif acao == "reiniciar":
-                    self.iniciar_partida(self.equipa_casa_id, self.equipa_fora_id, self.dificuldade)
+                    self._reiniciar_partida()
                 elif acao == "controlos":
                     self._abrir_definicoes("pausa")
                 elif acao == "desistir":
@@ -716,7 +724,7 @@ class Game(OnlineMixin, FaltasMixin, FintasMixin):
                         marcadores_adv=[m["nome"] for m in self.marcadores if m["equipa"] == "vermelho"])
                     self.abrir_campeonato(destaque=jornada)
                 elif acao == "reiniciar":
-                    self.iniciar_partida(self.equipa_casa_id, self.equipa_fora_id, self.dificuldade)
+                    self._reiniciar_partida()
                 elif acao == "equipas":
                     self.abrir_selecao_equipas()
                 elif acao == "menu":
@@ -730,12 +738,18 @@ class Game(OnlineMixin, FaltasMixin, FintasMixin):
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     self.running = False
+                elif self.dois_jogadores:
+                    ev = self._dois_eventos_pov(event)   # só contam as teclas de quem remata
+                    if ev is not None:
+                        self.remate_pov.handle_event(ev)
                 else:
                     self.remate_pov.handle_event(event)
             return
 
         # ── Partida a decorrer ───────────────────────────────────────────
         for event in pygame.event.get():
+            if self.dois_jogadores and self._dois_evento(event):
+                continue                             # tecla do jogador 2
             if event.type == pygame.QUIT:
                 self.running = False
             elif event.type == pygame.KEYDOWN:
@@ -749,7 +763,7 @@ class Game(OnlineMixin, FaltasMixin, FintasMixin):
                     self.show_debug = not self.show_debug
                 elif self.modo_teste and event.key == pygame.K_r:
                     self._teste_novo_remate()
-                elif self.modo_carreira and event.key in (pygame.K_F4, pygame.K_t, pygame.K_y, pygame.K_1,
+                elif (self.modo_carreira or self.dois_jogadores) and event.key in (pygame.K_F4, pygame.K_t, pygame.K_y, pygame.K_1,
                                                           pygame.K_2, pygame.K_3, pygame.K_4, pygame.K_5,
                                                           pygame.K_6, pygame.K_7, pygame.K_8):
                     pass   # no campeonato não se pode trocar de equipa nem de dificuldade a meio
@@ -1226,6 +1240,8 @@ class Game(OnlineMixin, FaltasMixin, FintasMixin):
             if self.remate_pov.terminado:
                 if self.online:
                     self._online_fechar_pov()      # anfitrião: aplica o remate de quem rematou
+                elif self._dois_fechar_pov():
+                    pass                           # remate do jogador 2
                 else:
                     self._aplicar_remate(self.remate_pov.resultado)
             return
@@ -1284,8 +1300,8 @@ class Game(OnlineMixin, FaltasMixin, FintasMixin):
 
         # Auto-seleção inteligente
         self._auto_selecionar()
-        if self.online == "anfitriao":
-            self._online_controlar_remoto()    # o jogador do convidado
+        if self.online == "anfitriao" or self.dois_jogadores:
+            self._online_controlar_remoto()    # o jogador do convidado (ou o jogador 2)
 
         # IA Vermelha
         lista_verm = list(self.equipa_vermelha)
@@ -1438,6 +1454,7 @@ class Game(OnlineMixin, FaltasMixin, FintasMixin):
         self._falta_cooldown = 0.0
         self._faltas_reiniciar()
         self._fintas_reiniciar()
+        self._dois_reiniciar()
 
         # Atualizar o ringue com o emblema oficial da equipa da casa
         self.rink.definir_equipa_casa(self.equipa_casa_id)
@@ -1617,8 +1634,16 @@ class Game(OnlineMixin, FaltasMixin, FintasMixin):
             self.pausado = True
             self.menu_pausa = MenuPausa(self.screen, modo_carreira=self.modo_carreira, modo_teste=self.modo_teste)
 
+    def _reiniciar_partida(self):
+        """Jogar de novo com as mesmas equipas (e, se era a dois, outra vez a dois)."""
+        dois = self.dois_jogadores
+        self.iniciar_partida(self.equipa_casa_id, self.equipa_fora_id, self.dificuldade)
+        if dois:
+            self._dois_comecar()
+
     def abrir_selecao_equipas(self):
         """Vai para o ecrã de seleção de equipas, mantendo as últimas escolhas e a dificuldade."""
+        self._dois_reiniciar()
         self._cancelar_mira()
         self.modo_carreira = False
         self.pausado = False
@@ -1626,7 +1651,10 @@ class Game(OnlineMixin, FaltasMixin, FintasMixin):
         self.fim_jogo = False
         self.estado = "menu_selecao"
         self.menu = TeamSelectMenu(self.screen, self.equipa_casa_id, self.equipa_fora_id,
-                                   dificuldade=self.dificuldade, arena=self.rink._surf)
+                                   dificuldade=self.dificuldade, arena=self.rink._surf,
+                                   dois_jogadores=self._escolha_2j and not self.online)
+        if self.online:
+            self.menu.botoes_jog = []          # no jogo online não há a opção de dois jogadores
 
     # Mantido por compatibilidade com o código antigo
     voltar_ao_menu = abrir_selecao_equipas
@@ -1914,6 +1942,7 @@ class Game(OnlineMixin, FaltasMixin, FintasMixin):
 
     def ir_para_menu_principal(self, casa_id: str = None, fora_id: str = None):
         self._online_fechar_rede()
+        self._dois_reiniciar()
         self._cancelar_mira()
         self.modo_teste = False
         self.remate_pov = None
@@ -2264,6 +2293,7 @@ class Game(OnlineMixin, FaltasMixin, FintasMixin):
         self.hud.draw_top_bar(self.screen, self)
         self._desenhar_suspensos(self.screen)
         self._desenhar_fintas(self.screen)
+        self._desenhar_dois(self.screen)
         self.hud.draw_foul_banner(self.screen, self)
 
         # 7. Painel Inferior (Mini-mapa, Cartão de Jogador e Controlos)

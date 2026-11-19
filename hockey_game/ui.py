@@ -178,7 +178,10 @@ class HUDController:
             nomes_dif = {"facil": "FÁCIL", "normal": "NORMAL", "dificil": "DIFÍCIL"}
             cores_dif = {"facil": (60, 210, 110), "normal": (70, 160, 255), "dificil": (255, 75, 75)}
             cor_badge = cores_dif.get(dif_str, (70, 160, 255))
-            txt_b = self.font_key.render(f"IA  {nomes_dif.get(dif_str, 'NORMAL')}", True, (255, 255, 255))
+            rotulo = f"IA  {nomes_dif.get(dif_str, 'NORMAL')}"
+            if getattr(game, "dois_jogadores", False):
+                rotulo, cor_badge = "2 JOGADORES", (240, 140, 50)
+            txt_b = self.font_key.render(rotulo, True, (255, 255, 255))
             badge = pygame.Rect(24, 22, txt_b.get_width() + 30, 24)
             pygame.draw.rect(screen, (12, 22, 42), badge, border_radius=12)
             pygame.draw.rect(screen, cor_badge, badge, 1, border_radius=12)
