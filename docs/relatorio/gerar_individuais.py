@@ -57,6 +57,7 @@ DONO_32 = {
     "Jogar com um comando": R, "Faltas, bolas paradas e cartões": R, "Cartões": R,
     "Mais faltas e menos roubos de bola": R, "Livre parado até ser batido": R, "Fintas": R, "Roleta": R,
     "Guarda-redes melhorado": R, "Dois jogadores no mesmo computador": R, "Site do jogo e Microsoft Store": R,
+    "Repetição dos golos": R,
     "Gráficos": R,
     "Sons": V, "Sons no jogo": V, "Cânticos dos clubes": V, "Cânticos no jogo": V,
     "Estilo arcade": R, "Tempo de jogo e ecrã a tremer": R,
@@ -106,7 +107,8 @@ DIVISAO = [
     ("Modo carreira (divisões, Taça Europeia e simulação) e estatísticas da partida",
      "carreira.py, carreira_menu.py, team.py", V),
     ("Faltas, cartões e bolas paradas", "faltas.py", R),
-    ("Estilo arcade, otimização e arranque sem consola", "efeitos.py, fontes.py, main.py, jogar.vbs", R),
+    ("Estilo arcade, repetição dos golos, otimização e arranque sem consola",
+     "efeitos.py, repeticao.py, fontes.py, main.py, jogar.vbs", R),
     ("Ciclo principal do jogo", "game.py, settings.py", C),
     ("Análise, diagramas, testes e relatório", "docs/, ferramentas/", C),
 ]
@@ -142,7 +144,8 @@ RESUMO = {
         ("Faltas e estilo arcade.", "Depois de uma falta o jogo pára até ser batida: num livre escolhe-se "
          "passar ou rematar, e no penálti e no livre direto remata-se contra o guarda-redes. Há cartões "
          "amarelo, azul e vermelho. O estilo arcade dá mais energia ao jogo, com pausas curtas nos impactos, "
-         "o ecrã a tremer e a festa do golo (faltas.py e efeitos.py)."),
+         "o ecrã a tremer e a festa do golo. Depois de cada golo o lance passa outra vez, com o remate em "
+         "câmara lenta (faltas.py, efeitos.py e repeticao.py)."),
         ("Gráficos e câmara.", "A física é calculada num campo plano visto de cima e a câmara (camera.py) "
          "só muda o desenho, mostrando o rinque em perspetiva, como numa transmissão de televisão. Os "
          "jogadores e a bola são desenhados por ordem de profundidade, as cores dos equipamentos são "

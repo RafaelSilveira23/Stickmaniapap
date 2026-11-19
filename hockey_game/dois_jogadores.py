@@ -83,10 +83,13 @@ class DoisJogadoresMixin:
     def _dois_ler(self):
         """Movimento e botões do jogador 2 (do comando dele ou do lado direito do teclado)."""
         self._dois_mascara()
-        a_jogar = self.jogo_ativo and not self.pausado and not self.fim_jogo and self.remate_pov is None
+        a_jogar = (self.jogo_ativo and not self.pausado and not self.fim_jogo and self.remate_pov is None
+                   and self._repeticao is None)
         if self._j2_comando:
             dx, dy, sprint, novos = comando.j2()
             acoes = [BOTOES_J2[b] for b in novos if b in BOTOES_J2]
+            if novos and self._repeticao is not None and self._repeticao["idade"] > 0.25:
+                self._rep_saltar()                # o comando do jogador 2 também salta a repetição
         else:
             k = pygame.key.get_pressed()
             dx = int(k[pygame.K_RIGHT]) - int(k[pygame.K_LEFT])

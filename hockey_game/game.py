@@ -29,6 +29,7 @@ from online import OnlineMixin
 from faltas import FaltasMixin
 from fintas import FintasMixin
 from dois_jogadores import DoisJogadoresMixin
+from repeticao import RepeticaoMixin
 import comando
 
 DURACAO_PARTE = 60 * 5   # 5 minutos por parte
@@ -47,12 +48,13 @@ FORMACAO = [
 CAMINHO_DEFINICOES = os.path.join(PASTA_SAVES, "definicoes.json")
 
 
-class Game(OnlineMixin, FaltasMixin, FintasMixin, DoisJogadoresMixin):
+class Game(OnlineMixin, FaltasMixin, FintasMixin, DoisJogadoresMixin, RepeticaoMixin):
     def __init__(self):
         pygame.init()
         definicoes = self._ler_definicoes()
         self.ecra_inteiro = bool(definicoes.get("ecra_inteiro", False))
         self.estilo_arcade = bool(definicoes.get("estilo_arcade", True))
+        self.repeticao_golos = bool(definicoes.get("repeticao_golos", True))   # repeticao.py
         # Tipo de passe: "z" (tecla Z, o jogo escolhe o colega) ou "clique" (clicar no colega)
         self.tipo_passe = "clique" if definicoes.get("tipo_passe") == "clique" else "z"
         self.screen = self._criar_janela()
@@ -160,6 +162,7 @@ class Game(OnlineMixin, FaltasMixin, FintasMixin, DoisJogadoresMixin):
         self._faltas_reiniciar()           # bolas paradas e cartões (faltas.py)
         self._fintas_reiniciar()           # fintas (fintas.py)
         self._dois_reiniciar()             # dois jogadores no mesmo PC (dois_jogadores.py)
+        self._rep_reiniciar()              # repetição dos golos (repeticao.py)
         self._escolha_2j = False           # última escolha no ecrã das equipas
 
         # ── Dificuldade da IA ──────────────────────────────────────────
@@ -349,6 +352,7 @@ class Game(OnlineMixin, FaltasMixin, FintasMixin, DoisJogadoresMixin):
             os.makedirs(os.path.dirname(CAMINHO_DEFINICOES), exist_ok=True)
             with open(CAMINHO_DEFINICOES, "w", encoding="utf-8") as f:
                 json.dump({"ecra_inteiro": self.ecra_inteiro, "estilo_arcade": self.estilo_arcade,
+                           "repeticao_golos": self.repeticao_golos,
                            "tipo_passe": self.tipo_passe, "vol_efeitos": som.vol_efeitos, "vol_publico": som.vol_publico}, f)
         except OSError:
             pass          # não conseguir gravar não impede de jogar
@@ -521,6 +525,7 @@ class Game(OnlineMixin, FaltasMixin, FintasMixin, DoisJogadoresMixin):
                 pygame.event.post(e)
         self.ecra_controlos.ecra_inteiro = self.ecra_inteiro
         self.ecra_controlos.estilo_arcade = self.estilo_arcade
+        self.ecra_controlos.repeticao = self.repeticao_golos
         self.ecra_controlos.tipo_passe = self.tipo_passe
 
         # ── Menus (cada ecrã devolve uma "ação") ──────────────────────────
@@ -570,6 +575,10 @@ class Game(OnlineMixin, FaltasMixin, FintasMixin, DoisJogadoresMixin):
                 elif acao == "estilo_arcade":
                     self.estilo_arcade = not self.estilo_arcade
                     self.efeitos.ativo = self.estilo_arcade
+                    self._gravar_definicoes()
+                elif acao == "repeticao":
+                    self.repeticao_golos = not self.repeticao_golos
+                    self.ecra_controlos.repeticao = self.repeticao_golos
                     self._gravar_definicoes()
                 elif acao == "tipo_passe":
                     self.tipo_passe = "clique" if self.tipo_passe == "z" else "z"
@@ -748,6 +757,8 @@ class Game(OnlineMixin, FaltasMixin, FintasMixin, DoisJogadoresMixin):
 
         # ── Partida a decorrer ───────────────────────────────────────────
         for event in pygame.event.get():
+            if self._rep_evento(event):
+                continue                             # repetição do golo: qualquer tecla salta
             if self.dois_jogadores and self._dois_evento(event):
                 continue                             # tecla do jogador 2
             if event.type == pygame.QUIT:
@@ -977,6 +988,8 @@ class Game(OnlineMixin, FaltasMixin, FintasMixin, DoisJogadoresMixin):
             chave = {"golo": "golos", "defesa": "defesas", "bloqueado": "defesas"}.get(r, "fora")
             self.teste[chave] += 1
             self._teste_espera = 1.6
+        if r != "golo":
+            self._rep_cortar()              # o lance da repetição recomeça depois da stickada
         if r == "bloqueado":
             # A bola bate no defesa e ressalta para trás (para o lado de quem rematou)
             dx_, dy_ = res["pos_bloqueio"]
@@ -990,6 +1003,7 @@ class Game(OnlineMixin, FaltasMixin, FintasMixin, DoisJogadoresMixin):
         elif r == "golo":
             b.pos_x, b.pos_y = gx + o * 16, cy + max(-28, min(28, u))
             b.vel.update(o * 60, 0)
+            self._rep_voo_da_bola((j.pos_x, j.pos_y), (b.pos_x, b.pos_y), v)   # para a repetição
             self._golo(marca)
         elif r == "defesa":
             gr.repor()
@@ -1235,6 +1249,9 @@ class Game(OnlineMixin, FaltasMixin, FintasMixin, DoisJogadoresMixin):
         if not self.jogo_ativo:
             return
 
+        if self._repeticao is not None:
+            self._rep_atualizar(dt)                # repetição do golo (o jogo está parado)
+            return
         if self.remate_pov is not None:
             self.remate_pov.update(dt)
             if self.remate_pov.terminado:
@@ -1256,7 +1273,7 @@ class Game(OnlineMixin, FaltasMixin, FintasMixin, DoisJogadoresMixin):
             falta -= dt_real
             if falta <= 0:
                 self._reposicao_pendente = None
-                self._repor_posicoes(saida=saida)
+                self._rep_ou_repor(saida)          # repetição do golo e só depois a saída
             else:
                 self._reposicao_pendente = (saida, falta)
         if dt <= 0:
@@ -1266,6 +1283,7 @@ class Game(OnlineMixin, FaltasMixin, FintasMixin, DoisJogadoresMixin):
 
         # Penálti / livre direto a preparar: o jogo está parado (faltas.py)
         if self._bola_parada is not None and self._atualizar_bola_parada(dt):
+            self._rep_cortar()                 # a repetição não mostra o jogo parado
             return
 
         # Cronómetro (pára nas bolas paradas, como no hóquei a sério)
@@ -1395,6 +1413,7 @@ class Game(OnlineMixin, FaltasMixin, FintasMixin, DoisJogadoresMixin):
 
         if self._msg_timer > 0:
             self._msg_timer -= dt
+        self._rep_gravar(dt)                   # fotografia deste frame (repeticao.py)
 
     def _auto_selecionar(self):
         # Se um colega apanhou a bola, passa o controlo imediatamente para ele
@@ -1455,6 +1474,7 @@ class Game(OnlineMixin, FaltasMixin, FintasMixin, DoisJogadoresMixin):
         self._faltas_reiniciar()
         self._fintas_reiniciar()
         self._dois_reiniciar()
+        self._rep_reiniciar()
 
         # Atualizar o ringue com o emblema oficial da equipa da casa
         self.rink.definir_equipa_casa(self.equipa_casa_id)
@@ -2041,6 +2061,7 @@ class Game(OnlineMixin, FaltasMixin, FintasMixin, DoisJogadoresMixin):
         if self.online == "anfitriao":
             self._rede_x.append(["golo", equipa, nome])      # o convidado também faz a festa
         self._bola_parada = None
+        self._rep_marcar_golo()                # o lance fica guardado para a repetição
         self._faltas_golo(equipa)              # quem sofreu o golo recupera o jogador do cartão azul
         # Recomeça com a bola a equipa que sofreu o golo
         saida = "vermelho" if equipa == "azul" else "azul"
@@ -2048,6 +2069,8 @@ class Game(OnlineMixin, FaltasMixin, FintasMixin, DoisJogadoresMixin):
             # Festa e só depois se repõe
             self._festa_golo(equipa, nome)
             self._reposicao_pendente = (saida, 2.0)
+        elif self._rep_lance is not None:
+            self._reposicao_pendente = (saida, 0.9)   # vê-se a bola entrar e depois a repetição
         else:
             self._repor_posicoes(saida=saida)
 
@@ -2207,6 +2230,9 @@ class Game(OnlineMixin, FaltasMixin, FintasMixin, DoisJogadoresMixin):
 
     def _draw_cena(self):
         """Desenha o ringue, os jogadores e o HUD (sem os menus por cima)."""
+        if self._repeticao is not None:
+            self._rep_desenhar()               # repetição do golo (repeticao.py)
+            return
         self.screen.fill(COR_FUNDO)
 
         # 1. Ringue e Balizas traseiras

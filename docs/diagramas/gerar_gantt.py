@@ -77,9 +77,10 @@ TAREFAS = [
     ("", "Fintas com física: corte e roleta", date(2027, 5, 13), date(2027, 5, 23), "Concluído", RAFAEL),
     ("", "Guarda-redes: saída, inércia e estiradas", date(2027, 5, 24), date(2027, 5, 30), "Concluído", RAFAEL),
     ("", "Dois jogadores no mesmo PC, site e Microsoft Store", date(2027, 5, 31), date(2027, 6, 6), "Concluído", RAFAEL),
+    ("", "Repetição dos golos em câmara lenta", date(2027, 6, 7), date(2027, 6, 11), "Concluído", RAFAEL),
 
     ("Novas funcionalidades", None, None, None, None, None),
-    ("", "Repetição dos golos e tutorial", date(2026, 11, 16), date(2026, 12, 31), "Planeado", DOIS),
+    ("", "Tutorial para quem joga pela primeira vez", date(2026, 11, 16), date(2026, 12, 31), "Planeado", DOIS),
     ("", "Mais estatísticas e transferências", date(2027, 1, 7), date(2027, 3, 31), "Planeado", DOIS),
 
     ("Validação e entrega", None, None, None, None, None),
