@@ -27,3 +27,6 @@ hockey_game/saves/erro.txt
 
 # Programa e instalador gerados pelo ferramentas/construir_app.py (o instalador fica em download/)
 build_app/
+
+# Base de dados das contas para testar o servidor no PC
+servidor/contas_local.db

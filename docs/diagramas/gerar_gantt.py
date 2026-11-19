@@ -79,6 +79,7 @@ TAREFAS = [
     ("", "Dois jogadores no mesmo PC, site e Microsoft Store", date(2027, 5, 31), date(2027, 6, 6), "Concluído", RAFAEL),
     ("", "Repetição dos golos em câmara lenta", date(2027, 6, 7), date(2027, 6, 11), "Concluído", RAFAEL),
     ("", "Tutorial com missões para quem começa", date(2027, 6, 12), date(2027, 6, 18), "Concluído", VASCO),
+    ("", "Contas, progresso na nuvem e ranking online", date(2027, 6, 19), date(2027, 6, 30), "Concluído", RAFAEL),
 
     ("Novas funcionalidades", None, None, None, None, None),
     ("", "Narrador e conquistas", date(2026, 11, 16), date(2026, 12, 31), "Planeado", DOIS),

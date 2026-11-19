@@ -101,7 +101,7 @@ class OnlineMixin:
         if self._servidor is None or self._servidor.estado == "erro":
             if self._servidor is not None:
                 self._servidor.fechar()
-            self._servidor = Servidor()
+            self._servidor = Servidor(token=self.conta.token if self.conta.ligada else None)
             if self.ecra_online is not None:
                 self.ecra_online.servidor = self._servidor
         return self._servidor
@@ -123,6 +123,28 @@ class OnlineMixin:
             elif acao == "entrar":
                 ecra.erro = ""
                 ecra.mudar_fase("entrar")
+            elif acao == "desafiar":
+                ecra.erro = ""
+                if not self.conta.ligada:
+                    ecra.erro = "Para desafiar um amigo, entra primeiro na tua conta (no menu principal)."
+                else:
+                    ecra.mudar_fase("desafiar")
+            elif isinstance(acao, tuple) and acao[0] == "desafiar_ok":
+                nome = acao[1].strip()
+                if len(nome) < 3:
+                    ecra.erro = "Escreve a alcunha do teu amigo."
+                    continue
+                self._desafio_pid = self._online_servidor().pedir("desafiar", alcunha=nome)
+                ecra.desafiado = nome
+                ecra.erro = ""
+                ecra.mudar_fase("desafio")
+            elif isinstance(acao, tuple) and acao[0] in ("aceitar", "recusar"):
+                srv = self._online_servidor()
+                srv._enviar({"t": acao[0], "de": acao[1]})
+                if acao[1] in srv.convites:
+                    srv.convites.remove(acao[1])
+                if acao[0] == "aceitar":
+                    ecra.mudar_fase("a_ligar")
             elif isinstance(acao, tuple) and acao[0] == "ligar":
                 codigo = acao[1]
                 if len(codigo) != 4:
@@ -160,6 +182,10 @@ class OnlineMixin:
         if not ligacao.ativa:
             self._online_terminar(ligacao.erro or "O outro jogador saiu do jogo.")
             return
+        if self.fim_jogo and not self._resultado_enviado and self._servidor is not None:
+            # Fim do jogo: os dois jogos enviam o resultado; se for igual, conta para o ranking
+            self._servidor._enviar({"t": "resultado", "casa": self.golos_azul, "fora": self.golos_vermelho})
+            self._resultado_enviado = True
         if self.estado == "jogo" and self.remate_pov is not None:
             self._online_pov_tick(dt)
         if self.online == "anfitriao" and self.estado == "jogo":
@@ -168,6 +194,18 @@ class OnlineMixin:
     def _online_esperar_adversario(self):
         """No ecrã JOGAR ONLINE: vê se o servidor já encontrou adversário (ou se deu erro)."""
         srv, ecra = self._servidor, self.ecra_online
+        pid = getattr(self, "_desafio_pid", None)
+        if pid is not None:
+            r = srv.resposta(pid)
+            if r is not None:
+                self._desafio_pid = None
+                if not r.get("ok") and ecra.fase == "desafio":
+                    ecra.erro = r.get("erro", "")
+                    ecra.mudar_fase("inicio")
+        if srv.aviso_desafio:                        # ex.: «X recusou o desafio»
+            ecra.erro, srv.aviso_desafio = srv.aviso_desafio, ""
+            if ecra.fase in ("desafio", "a_ligar"):
+                ecra.mudar_fase("inicio")
         if srv.aviso:                                # ex.: não existe sala com esse código
             ecra.erro, srv.aviso = srv.aviso, ""
             ecra.mudar_fase("entrar")
@@ -239,6 +277,10 @@ class OnlineMixin:
             elif t == "pov_fim":
                 self.remate_pov = None                    # o anfitrião já aplicou o remate
 
+    def _online_titulo(self) -> str:
+        adv = self._servidor.adversario if self._servidor is not None else None
+        return f"JOGO ONLINE vs {adv}  •  " if adv else "JOGO ONLINE  •  "
+
     def _online_largar_jogo(self):
         """Sai do jogo com o outro jogador (despedindo-se dele), mas fica ligado ao servidor."""
         if self.ligacao is not None:
@@ -297,7 +339,7 @@ class OnlineMixin:
         self._rede_eventos_bola = []
         self._rede_x = []
         self._rede_t = 1.0                       # envia o primeiro estado logo
-        self._msg_texto = "JOGO ONLINE  •  " + self._msg_texto
+        self._msg_texto = self._online_titulo() + self._msg_texto
         self.ligacao.enviar({"t": "inicio", "casa": casa_id, "fora": fora_id})
 
     def _online_controlar_remoto(self):
@@ -445,7 +487,7 @@ class OnlineMixin:
         self._erro_pred = [0.0, 0.0]
         self._pred_jogador = None
         self._online_mira = False
-        self._msg_texto = "JOGO ONLINE  •  " + self._msg_texto
+        self._msg_texto = self._online_titulo() + self._msg_texto
 
     def _online_aplicar_estado(self, msg: dict):
         agora = time.perf_counter()

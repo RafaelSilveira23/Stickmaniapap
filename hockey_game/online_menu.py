@@ -10,6 +10,9 @@ Fases do ecrã:
   "entrar"    escrever o código da sala do amigo
   "a_ligar"   a entrar na sala
   "espera"    emparelhado, à espera que o anfitrião comece o jogo
+  "desafiar"  escrever a alcunha do amigo que se quer desafiar (precisa de conta)
+  "desafio"   à espera que o amigo aceite
+Se alguém nos desafia, aparece um aviso por cima (ENTER aceita, ESC recusa).
 """
 import math
 
@@ -32,6 +35,8 @@ class EcraOnline:
         self.modo = None                  # "aleatorio" ou "privado" (fase "espera")
         self.t = 0.0
         self.codigo = ""                  # o código que se está a escrever (fase "entrar")
+        self.alcunha = ""                 # a alcunha do amigo (fase "desafiar")
+        self.desafiado = ""
         self.erro = erro
         self.caixa = pygame.Rect(WIDTH // 2 - 380, 168, 760, 440)
         self.mudar_fase("inicio")
@@ -44,13 +49,23 @@ class EcraOnline:
         if fase == "inicio":
             x, bw = cx - 270, 540
             self.lista = ListaBotoes([
-                BotaoMenu((x, self.caixa.top + 40, bw, 70), "JOGO ALEATÓRIO",
+                BotaoMenu((x, self.caixa.top + 30, bw, 62), "JOGO ALEATÓRIO",
                           "Joga contra outra pessoa que esteja à procura de jogo", "aleatorio", VERDE, "globo"),
-                BotaoMenu((x, self.caixa.top + 126, bw, 70), "CRIAR SALA PRIVADA",
+                BotaoMenu((x, self.caixa.top + 100, bw, 62), "CRIAR SALA PRIVADA",
                           "Recebes um código para dar ao teu amigo", "criar", (240, 170, 40), "casa"),
-                BotaoMenu((x, self.caixa.top + 212, bw, 70), "ENTRAR NUMA SALA",
+                BotaoMenu((x, self.caixa.top + 170, bw, 62), "ENTRAR NUMA SALA",
                           "Escreve o código da sala do teu amigo", "entrar", COR_ONLINE, "avancar"),
+                BotaoMenu((x, self.caixa.top + 240, bw, 62), "DESAFIAR UM AMIGO",
+                          "Pela alcunha da conta dele (os dois precisam de conta)", "desafiar", (255, 120, 160),
+                          "jogador"),
                 BotaoMenu((cx - 140, base, 280, 50), "VOLTAR", "", "voltar", (150, 110, 255), "casa",
+                          seta=False, tamanho=18),
+            ])
+        elif fase == "desafiar":
+            self.lista = ListaBotoes([
+                BotaoMenu((cx - 290, base, 280, 54), "DESAFIAR", "", "desafiar_ok", (40, 190, 100), "jogar",
+                          seta=False, tamanho=20),
+                BotaoMenu((cx + 10, base, 280, 54), "VOLTAR", "", "cancelar", (150, 110, 255), "casa",
                           seta=False, tamanho=18),
             ])
         elif fase == "entrar":
@@ -67,7 +82,7 @@ class EcraOnline:
                           seta=False, tamanho=18),
             ])
         try:
-            if fase == "entrar":
+            if fase in ("entrar", "desafiar"):
                 pygame.key.start_text_input()
             else:
                 pygame.key.stop_text_input()
@@ -75,9 +90,53 @@ class EcraOnline:
             pass
 
     # ------------------------------------------------------------------ #
+    def _convite(self):
+        srv = self.servidor
+        if srv is not None and srv.convites and self.fase in ("inicio", "procurar", "criar", "desafiar"):
+            return srv.convites[0]
+        return None
+
     def handle_event(self, event):
         if event.type == pygame.QUIT:
             return "sair"
+        convite = self._convite()
+        if convite is not None:
+            # Um amigo desafiou-nos: ENTER (ou A no comando) aceita, ESC (ou B) recusa
+            if event.type == pygame.KEYDOWN:
+                if event.key in (pygame.K_RETURN, pygame.K_KP_ENTER, pygame.K_SPACE):
+                    return ("aceitar", convite)
+                if event.key in (pygame.K_ESCAPE, pygame.K_BACKSPACE):
+                    return ("recusar", convite)
+                return None
+            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                sim, nao = self._botoes_convite()
+                if sim.collidepoint(event.pos):
+                    return ("aceitar", convite)
+                if nao.collidepoint(event.pos):
+                    return ("recusar", convite)
+                return None
+            if event.type == pygame.TEXTINPUT:
+                return None
+        if self.fase == "desafiar":
+            if event.type == pygame.TEXTINPUT:
+                self.alcunha = (self.alcunha + event.text)[:16]
+                self.erro = ""
+                return None
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_BACKSPACE:
+                    self.alcunha = self.alcunha[:-1]
+                    return None
+                if event.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
+                    return ("desafiar_ok", self.alcunha)
+                if event.key == pygame.K_ESCAPE:
+                    return "cancelar"
+                if event.key in (pygame.K_LEFT, pygame.K_RIGHT, pygame.K_UP, pygame.K_DOWN):
+                    self.lista.foco = 1 - self.lista.foco
+                    return None
+                if event.key not in (pygame.K_TAB,):
+                    return None
+            acao = self.lista.handle_event(event)
+            return ("desafiar_ok", self.alcunha) if acao == "desafiar_ok" else acao
         if self.fase == "entrar":
             if event.type == pygame.TEXTINPUT:
                 # Código: 4 letras/números, sempre em maiúsculas
@@ -144,7 +203,11 @@ class EcraOnline:
 
         if self.erro:
             texto(s, self.erro, 15, (255, 110, 100), (WIDTH // 2, caixa.bottom + 24))
+        convite = self._convite()
+        if convite is not None:
+            self._desenhar_convite(s, convite)
         dicas = {"entrar": "Escreve o código     CTRL+V  colar     ENTER  entrar     ESC  voltar",
+                 "desafiar": "Escreve a alcunha     ENTER  desafiar     ESC  voltar",
                  "inicio": "↑ ↓  escolher     ENTER  confirmar     ESC  voltar"}
         texto(s, dicas.get(self.fase, "ESC  cancelar"), 12, (120, 145, 195), (WIDTH // 2, HEIGHT - 22),
               negrito=False)
@@ -198,10 +261,50 @@ class EcraOnline:
             elif ativa and int(self.t * 2) % 2 == 0:
                 pygame.draw.rect(s, COR_ONLINE, (r.centerx - 18, r.bottom - 26, 36, 5), border_radius=2)
 
+    def _botoes_convite(self):
+        sim = pygame.Rect(0, 0, 220, 50)
+        sim.center = (WIDTH // 2 - 125, 400)
+        return sim, sim.move(250, 0)
+
+    def _desenhar_convite(self, s, nome: str):
+        sombra = pygame.Surface(s.get_size(), pygame.SRCALPHA)
+        sombra.fill((0, 0, 0, 150))
+        s.blit(sombra, (0, 0))
+        caixa = pygame.Rect(0, 0, 580, 220)
+        caixa.center = (WIDTH // 2, 340)
+        pygame.draw.rect(s, (12, 20, 44), caixa, border_radius=16)
+        pygame.draw.rect(s, (255, 120, 160), caixa, 2, border_radius=16)
+        texto(s, f"{nome} desafia-te para um jogo!", 26, (255, 170, 200), (WIDTH // 2, caixa.top + 46), sombra=True)
+        texto(s, "Conta para o ranking. Quem desafiou escolhe as equipas.", 14, COR_TEXTO_SUAVE,
+              (WIDTH // 2, caixa.top + 84), negrito=False)
+        mpos = pygame.mouse.get_pos()
+        for r, txt, cor in zip(self._botoes_convite(), ("ACEITAR", "RECUSAR"), ((40, 190, 100), (230, 70, 70))):
+            pygame.draw.rect(s, cor if r.collidepoint(mpos) or txt == "ACEITAR" else (30, 40, 70), r, border_radius=12)
+            pygame.draw.rect(s, (255, 255, 255), r, 2, border_radius=12)
+            texto(s, txt, 18, (255, 255, 255), r.center)
+        texto(s, "ENTER aceitar     ESC recusar", 12, (150, 170, 215), (WIDTH // 2, caixa.bottom - 18), negrito=False)
+
     # ------------------------------------------------------------------ fases
     def _desenhar_inicio(self, s, caixa):
         texto(s, "Quem cria a sala (ou estava há mais tempo à procura) joga com a equipa da casa.", 13,
-              (150, 175, 215), (WIDTH // 2, caixa.top + 316), negrito=False)
+              (150, 175, 215), (WIDTH // 2, caixa.top + 332), negrito=False)
+
+    def _desenhar_desafiar(self, s, caixa):
+        texto(s, "Alcunha do teu amigo", 22, COR_DESTAQUE, (WIDTH // 2, caixa.top + 42))
+        texto(s, "O teu amigo tem de ter conta e estar no ecrã JOGAR ONLINE.", 14, COR_TEXTO_SUAVE,
+              (WIDTH // 2, caixa.top + 78), negrito=False)
+        r = pygame.Rect(0, 0, 440, 64)
+        r.center = (WIDTH // 2, caixa.top + 170)
+        pygame.draw.rect(s, (8, 14, 30), r, border_radius=14)
+        pygame.draw.rect(s, (255, 120, 160), r, 3, border_radius=14)
+        t = texto(s, self.alcunha, 30, (255, 255, 255), r.center) if self.alcunha else pygame.Rect(r.centerx, r.centery, 0, 0)
+        if int(self.t * 2) % 2 == 0:
+            pygame.draw.line(s, (255, 120, 160), (t.right + 4, r.centery - 16), (t.right + 4, r.centery + 16), 3)
+
+    def _desenhar_desafio(self, s, caixa):
+        texto(s, f"Desafiaste {self.desafiado}", 26, COR_DESTAQUE, (WIDTH // 2, caixa.top + 60))
+        self._roda(s, (WIDTH // 2, caixa.top + 150), (255, 120, 160))
+        texto(s, "À espera que aceite" + self._pontos(), 18, (220, 230, 250), (WIDTH // 2, caixa.top + 220))
 
     def _desenhar_procurar(self, s, caixa):
         texto(s, "À procura de adversário" + self._pontos(), 26, COR_DESTAQUE, (WIDTH // 2, caixa.top + 60))
@@ -247,8 +350,13 @@ class EcraOnline:
         pygame.draw.circle(s, (12, 40, 30), (WIDTH // 2, caixa.top + 90), 40)
         pygame.draw.circle(s, (40, 210, 110), (WIDTH // 2, caixa.top + 90), 40, 3)
         s.blit(ok, ok.get_rect(center=(WIDTH // 2 + 3, caixa.top + 90)))
-        if self.modo == "aleatorio":
-            texto(s, "Adversário encontrado!", 30, (90, 230, 140), (WIDTH // 2, caixa.top + 168))
+        adv = self.servidor.adversario if self.servidor is not None else None
+        if self.modo == "desafio":
+            texto(s, f"Desafio aceite{' (' + adv + ')' if adv else ''}!", 30, (90, 230, 140), (WIDTH // 2, caixa.top + 168))
+            texto(s, "Quem te desafiou está a escolher as equipas" + self._pontos(), 18, COR_TEXTO,
+                  (WIDTH // 2, caixa.top + 214))
+        elif self.modo == "aleatorio":
+            texto(s, f"Adversário encontrado{': ' + adv if adv else ''}!", 30, (90, 230, 140), (WIDTH // 2, caixa.top + 168))
             texto(s, "O jogo vai começar" + self._pontos(), 18, COR_TEXTO, (WIDTH // 2, caixa.top + 214))
         else:
             texto(s, "Entraste na sala!", 30, (90, 230, 140), (WIDTH // 2, caixa.top + 168))

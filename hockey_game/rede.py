@@ -14,6 +14,10 @@ Classes:
   Ligacao   - a "ligação" ao outro jogador depois de emparelhados. Tem os mesmos métodos que
               a ligação direta antiga (enviar, mensagens, ativa, terminar), por isso o resto do
               modo online (online.py) não precisou de mudar.
+
+Contas (conta.py): o jogo faz pedidos com pedir() e vai buscar a resposta com resposta(). Se o
+jogador tem a conta aberta, o Servidor envia logo o token da sessão quando se liga, por isso os
+jogos online ficam associados à conta (ranking) e pode receber desafios de amigos.
 """
 import json
 import os
@@ -72,7 +76,7 @@ class Servidor:
     online / a_jogar / a_procurar: contagens que o servidor envia de 2 em 2 segundos.
     """
 
-    def __init__(self, endereco: str = None):
+    def __init__(self, endereco: str = None, token: str = None):
         self.endereco = endereco or SERVIDOR
         self.estado = "a_ligar"
         self.erro = ""
@@ -85,7 +89,18 @@ class Servidor:
         self._ws = None
         self._fechado = False
         self._saida = queue.Queue()
+        # Contas (conta.py)
+        self.perfil = None           # perfil da conta com que se entrou (alcunha, pontos, ...)
+        self.sessao_erro = ""        # o token já não é válido (é preciso entrar outra vez)
+        self.adversario = None       # alcunha do adversário no jogo online (se tiver conta)
+        self.convites = []           # alcunhas de quem nos desafiou
+        self.aviso_desafio = ""      # ex.: «X recusou o desafio»
+        self.ranking_mudou = None    # (pontos ganhos ou perdidos, perfil) no fim de um jogo online
+        self._respostas = {}
+        self._n_pedido = 0
         self._enviar({"t": "ola", "versao": VERSAO})
+        if token:
+            self._enviar({"t": "conta_sessao", "token": token, "pedido": "sessao"})
         threading.Thread(target=self._correr, daemon=True).start()
 
     # ------------------------------------------------------------------ pedidos do jogo
@@ -106,6 +121,17 @@ class Servidor:
         """Sai da fila ou fecha a sala que estava à espera do amigo."""
         self._largar()
         self._enviar({"t": "cancelar"})
+
+    def pedir(self, tipo_msg: str, /, **dados) -> str:
+        """Pedido às contas (ex.: pedir("conta_entrar", alcunha=..., senha=...)). Devolve o número do pedido."""
+        self._n_pedido += 1
+        pid = str(self._n_pedido)
+        self._enviar({"t": tipo_msg, "pedido": pid, **dados})
+        return pid
+
+    def resposta(self, pid: str):
+        """A resposta ao pedido (dicionário com "ok" e os dados ou o "erro"), ou None se ainda não chegou."""
+        return self._respostas.pop(pid, None)
 
     def tomar_emparelhamento(self):
         """(papel, modo) quando se encontrou adversário; senão None. Só devolve uma vez."""
@@ -202,7 +228,24 @@ class Servidor:
             self.online, self.a_jogar, self.a_procurar = msg["online"], msg["a_jogar"], msg["a_procurar"]
         elif t == "sala":
             self.codigo = msg["codigo"]
+        elif t == "resposta":
+            if msg.get("ok") and isinstance(msg.get("perfil"), dict):
+                self.perfil = msg["perfil"]
+            if msg.get("pedido") == "sessao":
+                if not msg.get("ok"):
+                    self.sessao_erro = msg.get("erro", "")
+            else:
+                self._respostas[str(msg.get("pedido"))] = msg
+        elif t == "convite":
+            if msg.get("de") and msg["de"] not in self.convites:
+                self.convites.append(msg["de"])
+        elif t == "aviso":
+            self.aviso_desafio = msg.get("texto", "")
+        elif t == "ranking_mudou":
+            self.perfil = msg.get("perfil") or self.perfil
+            self.ranking_mudou = (msg.get("delta", 0), self.perfil)
         elif t == "emparelhado":
+            self.adversario = msg.get("adversario")
             self.codigo = None
             self.ligacao = Ligacao(self)
             self._emparelhado = (msg["papel"], msg["modo"])

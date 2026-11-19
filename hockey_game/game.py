@@ -31,6 +31,8 @@ from fintas import FintasMixin
 from dois_jogadores import DoisJogadoresMixin
 from repeticao import RepeticaoMixin
 from tutorial import TutorialMixin
+from conta import ContaMixin
+from conta_menu import BotaoConta
 import comando
 
 DURACAO_PARTE = 60 * 5   # 5 minutos por parte
@@ -49,7 +51,8 @@ FORMACAO = [
 CAMINHO_DEFINICOES = os.path.join(PASTA_SAVES, "definicoes.json")
 
 
-class Game(OnlineMixin, FaltasMixin, FintasMixin, DoisJogadoresMixin, RepeticaoMixin, TutorialMixin):
+class Game(OnlineMixin, FaltasMixin, FintasMixin, DoisJogadoresMixin, RepeticaoMixin, TutorialMixin,
+           ContaMixin):
     def __init__(self):
         pygame.init()
         definicoes = self._ler_definicoes()
@@ -99,8 +102,10 @@ class Game(OnlineMixin, FaltasMixin, FintasMixin, DoisJogadoresMixin, RepeticaoM
         # Estados: "menu_principal", "controlos", "menu_selecao", "carreira_escolha",
         #          "carreira" (ecrã do campeonato) ou "jogo"
         self.estado         = "menu_principal"
+        self._conta_iniciar()               # conta do jogador e progresso na nuvem (conta.py)
         self.menu_principal = MenuPrincipal(self.screen, self.equipa_casa_id, self.equipa_fora_id,
                                             arena=self.rink._surf)
+        self.menu_principal.lista.botoes.append(BotaoConta(self.conta))
         self.menu           = TeamSelectMenu(self.screen, self.equipa_casa_id, self.equipa_fora_id)
         self.ecra_controlos = EcraControlos(self.screen)
         self.ecra_controlos.vol_efeitos = som.vol_efeitos
@@ -519,12 +524,14 @@ class Game(OnlineMixin, FaltasMixin, FintasMixin, DoisJogadoresMixin, RepeticaoM
             comando.processar("menu")
         if self.dois_jogadores and self.estado == "jogo":
             self._dois_ler()                     # o jogador 2 (dois_jogadores.py)
-        # F11 funciona em qualquer ecrã (os outros eventos voltam para a fila, pela mesma ordem)
-        teclas = pygame.event.get(pygame.KEYDOWN)
-        if any(e.key == pygame.K_F11 for e in teclas):
+        # F11 funciona em qualquer ecrã. Tiram-se TODOS os eventos e os outros voltam para a fila pela
+        # mesma ordem (antes só se tiravam as teclas, e uma tecla como o TAB podia passar à frente das
+        # letras que se estavam a escrever).
+        eventos = pygame.event.get()
+        if any(e.type == pygame.KEYDOWN and e.key == pygame.K_F11 for e in eventos):
             self.alternar_ecra_inteiro()
-        for e in teclas:
-            if e.key != pygame.K_F11:
+        for e in eventos:
+            if not (e.type == pygame.KEYDOWN and e.key == pygame.K_F11):
                 pygame.event.post(e)
         self.ecra_controlos.ecra_inteiro = self.ecra_inteiro
         self.ecra_controlos.estilo_arcade = self.estilo_arcade
@@ -551,6 +558,8 @@ class Game(OnlineMixin, FaltasMixin, FintasMixin, DoisJogadoresMixin, RepeticaoM
                     self.estado = "teste_escolha"
                 elif acao == "definicoes":
                     self._abrir_definicoes("menu_principal")
+                elif acao == "conta":
+                    self.abrir_conta()
                 elif acao == "sair":
                     self.running = False
             return
@@ -571,6 +580,10 @@ class Game(OnlineMixin, FaltasMixin, FintasMixin, DoisJogadoresMixin, RepeticaoM
 
         if self.estado == "online":
             self._online_eventos_ecra()
+            return
+
+        if self.estado == "conta":
+            self._conta_eventos()                  # ecrã da conta (conta.py)
             return
 
         if self.estado == "controlos":
@@ -1226,8 +1239,13 @@ class Game(OnlineMixin, FaltasMixin, FintasMixin, DoisJogadoresMixin, RepeticaoM
         self._atualizar_publico()
         self._atualizar_canticos(dt)
         self._online_tick(dt)                  # mensagens da rede (só no jogo online)
+        if self.estado != "jogo":
+            self._nuvem_tick(dt)                   # progresso das carreiras para a nuvem (conta.py)
         if self.estado == "online":
             self.ecra_online.update(dt)
+            return
+        if self.estado == "conta":
+            self._conta_update(dt)
             return
         if self.online == "convidado" and self.estado == "jogo":
             self._update_convidado(dt)         # o convidado só mostra o que o anfitrião envia
@@ -1493,6 +1511,9 @@ class Game(OnlineMixin, FaltasMixin, FintasMixin, DoisJogadoresMixin, RepeticaoM
         self._fintas_reiniciar()
         self._dois_reiniciar()
         self._rep_reiniciar()
+        self._resultado_enviado = False    # jogo online: o resultado vai para o ranking no fim
+        if getattr(self, "_servidor", None) is not None:
+            self._servidor.ranking_mudou = None
 
         # Atualizar o ringue com o emblema oficial da equipa da casa
         self.rink.definir_equipa_casa(self.equipa_casa_id)
@@ -1997,6 +2018,7 @@ class Game(OnlineMixin, FaltasMixin, FintasMixin, DoisJogadoresMixin, RepeticaoM
         self.estado = "menu_principal"
         self.menu_principal = MenuPrincipal(self.screen, self.equipa_casa_id, self.equipa_fora_id,
                                             arena=self.rink._surf)
+        self.menu_principal.lista.botoes.append(BotaoConta(self.conta))   # botão da conta (canto)
 
     def _atualizar_equipamentos(self):
         """Recalcula os equipamentos das duas equipas e aplica-os aos jogadores."""
@@ -2183,6 +2205,8 @@ class Game(OnlineMixin, FaltasMixin, FintasMixin, DoisJogadoresMixin, RepeticaoM
             self.menu.draw()
         elif self.estado == "online":
             self.ecra_online.draw()
+        elif self.estado == "conta":
+            self.ecra_conta.draw()
         elif self.estado == "carreira_escolha":
             self.ecra_carreira.draw()
         elif self.estado == "teste_escolha":
@@ -2207,6 +2231,8 @@ class Game(OnlineMixin, FaltasMixin, FintasMixin, DoisJogadoresMixin, RepeticaoM
                 self.menu_pausa.draw(self)
             elif self.fim_jogo:
                 self.ecra_fim.draw(self)
+                if self.online:
+                    self._desenhar_ranking_online(self.screen)   # pontos ganhos ou perdidos
         self._transicao()
         pygame.display.flip()
 
@@ -2217,7 +2243,8 @@ class Game(OnlineMixin, FaltasMixin, FintasMixin, DoisJogadoresMixin, RepeticaoM
         """Identifica o ecrã que está à vista; quando muda, faz-se uma transição."""
         ecras = {"menu_principal": "menu_principal", "menu_selecao": "menu", "carreira_escolha": "ecra_carreira",
                  "carreira": "ecra_campeonato", "cj_criar": "ecra_cj_criar", "cj": "ecra_cj",
-                 "controlos": "ecra_controlos", "online": "ecra_online", "teste_escolha": "ecra_teste"}
+                 "controlos": "ecra_controlos", "online": "ecra_online", "teste_escolha": "ecra_teste",
+                 "conta": "ecra_conta"}
         obj = getattr(self, ecras.get(self.estado, ""), None)
         return (self.estado, id(obj), self.pausado, self.fim_jogo, self.remate_pov is not None)
 
