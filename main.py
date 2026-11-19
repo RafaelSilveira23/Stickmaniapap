@@ -3,7 +3,7 @@
 import os
 import sys
 
-pasta_jogo = os.path.join(os.path.dirname(os.path.abspath(__file__)), "hockey_game")
+pasta_jogo = os.path.join(os.path.dirname(os.path.abspath(__file__)), "jogo")
 sys.path.insert(0, pasta_jogo)
 os.chdir(pasta_jogo)
 

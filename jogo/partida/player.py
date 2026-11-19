@@ -1,0 +1,992 @@
+# -*- coding: utf-8 -*-
+"""player.py - jogador com inércia, colisões entre jogadores e pick-up correto."""
+import os
+import random
+import math
+import pygame
+from graficos import sombra_suave
+from settings import *
+from animation import AnimationController, load_animation_from_names
+from cores import recolorir_frames, escurecer_stick
+import comando
+
+# ---------- Constantes ----------
+PLAYER_SPEED   = 200
+PLAYER_SPRINT  = 260      # reduzido (era 330 — demasiado rápido)
+PLAYER_SIZE    = (52, 52)
+# Margem à volta do sprite para caber a sombra, a inclinação e o balanço
+_MARGEM_X, _MARGEM_Y = 8, 4
+TAMANHO_TELA   = (PLAYER_SIZE[0] + 2 * _MARGEM_X, PLAYER_SIZE[1] + 2 * _MARGEM_Y)
+PICK_UP_DIST   = 30
+ACELERACAO     = 2000
+
+# Finta (ver fintas.py): engano para um lado, depois corte forte para o outro
+FINTA_ENGANO   = 0.13     # s
+FINTA_CORTE    = 0.30     # s
+FINTA_RECARGA  = 1.2      # s até poder fintar outra vez
+FINTA_ROLETA   = 0.55     # s que dura a roleta (uma volta completa com a bola)
+SEP_JOGADORES  = 38
+_RAIO_CORPO    = 14     # "raio" do jogador para as colisões com as balizas
+
+# Constantes de animação
+_BLEND_DURACAO  = 0.08    # segundos de transição suave entre estados
+_FPS_ANIM_BASE  = 6.0     # fps de animação mínimo (parado)
+_FPS_ANIM_MAX   = 12.0    # fps de animação máximo (correr a fundo)
+_FPS_SPRINT_ADD = 3.0     # fps extra durante sprint
+_FPS_COM_BOLA_IDLE = 1.5  # fps de animação quando tem bola e está parado
+
+# Efeitos de movimento
+_VIRAR_DURACAO  = 0.12    # segundos que o jogador demora a "dar a volta"
+_INCLINACAO_MAX = 6.0     # graus de inclinação para a frente a correr
+
+# Duração e intensidade do shake de colisão
+_SHAKE_DURACAO  = 0.20    # segundos de shake após colisão
+_SHAKE_AMP      = 2       # amplitude do shake em px
+
+
+def _lerp_fixo(atual: float, alvo: float, max_step: float) -> float:
+    """Move 'atual' em direção a 'alvo' no máximo 'max_step' por chamada."""
+    diff = alvo - atual
+    if abs(diff) <= max_step:
+        return alvo
+    return atual + max_step * (1.0 if diff > 0 else -1.0)
+
+
+def _pasta_sprites(equipa: str) -> str:
+    from caminhos import PASTA_SPRITES
+    return os.path.join(PASTA_SPRITES, "hd", "frames", equipa)
+
+
+# Todos os sprites estão desenhados virados para a DIREITA.
+# Para andar para a esquerda, o frame é espelhado no código (ver _compor_imagem).
+#
+# Os ficheiros "correr_cima/baixo/esquerda" originais são todos vistas de lado e
+# com pequenas diferenças entre si (cabelo, stick), o que fazia o jogador "tremer".
+# Por isso montamos UM ciclo de patinagem com os 4 frames mais consistentes
+# e usamo-lo em todas as direções.
+_ANIMACOES_JOGADOR = [
+    # (estado, ficheiros, fps, loop)
+    # Os ficheiros parado_0X estão de frente e sem stick (o stick desaparecia).
+    # Usamos a pose de lado com o stick no chão (sem bola desenhada), lenta como uma respiração.
+    ("parado",   ["com_bola_02", "com_bola_03"],                                 2.0, True),
+    ("correr",   ["correr_esquerda_01", "correr_esquerda_02",
+                  "correr_esquerda_03", "correr_cima_02"],                      9.0, True),
+    # com_bola_04 não entra: esse frame já tem uma bola desenhada (ficavam duas bolas)
+    ("com_bola", ["com_bola_01", "com_bola_02", "com_bola_03"],                 8.0, True),
+    ("passe",    ["passe_01", "passe_02", "passe_03"],                         10.0, False),
+    ("remate",   ["remate_01", "remate_02"],                                   10.0, False),
+    ("colisao",  ["colisao_01", "colisao_02", "colisao_03"],                    8.0, False),
+]
+
+
+# Os frames têm 128x128, mas o boneco só ocupa a zona x 28-101, y 35-126 (já alinhado pelos patins).
+# Cortamos este quadrado de 94 px (centrado nos patins, com os pés em baixo) antes de reduzir para
+# PLAYER_SIZE: o jogador fica ~36% maior no ecrã sem mudar o tamanho da imagem nem as colisões.
+_RECORTE_SPRITE = pygame.Rect(17, 34, 94, 94)
+
+
+def _carregar_animacoes(equipa: str, kit: dict | None = None) -> dict:
+    """
+    Carrega as animações do jogador.
+    Se for dado um 'kit' (cores do equipamento), usa os sprites base azuis
+    e pinta-os com as cores da equipa.
+    """
+    # "novo" = sprites azuis com o cabelo igual em todos os frames
+    pasta = _pasta_sprites("novo" if kit or equipa == "azul" else equipa)
+    s = PLAYER_SIZE
+    anims = {}
+    for estado, nomes, fps, loop in _ANIMACOES_JOGADOR:
+        anim = load_animation_from_names(pasta, nomes, fps=fps, loop=loop, scale=s,
+                                         recorte=_RECORTE_SPRITE)
+        anim.frames = escurecer_stick(("jogador", estado, s), anim.frames)
+        if kit:
+            anim.frames = recolorir_frames((estado, s, "v2"), anim.frames, kit)
+        anims[estado] = anim
+    return anims
+
+
+# Sombra oval por baixo dos patins (igual para todos os jogadores)
+_sombra_cache = {}
+
+
+def sombra_oval(largura: int, altura: int, alpha: int = 70) -> pygame.Surface:
+    """Sombra com a borda esbatida: escura junto aos patins e a desaparecer para fora."""
+    chave = (largura, altura, alpha)
+    if chave not in _sombra_cache:
+        # Elipse um pouco mais larga, para a parte esbatida não ficar mais pequena do que antes
+        suave = sombra_suave(largura + 8, altura + 4, min(255, int(alpha * 1.9)))
+        s = pygame.Surface((largura + 8, altura + 4), pygame.SRCALPHA)
+        s.blit(suave, (0, 0))
+        _sombra_cache[chave] = s
+    return _sombra_cache[chave]
+
+
+class Player(pygame.sprite.Sprite):
+    # Finta (valores por omissão; cada jogador muda os seus)
+    _finta = None             # dict com a finta a decorrer, ou None
+    _finta_cd = 0.0           # recarga
+    _acel_mult = 1.0          # aceleração extra durante a finta (o corte é explosivo)
+    ang_bola_forcado = None   # ângulo da bola à volta do jogador durante a finta
+    passo_bola = None         # rapidez com que o stick arrasta a bola (rad por frame)
+
+    """
+    Jogador de campo.
+    A velocidade usa inércia: não muda instantaneamente, acelera/trava gradualmente.
+    """
+
+    def __init__(self, equipa: str, pos: tuple, numero: int = 10,
+                 nome: str = "Jogador", humano: bool = False,
+                 teclas: str = "wasd", kit: dict | None = None):
+        """
+        teclas : 'wasd' (o jogador 2 do mesmo PC é controlado à parte, em dois_jogadores.py)
+        kit    : cores do equipamento (ver cores.definir_equipamentos)
+        """
+        super().__init__()
+
+        self.equipa  = equipa
+        self.numero  = numero
+        self.nome    = nome
+        self.humano  = humano
+        self.remoto  = False    # jogo online: controlado pelo outro computador (não lê o teclado)
+        self.teclas  = teclas   # esquema de teclas para este jogador
+
+        self.stat_velocidade = 80
+        self.stat_remate     = 75
+        self.stat_passe      = 70
+        self.stat_defesa     = 65
+
+        self.kit = kit
+        self._anim = AnimationController(_carregar_animacoes(equipa, kit))
+
+        self.pos_x = float(pos[0])
+        self.pos_y = float(pos[1])
+
+        # --- Efeitos visuais da animação ---
+        self._virado_esq   = (equipa == "azul")   # para que lado o sprite está virado
+        self._virar_timer  = 0.0    # "achatamento" rápido quando o jogador dá a volta
+        self._inclinacao   = 0.0    # graus: inclina-se para a frente ao acelerar
+        self._fase_passada = 0.0    # fase do balanço (sobe/desce a cada passada)
+        self._particulas   = []     # raspas dos patins: [x, y, vx, vy, vida, vida_max]
+        self._shake_offset = (0, 0)
+
+        self.image = pygame.Surface(TAMANHO_TELA, pygame.SRCALPHA)
+        self.rect  = self.image.get_rect(center=pos)
+        self._compor_imagem()
+
+        # Velocidade atual (com inércia)
+        self.vel_x = 0.0
+        self.vel_y = 0.0
+
+        # Velocidade alvo (definida pelo input ou pela IA a cada frame)
+        self._target_vx = 0.0
+        self._target_vy = 0.0
+
+        self.tem_bola   = False
+        self.selecionado = False
+        self.direcao    = "esquerda" if equipa == "azul" else "direita"
+        self.vetor_direcao = pygame.math.Vector2(-1.0 if equipa == "azul" else 1.0, 0.0)
+
+        self._estado_action = None
+        self._action_timer  = 0.0
+
+        # --- Estado de animação com transição suave ---
+        self._estado_anterior = None   # último estado antes da mudança
+        self._blend_timer     = 0.0    # temporizador de blend (0.08s)
+
+        # Sprint activo (guardado para FPS dinâmico)
+        self._sprint_ativo = False
+
+        # Shake de colisão
+        self._shake_timer  = 0.0       # tempo restante de shake
+
+        # Estabilidade física e gestão de quedas/faltas
+        self._imunidade_queda_timer = 0.0   # tempo restante de imunidade a nova queda
+        self._desestabilizado_timer = 0.0   # tempo de ligeiro desequilíbrio após desarme limpo
+        self._cooldown_desarme      = 0.0   # proteção de quem tem a bola (não pode ser desarmado)
+        self._bloqueio_desarme      = 0.0   # quem acabou de perder/falhar um desarme não pode tentar logo
+        self._rink_rect = None              # guardados no update para as colisões
+        self._rink = None
+
+    def aplicar_equipamento(self, kit: dict):
+        """Troca as cores do equipamento (ex.: quando se muda de equipa a meio do jogo)."""
+        estado = self._anim.estado
+        self.kit = kit
+        self._anim = AnimationController(_carregar_animacoes(self.equipa, kit))
+        self._anim.estado = estado
+        self._compor_imagem()
+
+    # ================================================================== #
+    # Update principal                                                     #
+    # ================================================================== #
+
+    def update(self, dt: float, rink_rect: pygame.Rect, bola=None, rink=None):
+        if self._imunidade_queda_timer > 0:
+            self._imunidade_queda_timer = max(0.0, self._imunidade_queda_timer - dt)
+        if self._desestabilizado_timer > 0:
+            self._desestabilizado_timer = max(0.0, self._desestabilizado_timer - dt)
+        if self._cooldown_desarme > 0:
+            self._cooldown_desarme = max(0.0, self._cooldown_desarme - dt)
+        if self._bloqueio_desarme > 0:
+            self._bloqueio_desarme = max(0.0, self._bloqueio_desarme - dt)
+        self._rink_rect, self._rink = rink_rect, rink
+
+        if self.humano and not self.remoto:
+            self._input_humano()
+        self._atualizar_finta(dt)        # durante a finta o movimento é o da finta
+
+        self._aplicar_inercia(dt)
+        self._mover(dt, rink_rect, rink)
+        self._gerir_bola(bola)
+        self._atualizar_animacao(dt)
+
+    # ------------------------------------------------------------------ #
+    # Input humano                                                         #
+    # ------------------------------------------------------------------ #
+
+    def _input_humano(self):
+        keys = comando.teclas()          # teclado + comando
+        vx, vy = 0.0, 0.0
+
+        if keys[pygame.K_LEFT]  or keys[pygame.K_a]: vx -= 1
+        if keys[pygame.K_RIGHT] or keys[pygame.K_d]: vx += 1
+        if keys[pygame.K_UP]    or keys[pygame.K_w]: vy -= 1
+        if keys[pygame.K_DOWN]  or keys[pygame.K_s]: vy += 1
+        sprint = keys[pygame.K_LSHIFT] or keys[pygame.K_RSHIFT]
+        self.aplicar_controlo(vx, vy, sprint)
+
+    def aplicar_controlo(self, vx: float, vy: float, sprint: bool):
+        """
+        Movimento pedido pelo jogador (-1, 0 ou 1 em cada eixo). Usado pelo teclado e, no jogo
+        online, pelos comandos que chegam do outro computador.
+        """
+        self._sprint_ativo = bool(sprint)
+        spd = PLAYER_SPRINT if sprint else PLAYER_SPEED
+
+        if vx != 0 and vy != 0:
+            vx *= 0.7071
+            vy *= 0.7071
+
+        self._target_vx = vx * spd
+        self._target_vy = vy * spd
+
+        # Direção guardada para o passe/remate (suporta 8 direções incluindo diagonais)
+        if vx != 0 or vy != 0:
+            self.vetor_direcao = pygame.math.Vector2(vx, vy).normalize()
+            # Detecção de 8 direções mais precisa usando ângulo do vetor
+            ax, ay = abs(vx), abs(vy)
+            if ay > ax * 1.5:
+                self.direcao = "baixo" if vy > 0 else "cima"
+            else:
+                self.direcao = "direita" if vx > 0 else "esquerda"
+
+    # ------------------------------------------------------------------ #
+    # Inércia: suaviza a mudança de velocidade                            #
+    # ------------------------------------------------------------------ #
+
+    def _aplicar_inercia(self, dt: float):
+        """Suaviza a mudança de velocidade com taxa fixa por segundo tanto para humanos como IA."""
+        taxa = ACELERACAO * dt * self._acel_mult   # px/s * dt = px/frame
+
+        if self._estado_action in ("remate", "colisao"):
+            self.vel_x = _lerp_fixo(self.vel_x, 0.0,            taxa * 0.8)
+            self.vel_y = _lerp_fixo(self.vel_y, 0.0,            taxa * 0.8)
+        elif self._desestabilizado_timer > 0:
+            # Jogador desestabilizado após toque tem velocidade temporariamente reduzida
+            self.vel_x = _lerp_fixo(self.vel_x, self._target_vx * 0.65, taxa)
+            self.vel_y = _lerp_fixo(self.vel_y, self._target_vy * 0.65, taxa)
+        else:
+            self.vel_x = _lerp_fixo(self.vel_x, self._target_vx, taxa)
+            self.vel_y = _lerp_fixo(self.vel_y, self._target_vy, taxa)
+
+    # ------------------------------------------------------------------ #
+    # API para a IA definir a velocidade alvo                             #
+    # ------------------------------------------------------------------ #
+
+    def set_target(self, vx: float, vy: float):
+        """Usado pelo AgentIA para definir para onde o jogador se deve mover."""
+        self._target_vx = vx
+        self._target_vy = vy
+
+    # ------------------------------------------------------------------ #
+    # Movimento e colisão com paredes                                      #
+    # ------------------------------------------------------------------ #
+
+    def _mover(self, dt: float, rink_rect: pygame.Rect, rink=None):
+        self.pos_x += self.vel_x * dt
+        self.pos_y += self.vel_y * dt
+        self._limitar(rink_rect, rink)
+
+    def _limitar(self, rink_rect, rink=None):
+        """Mantém o jogador dentro do rinque e fora da estrutura das balizas."""
+        if rink_rect is None:
+            return
+        mx = PLAYER_SIZE[0] // 2
+        my = PLAYER_SIZE[1] // 2
+
+        self.pos_x = max(rink_rect.left  + mx, min(rink_rect.right  - mx, self.pos_x))
+        self.pos_y = max(rink_rect.top   + my, min(rink_rect.bottom - my, self.pos_y))
+
+        # Não atravessar a estrutura e redes das balizas (permite patinar livremente atrás delas).
+        # O obstáculo é alargado pelo "raio" do jogador e o jogador é encostado à borda mais perto,
+        # sem saltos; a velocidade contra a baliza é anulada (desliza ao longo dela).
+        if rink is not None:
+            R = _RAIO_CORPO
+            for obs in (rink.obstaculo_baliza_esq, rink.obstaculo_baliza_dir):
+                o = obs.inflate(2 * R, 2 * R)
+                if o.collidepoint(self.pos_x, self.pos_y):
+                    d_esq, d_dir = self.pos_x - o.left, o.right - self.pos_x
+                    d_cima, d_baixo = self.pos_y - o.top, o.bottom - self.pos_y
+                    m = min(d_esq, d_dir, d_cima, d_baixo)
+                    if m == d_esq:
+                        self.pos_x = o.left
+                        self.vel_x = min(0.0, self.vel_x)
+                    elif m == d_dir:
+                        self.pos_x = o.right
+                        self.vel_x = max(0.0, self.vel_x)
+                    elif m == d_cima:
+                        self.pos_y = o.top
+                        self.vel_y = min(0.0, self.vel_y)
+                    else:
+                        self.pos_y = o.bottom
+                        self.vel_y = max(0.0, self.vel_y)
+
+        self.rect.center = (round(self.pos_x), round(self.pos_y))
+
+    # ------------------------------------------------------------------ #
+    # Colisões entre jogadores (separação física)                         #
+    # ------------------------------------------------------------------ #
+
+    def afastar_de(self, x: float, y: float, raio: float):
+        """Empurra este jogador para fora de um círculo fixo (ex.: o guarda-redes)."""
+        dx, dy = self.pos_x - x, self.pos_y - y
+        d = math.hypot(dx, dy)
+        if d >= raio:
+            return
+        if d < 0.1:
+            dx, dy, d = 0.0, 1.0, 1.0
+        nx, ny = dx / d, dy / d
+        self.pos_x = x + nx * raio
+        self.pos_y = y + ny * raio
+        # Anula a velocidade contra o guarda-redes (desliza à volta dele)
+        vn = self.vel_x * nx + self.vel_y * ny
+        if vn < 0:
+            self.vel_x -= vn * nx
+            self.vel_y -= vn * ny
+        self._limitar(self._rink_rect, self._rink)
+
+    def empurrar_separar(self, outro: "Player", bola=None) -> dict | None:
+        """
+        Colisão entre dois jogadores.
+          1. Separa-os (cada um anda metade da sobreposição) e mantém-nos dentro do rinque.
+          2. Anula a velocidade com que vinham um contra o outro (choque inelástico):
+             assim não ficam a empurrar-se frame a frame (era isto que os fazia "tremer").
+          3. Se um deles tem a bola e o outro é adversário, há uma TENTATIVA de desarme:
+             pode ganhar a bola, falhar, ou (em choques fortes) fazer falta.
+        Retorna um dicionário com os dados da falta, ou None.
+        """
+        dx = self.pos_x - outro.pos_x
+        dy = self.pos_y - outro.pos_y
+        dist = (dx * dx + dy * dy) ** 0.5
+
+        if dist >= SEP_JOGADORES:
+            return None
+        if dist <= 0.1:
+            # Exatamente no mesmo sítio: escolher uma direção qualquer
+            dx, dy, dist = random.uniform(-1, 1), random.uniform(-1, 1), 1.0
+            dist = max(0.1, math.hypot(dx, dy))
+
+        nx = dx / dist
+        ny = dy / dist
+
+        # Velocidade de aproximação ANTES de corrigir (usada para saber se o choque foi forte)
+        v_rel = (self.vel_x - outro.vel_x) * nx + (self.vel_y - outro.vel_y) * ny
+
+        # 1) Separação
+        overlap = (SEP_JOGADORES - dist) / 2
+        self.pos_x  += nx * overlap
+        self.pos_y  += ny * overlap
+        outro.pos_x -= nx * overlap
+        outro.pos_y -= ny * overlap
+
+        # 2) Anular a velocidade de um contra o outro (cada um perde metade)
+        if v_rel < 0:
+            imp = -v_rel / 2
+            self.vel_x  += nx * imp
+            self.vel_y  += ny * imp
+            outro.vel_x -= nx * imp
+            outro.vel_y -= ny * imp
+
+        self._limitar(self._rink_rect, self._rink)
+        outro._limitar(outro._rink_rect, outro._rink)
+
+        # Colegas de equipa: só se afastam
+        if self.equipa == outro.equipa:
+            return None
+
+        # 3) Quem tem a bola?
+        if outro.tem_bola:
+            portador, defensor = outro, self
+        elif self.tem_bola:
+            portador, defensor = self, outro
+        else:
+            return self._falta_sem_bola(outro, nx, ny, bola)
+
+        # Proteções: quem acabou de ganhar a bola fica uns instantes protegido,
+        # e quem acabou de a perder (ou falhou um desarme) não pode tentar logo outra vez.
+        if portador._cooldown_desarme > 0 or defensor._bloqueio_desarme > 0:
+            return None
+        if defensor._estado_action == "colisao":
+            return None
+
+        # Direção do choque: do defensor para o portador
+        dir_impacto = pygame.math.Vector2(portador.pos_x - defensor.pos_x,
+                                          portador.pos_y - defensor.pos_y)
+        if dir_impacto.length_squared() == 0:
+            dir_impacto = pygame.math.Vector2(1, 0)
+        dir_impacto.normalize_ip()
+
+        vel_def = math.hypot(defensor.vel_x, defensor.vel_y)
+        forca_choque = abs(v_rel)
+        is_sprint = getattr(defensor, "_sprint_ativo", False) or (vel_def > 230)
+
+        # Carga por trás: o defensor vem na mesma direção em que o portador está virado
+        carga_por_tras = False
+        if portador.vetor_direcao.length_squared() > 0 and vel_def > 130:
+            v_def_vec = pygame.math.Vector2(defensor.vel_x, defensor.vel_y).normalize()
+            carga_por_tras = portador.vetor_direcao.dot(v_def_vec) > 0.55
+
+        # Falta? Cargas por trás e choques fortes (a carga por trás é a falta mais comum)
+        deve_cair = False
+        if portador._imunidade_queda_timer <= 0:
+            if carga_por_tras and forca_choque > 100:
+                deve_cair = random.random() < 0.55
+            elif is_sprint and forca_choque > 170:
+                deve_cair = random.random() < 0.30
+            elif forca_choque > 280:
+                deve_cair = random.random() < 0.35
+        # Gravidade (decide o cartão): por trás e a correr = violenta; por trás ou muito forte = grave
+        if carga_por_tras and is_sprint and forca_choque > 230:
+            gravidade = "violenta"
+        elif (carga_por_tras and forca_choque > 140) or forca_choque > 320:
+            gravidade = "grave"
+        else:
+            gravidade = "normal"
+
+        if deve_cair:
+            portador.sofrer_queda(bola, dir_impacto)
+            portador._imunidade_queda_timer = 2.5
+            defensor._bloqueio_desarme = 0.8
+            return {
+                "tipo": "falta",
+                "infrator": defensor,
+                "vitima": portador,
+                "queda": True,
+                "gravidade": gravidade, "origem": "carga",
+                "pos": (portador.pos_x, portador.pos_y)
+            }
+
+        # Probabilidade de ganhar a bola: depende da defesa de um e da velocidade/controlo do outro
+        # (antes um choque dava quase sempre a bola ao defensor; agora a maioria falha)
+        p = 0.24 + (defensor.stat_defesa - 0.5 * portador.stat_velocidade - 30) / 120
+        if defensor.humano:
+            p += 0.10          # o jogador humano consegue desarmar um pouco melhor
+        if is_sprint:
+            p += 0.05
+        # Desarme de frente (o defensor está à frente do portador) é mais fácil do que de lado/trás
+        if portador.vetor_direcao.length_squared() > 0 and portador.vetor_direcao.dot(-dir_impacto) > 0.5:
+            p += 0.08
+        p = max(0.08, min(0.55, p))
+
+        if random.random() < p:
+            # Desarme: a bola salta para o lado do defensor, que fica com ela
+            portador.desarme_limpo(bola, -dir_impacto)
+            portador._bloqueio_desarme = 0.8     # quem perdeu não pode roubar logo de volta
+            defensor._cooldown_desarme = 0.0
+        else:
+            # Falhou: o portador segura a bola e o defensor perde uns instantes
+            defensor._bloqueio_desarme = 0.9
+            portador._cooldown_desarme = 0.6
+            defensor._desestabilizado_timer = 0.25
+            # Desarme falhado e com força: bateu no stick ou nas pernas do adversário = falta
+            if forca_choque > 160 and random.random() < 0.12:
+                return {"tipo": "falta", "infrator": defensor, "vitima": portador, "queda": False,
+                        "gravidade": "normal", "origem": "desarme", "pos": (portador.pos_x, portador.pos_y)}
+        return None
+
+    def _falta_sem_bola(self, outro: "Player", nx: float, ny: float, bola) -> dict | None:
+        """
+        Choque forte entre adversários sem a bola, perto dela (a disputar a bola ou a marcar):
+        quem vai contra o outro com mais velocidade pode fazer falta (empurrão ou rasteira).
+        """
+        if bola is None or bola.dono is not None:
+            return None
+        if min(math.hypot(self.pos_x - bola.pos_x, self.pos_y - bola.pos_y),
+               math.hypot(outro.pos_x - bola.pos_x, outro.pos_y - bola.pos_y)) > 160:
+            return None
+        # Velocidade de cada um na direção do outro (n aponta do "outro" para "self")
+        v_self = -(self.vel_x * nx + self.vel_y * ny)
+        v_outro = outro.vel_x * nx + outro.vel_y * ny
+        if max(v_self, v_outro) < 250:
+            return None
+        infrator, vitima = (self, outro) if v_self > v_outro else (outro, self)
+        if vitima._imunidade_queda_timer > 0 or infrator._bloqueio_desarme > 0:
+            return None
+        # Só é falta se for por trás (a vítima vai para o mesmo lado do empurrão): um choque de
+        # frente ou de lado, a disputar a bola, é jogo limpo
+        direcao = pygame.math.Vector2(vitima.pos_x - infrator.pos_x, vitima.pos_y - infrator.pos_y)
+        por_tras = (vitima.vetor_direcao.length_squared() > 0 and direcao.length_squared() > 0
+                    and vitima.vetor_direcao.dot(direcao.normalize()) > 0.55)
+        if not por_tras or random.random() >= 0.25:
+            return None
+        vitima.sofrer_queda(None, direcao)
+        vitima._imunidade_queda_timer = 2.5
+        infrator._bloqueio_desarme = 0.8
+        return {"tipo": "falta", "infrator": infrator, "vitima": vitima, "queda": True,
+                "gravidade": ("violenta" if max(v_self, v_outro) > 340 else
+                              "grave" if max(v_self, v_outro) > 270 else "normal"), "origem": "sem_bola",
+                "pos": (vitima.pos_x, vitima.pos_y)}
+
+    # ------------------------------------------------------------------ #
+    # Interação com a bola                                                 #
+    # ------------------------------------------------------------------ #
+
+    def _gerir_bola(self, bola):
+        if bola is None:
+            return
+
+        if self.tem_bola:
+            bola.seguir_jogador(self)
+            return
+
+        if bola.dono is not None:
+            return
+
+        # Jogador atordoado por colisão não apanha a bola de imediato
+        if self._estado_action == "colisao":
+            return
+
+        dist = ((self.pos_x - bola.pos_x) ** 2 + (self.pos_y - bola.pos_y) ** 2) ** 0.5
+
+        # Só apanha se a bola estiver ao alcance e respeitar o cooldown do dono anterior
+        if dist < PICK_UP_DIST and bola.pode_ser_apanhada_por(self):
+            bola.definir_dono(self)
+            self.tem_bola = True
+            # Acabou de ganhar a bola: fica protegido de desarmes durante um instante
+            self._cooldown_desarme = 0.6
+
+    # ------------------------------------------------------------------ #
+    # Ações                                                                #
+    # ------------------------------------------------------------------ #
+
+    def fazer_passe(self, bola, direcao_vec: pygame.math.Vector2):
+        if not self.tem_bola or bola is None:
+            return
+        self._comecar_acao("passe", 0.30)
+        self.tem_bola = False
+        from ball import PASSE_FORCA
+        if direcao_vec.length_squared() == 0:
+            direcao_vec = pygame.math.Vector2(1, 0)
+        self._olhar_para(direcao_vec)
+        bola.libertar(direcao_vec.normalize() * PASSE_FORCA, dono_anterior=self)
+
+    def fazer_remate(self, bola, direcao_vec: pygame.math.Vector2):
+        if not self.tem_bola or bola is None:
+            return
+        self._comecar_acao("remate", 0.30)
+        self.tem_bola = False
+        from ball import REMATE_FORCA
+        if direcao_vec.length_squared() == 0:
+            direcao_vec = pygame.math.Vector2(1, 0)
+        self._olhar_para(direcao_vec)
+        bola.libertar(direcao_vec.normalize() * REMATE_FORCA, dono_anterior=self)
+
+    def fazer_remate_com_forca(self, bola, direcao_vec: pygame.math.Vector2, forca: float):
+        """Remata com uma força específica (em px/s) em vez da força padrão."""
+        if not self.tem_bola or bola is None:
+            return
+        self._comecar_acao("remate", 0.30)
+        self.tem_bola = False
+        if direcao_vec.length_squared() == 0:
+            direcao_vec = pygame.math.Vector2(1, 0)
+        self._olhar_para(direcao_vec)
+        bola.libertar(direcao_vec.normalize() * forca, dono_anterior=self)
+
+    # ------------------------------------------------------------------ #
+    # Finta                                                                #
+    # ------------------------------------------------------------------ #
+
+    def direcao_finta(self):
+        """(frente, lado): para onde vai o jogador e o vetor perpendicular (para a esquerda dele)."""
+        v = pygame.math.Vector2(self.vel_x, self.vel_y)
+        if v.length() > 40:
+            frente = v.normalize()
+        elif self.vetor_direcao.length_squared() > 0:
+            frente = pygame.math.Vector2(self.vetor_direcao).normalize()
+        else:
+            frente = pygame.math.Vector2(-1 if self.equipa == "azul" else 1, 0)
+        return frente, pygame.math.Vector2(-frente.y, frente.x)
+
+    def comecar_finta(self, lado: int, tipo: str = "corte") -> bool:
+        """
+        lado: +1 ou -1 (o corte, ou o arco da roleta, vai para esse lado).
+        tipo: "corte" (engano + corte) ou "roleta" (uma volta completa com a bola colada ao stick).
+        Devolve False se não pode fintar.
+        """
+        if (not self.tem_bola or self._finta is not None or self._finta_cd > 0
+                or self._estado_action in ("colisao", "remate")):
+            return False
+        frente, perp = self.direcao_finta()
+        base = max(math.hypot(self.vel_x, self.vel_y), PLAYER_SPEED * 0.9)
+        self._finta = {"t": 0.0, "lado": lado, "frente": frente, "perp": perp, "base": base, "tipo": tipo}
+        self._finta_cd = FINTA_RECARGA
+        return True
+
+    def cancelar_finta(self):
+        self._finta = None
+        self._acel_mult = 1.0
+        self.ang_bola_forcado = None
+        self.passo_bola = None
+
+    def _atualizar_finta(self, dt: float):
+        if self._finta_cd > 0:
+            self._finta_cd = max(0.0, self._finta_cd - dt)
+        f = self._finta
+        if f is None:
+            return
+        if not self.tem_bola:
+            self.cancelar_finta()
+            return
+        f["t"] += dt
+        fr, pp, lado, b = f["frente"], f["perp"], f["lado"], f["base"]
+        a0 = math.atan2(fr.y, fr.x)
+        if f.get("tipo") == "roleta":
+            self._atualizar_roleta(f, fr, pp, lado, b, a0)
+            return
+        if f["t"] < FINTA_ENGANO:
+            # Engano: o corpo e a bola vão para o lado contrário ao do corte
+            alvo = fr * (b * 0.6) - pp * (lado * b * 0.55)
+            self._acel_mult = 1.5
+            self.ang_bola_forcado = a0 - lado * 1.15
+            self.passo_bola = 0.35
+        elif f["t"] < FINTA_ENGANO + FINTA_CORTE:
+            # Corte: arranque forte para o outro lado, o stick arrasta a bola de um lado ao outro
+            alvo = fr * (b * 0.85) + pp * (lado * b * 1.05)
+            self._acel_mult = 2.2
+            self.ang_bola_forcado = a0 + lado * 0.85
+            self.passo_bola = 0.5
+        else:
+            self.cancelar_finta()       # a partir daqui é a inércia normal (sai na diagonal)
+            return
+        self._target_vx, self._target_vy = alvo.x, alvo.y
+        if alvo.length_squared() > 0:
+            self.vetor_direcao = alvo.normalize()
+            self._olhar_para(self.vetor_direcao)
+
+    def _atualizar_roleta(self, f, fr, pp, lado, b, a0):
+        """
+        Roleta: o jogador dá uma volta completa sobre si próprio. A rotação começa e acaba devagar
+        (curva em cosseno); o corpo faz um arco para o lado (sai e volta à linha) enquanto continua
+        para a frente, e a bola roda colada ao stick, sempre do lado de fora da volta.
+        """
+        s = f["t"] / FINTA_ROLETA
+        if s >= 1.0:
+            self.cancelar_finta()
+            return
+        ease = 0.5 - 0.5 * math.cos(math.pi * s)          # 0 -> 1, devagar no início e no fim
+        theta = lado * 2 * math.pi * ease                   # ângulo da volta
+        alvo = fr * (b * 0.7) + pp * (lado * b * 0.75 * math.sin(2 * math.pi * s))
+        self._target_vx, self._target_vy = alvo.x, alvo.y
+        self._acel_mult = 1.8
+        cara = pygame.math.Vector2(math.cos(a0 + theta), math.sin(a0 + theta))
+        self.vetor_direcao = cara
+        self._olhar_para(cara)
+        self.ang_bola_forcado = a0 + theta
+        self.passo_bola = 0.45
+        # O corpo fica entre a bola e o defesa: é difícil roubar a bola durante a volta
+        self._cooldown_desarme = max(self._cooldown_desarme, 0.12)
+
+    def desarme_limpo(self, bola=None, direcao_impacto=None):
+        """Desarme ou perda de posse normal: o jogador NÃO cai ao chão e continua a patinar."""
+        if self.tem_bola:
+            self.tem_bola = False
+            if bola is not None:
+                if direcao_impacto and direcao_impacto.length_squared() > 0:
+                    v = direcao_impacto.normalize() * 95
+                else:
+                    v = pygame.math.Vector2(50, 50)
+                bola.libertar(v, dono_anterior=self)
+
+        # Apenas um pequeno tremor e abrandamento momentâneo (sem animação de queda!)
+        self._shake_timer = 0.12
+        self._desestabilizado_timer = 0.22
+
+    def sofrer_queda(self, bola=None, direcao_impacto=None):
+        """Queda ao chão após carga violenta ou falta sofrida."""
+        if self.tem_bola:
+            self.tem_bola = False
+            if bola is not None:
+                if direcao_impacto and direcao_impacto.length_squared() > 0:
+                    v = direcao_impacto.normalize() * 130
+                else:
+                    v = pygame.math.Vector2(65, 65)
+                bola.libertar(v, dono_anterior=self)
+        self._comecar_acao("colisao", 0.65)
+        self._shake_timer = _SHAKE_DURACAO
+
+    def _olhar_para(self, direcao_vec: pygame.math.Vector2):
+        """Vira o sprite para o lado do passe/remate."""
+        if abs(direcao_vec.x) > 0.2:
+            self._virado_esq = direcao_vec.x < 0
+
+    def _comecar_acao(self, acao: str, duracao: float):
+        self._estado_action = acao
+        self._action_timer  = duracao
+        self._anim.estado   = acao
+
+    # ------------------------------------------------------------------ #
+    # Animação                                                             #
+    # ------------------------------------------------------------------ #
+
+    def _atualizar_animacao(self, dt: float):
+        # Atualizar shake de colisão
+        if self._shake_timer > 0:
+            self._shake_timer -= dt
+            if self._shake_timer > 0:
+                self._shake_offset = (
+                    random.randint(-_SHAKE_AMP, _SHAKE_AMP),
+                    random.randint(-_SHAKE_AMP, _SHAKE_AMP)
+                )
+            else:
+                self._shake_timer  = 0.0
+                self._shake_offset = (0, 0)
+
+        if self._estado_action is not None:
+            self._action_timer -= dt
+            if self._action_timer <= 0 or self._anim.finished:
+                self._estado_action = None
+
+        vel_atual = (self.vel_x ** 2 + self.vel_y ** 2) ** 0.5
+        self._atualizar_lado(dt)
+        self._atualizar_inclinacao(dt, vel_atual)
+        self._atualizar_particulas(dt, vel_atual)
+
+        if self._estado_action is None:
+            em_movimento = abs(self.vel_x) > 8 or abs(self.vel_y) > 8
+
+            if self.tem_bola:
+                novo_estado = "com_bola"
+            elif em_movimento:
+                novo_estado = "correr"
+            else:
+                novo_estado = "parado"
+
+            # Transição suave — blend_timer evita pop visual entre estados
+            estado_atual = self._anim.estado
+            if novo_estado != estado_atual:
+                if self._blend_timer <= 0:
+                    # Iniciar período de blend: mantém o frame anterior por 0.08s
+                    self._estado_anterior = estado_atual
+                    self._blend_timer     = _BLEND_DURACAO
+                # Durante o blend, não muda ainda
+            else:
+                # Mesmo estado → cancelar qualquer blend pendente
+                self._blend_timer = 0.0
+
+            if self._blend_timer > 0:
+                self._blend_timer -= dt
+                if self._blend_timer <= 0:
+                    # Blend concluído → aplicar novo estado
+                    self._blend_timer = 0.0
+                    self._anim.estado = novo_estado
+                # Enquanto blend ativo, manter estado anterior (já está definido)
+            else:
+                self._anim.estado = novo_estado
+
+            # FPS dinâmico conforme velocidade actual
+            fps_anim  = _FPS_ANIM_BASE + (vel_atual / PLAYER_SPEED) * (_FPS_ANIM_MAX - _FPS_ANIM_BASE)
+            if self._sprint_ativo:
+                fps_anim += _FPS_SPRINT_ADD
+
+            # Quando parado com bola → fps lento (idle com bola)
+            if self.tem_bola and not em_movimento:
+                fps_anim = _FPS_COM_BOLA_IDLE
+
+            # Aplicar FPS dinâmico à animação de corrida/com_bola
+            # (não tocar em passe/remate/colisao que têm fps fixo)
+            estado_anim_atual = self._anim.estado
+            if estado_anim_atual in self._anim._anims:
+                anim_obj = self._anim._anims[estado_anim_atual]
+                if hasattr(anim_obj, "frame_time") and estado_anim_atual not in ("passe", "remate", "colisao", "parado"):
+                    anim_obj.frame_time = 1.0 / max(fps_anim, 0.5)
+
+            # Balanço: o corpo sobe e desce duas vezes por ciclo de 4 frames (uma por passada)
+            if em_movimento:
+                self._fase_passada += dt * fps_anim * math.pi / 2
+            else:
+                self._fase_passada = 0.0
+
+        self._anim.update(dt)
+        self._compor_imagem()
+
+    # ------------------------------------------------------------------ #
+    # Efeitos procedimentais (feitos no código, sem sprites novos)        #
+    # ------------------------------------------------------------------ #
+
+    def _atualizar_lado(self, dt: float):
+        """Decide se o sprite fica virado para a esquerda ou para a direita."""
+        if self._virar_timer > 0:
+            self._virar_timer = max(0.0, self._virar_timer - dt)
+
+        # Durante a queda o jogador não se vira
+        if self._estado_action == "colisao":
+            return
+
+        # Com a bola (ou a passar/rematar) olha para onde aponta o stick;
+        # sem bola olha para onde está a patinar.
+        if self.tem_bola or self._estado_action in ("passe", "remate"):
+            dx = self.vetor_direcao.x
+            limite = 0.25
+        else:
+            dx = self.vel_x
+            limite = 25.0
+
+        if abs(dx) > limite:
+            quer_esq = dx < 0
+            if quer_esq != self._virado_esq:
+                self._virado_esq  = quer_esq
+                self._virar_timer = _VIRAR_DURACAO
+                # Ao dar a volta a alta velocidade os patins raspam no piso
+                if (self.vel_x ** 2 + self.vel_y ** 2) > 120 ** 2:
+                    self._emitir_raspas(6)
+
+    def _atualizar_inclinacao(self, dt: float, vel_atual: float):
+        """O jogador inclina-se para a frente ao patinar e para trás ao travar."""
+        alvo = 0.0
+        if self._estado_action != "colisao" and vel_atual > 8:
+            # Para a frente, proporcional à velocidade horizontal
+            frente = abs(self.vel_x) / PLAYER_SPEED
+            alvo = _INCLINACAO_MAX * min(frente, 1.3)
+            # Travagem: velocidade alvo menor (ou ao contrário) → inclina para trás
+            alvo_vel = (self._target_vx ** 2 + self._target_vy ** 2) ** 0.5
+            contra = self.vel_x * self._target_vx + self.vel_y * self._target_vy
+            if alvo_vel < vel_atual * 0.5 or contra < 0:
+                alvo = -_INCLINACAO_MAX * 0.6 * min(vel_atual / PLAYER_SPEED, 1.0)
+        self._inclinacao = _lerp_fixo(self._inclinacao, alvo, 60.0 * dt)
+
+    def _emitir_raspas(self, n: int, forca: float = 1.0):
+        """Cria partículas de 'pó' a sair dos patins."""
+        pes_x = self.pos_x
+        pes_y = self.pos_y + PLAYER_SIZE[1] // 2 - 4
+        for _ in range(n):
+            ang = random.uniform(0, 2 * math.pi)
+            v   = random.uniform(20, 70) * forca
+            # Saem sobretudo para trás do movimento
+            vx = -self.vel_x * 0.25 + math.cos(ang) * v
+            vy = -self.vel_y * 0.25 + math.sin(ang) * v * 0.5 - 15
+            vida = random.uniform(0.25, 0.5)
+            self._particulas.append([pes_x + random.uniform(-6, 6), pes_y, vx, vy, vida, vida])
+
+    def _atualizar_particulas(self, dt: float, vel_atual: float):
+        # Travagens fortes e sprints rápidos largam raspas dos patins
+        if self._estado_action != "colisao" and vel_atual > 140:
+            contra = self.vel_x * self._target_vx + self.vel_y * self._target_vy
+            alvo_vel = (self._target_vx ** 2 + self._target_vy ** 2) ** 0.5
+            if contra < 0 or alvo_vel < vel_atual * 0.4:
+                if random.random() < 0.6:
+                    self._emitir_raspas(2)
+            elif self._sprint_ativo and vel_atual > 220 and random.random() < 0.15:
+                self._emitir_raspas(1, 0.6)
+
+        vivas = []
+        for p in self._particulas:
+            p[4] -= dt
+            if p[4] > 0:
+                p[0] += p[2] * dt
+                p[1] += p[3] * dt
+                p[2] *= 0.90
+                p[3] *= 0.90
+                vivas.append(p)
+        self._particulas = vivas[-40:]
+
+    def _compor_imagem(self):
+        """
+        Monta a imagem final do jogador:
+          sombra no chão + frame (espelhado se for para a esquerda)
+          + inclinação + balanço da passada + tremor das colisões.
+        """
+        frame = self._anim.imagem
+        if self._virado_esq:
+            frame = pygame.transform.flip(frame, True, False)
+
+        # Ao dar a volta, o sprite "estreita" por instantes (dá ideia de rodar o corpo)
+        if self._virar_timer > 0:
+            t = self._virar_timer / _VIRAR_DURACAO          # 1 → 0
+            larg = max(8, int(PLAYER_SIZE[0] * (1.0 - 0.45 * math.sin(t * math.pi))))
+            frame = pygame.transform.smoothscale(frame, (larg, PLAYER_SIZE[1]))
+
+        # Inclinação (positivo = topo para a esquerda no pygame)
+        angulo = self._inclinacao if self._virado_esq else -self._inclinacao
+        if abs(angulo) > 0.5:
+            frame = pygame.transform.rotozoom(frame, angulo, 1.0)
+
+        bob = 0
+        if self._anim.estado in ("correr", "com_bola") and self._fase_passada:
+            bob = -round(abs(math.sin(self._fase_passada)) * 2)
+
+        tela = pygame.Surface(TAMANHO_TELA, pygame.SRCALPHA)
+        cx = TAMANHO_TELA[0] // 2
+        pes_y = _MARGEM_Y + PLAYER_SIZE[1] - 2
+
+        # Sombra: encolhe um pouco quando o corpo sobe
+        larg_sombra = 30 + bob * 2 if self._anim.estado != "colisao" else 44
+        sombra = sombra_oval(larg_sombra, 9)
+        tela.blit(sombra, (cx - sombra.get_width() // 2, pes_y - 7))
+
+        sx, sy = self._shake_offset
+        # Rodamos à volta dos pés, para os patins ficarem sempre no chão:
+        # o centro do sprite fica a meia altura, inclinado pelo mesmo ângulo.
+        meia = PLAYER_SIZE[1] / 2
+        rad = math.radians(angulo)
+        centro = (cx + sx - meia * math.sin(rad),
+                  pes_y + 1 + bob + sy - meia * math.cos(rad))
+        tela.blit(frame, frame.get_rect(center=(round(centro[0]), round(centro[1]))))
+
+        self.image = tela
+
+    def draw_rastos(self, screen: pygame.Surface, camera=None):
+        """Desenha as raspas dos patins (chamado ANTES de desenhar os jogadores)."""
+        for x, y, _vx, _vy, vida, vida_max in self._particulas:
+            t = vida / vida_max
+            raio = 1 + int(2 * t)
+            if camera is not None:
+                # As raspas nascem nos patins (abaixo do centro); a câmara põe os patins em pos_y
+                x, y = camera.projetar(x, y - PLAYER_SIZE[1] // 2 + 4)
+            cor = (250, 238, 215, int(170 * t))
+            s = pygame.Surface((raio * 2, raio * 2), pygame.SRCALPHA)
+            pygame.draw.circle(s, cor, (raio, raio), raio)
+            screen.blit(s, (int(x) - raio, int(y) - raio))
+
+    # ------------------------------------------------------------------ #
+    # Desenho extra                                                        #
+    # ------------------------------------------------------------------ #
+
+    def draw_extra(self, screen: pygame.Surface, font: pygame.font.Font, show_debug: bool = False):
+        if self.selecionado:
+            cx = self.rect.centerx
+            ty = self.rect.top - 6
+            # Indicador de seleção triangular azul com rebordo (igual ao mockup)
+            # Indicador de seleção na cor do equipamento, com rebordo branco para se ver sempre
+            cor = self.kit["principal"] if self.kit else (30, 140, 255)
+            pts_fora  = [(cx, ty + 3), (cx - 9, ty - 12), (cx + 9, ty - 12)]
+            pts_borda = [(cx, ty + 1), (cx - 7, ty - 10), (cx + 7, ty - 10)]
+            pts_cor   = [(cx, ty - 1), (cx - 5, ty - 8),  (cx + 5, ty - 8)]
+            pygame.draw.polygon(screen, (10, 14, 24), pts_fora)
+            pygame.draw.polygon(screen, (255, 255, 255), pts_borda)
+            pygame.draw.polygon(screen, cor, pts_cor)
+
+        if show_debug:
+            # Número apenas em modo debug
+            for cor, off in [((0,0,0), 1), ((255,255,255), 0)]:
+                t = font.render(str(self.numero), True, cor)
+                screen.blit(t, (self.rect.centerx - t.get_width()//2 + off,
+                                self.rect.top - t.get_height() - 2 + off))

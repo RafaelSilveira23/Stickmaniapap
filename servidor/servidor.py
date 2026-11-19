@@ -30,7 +30,7 @@ from websockets.exceptions import ConnectionClosed
 
 from contas import BaseDados, Contas, ErroConta, TIPOS_SAVE
 
-VERSAO = 3                  # tem de ser igual à VERSAO do jogo (hockey_game/rede.py)
+VERSAO = 3                  # tem de ser igual à VERSAO do jogo (jogo/multijogador/rede.py)
 LETRAS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"     # sem O/0 e I/1, que se confundem
 MAX_MENSAGEM = 2 * 1024 * 1024    # o progresso das carreiras vai numa mensagem só
 MAX_FALHAS = 5                    # tentativas erradas de entrar antes de ter de esperar

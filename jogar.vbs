@@ -11,12 +11,12 @@ Set sh = CreateObject("WScript.Shell")
 Set fso = CreateObject("Scripting.FileSystemObject")
 
 pasta = fso.GetParentFolderName(WScript.ScriptFullName)
-If Not fso.FileExists(pasta & "\hockey_game\main.py") Then
-    MsgBox "Nao encontrei a pasta hockey_game ao lado do jogar.vbs." & vbCrLf & _
+If Not fso.FileExists(pasta & "\jogo\main.py") Then
+    MsgBox "Nao encontrei a pasta jogo ao lado do jogar.vbs." & vbCrLf & _
            "O jogar.vbs tem de estar na pasta principal do projeto.", vbCritical, "StickMania"
     WScript.Quit 1
 End If
-sh.CurrentDirectory = pasta & "\hockey_game"
+sh.CurrentDirectory = pasta & "\jogo"
 
 candidatos = Array(sh.ExpandEnvironmentStrings("%LOCALAPPDATA%") & "\Python\bin\pythonw.exe", "pyw", "pythonw")
 teste = " -c ""import sys, pygame; sys.exit(sys.version_info < (3, 10))"""

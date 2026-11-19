@@ -19,7 +19,7 @@ de Aplicações e desaparece o aviso «O Windows protegeu o computador».
 ## 3. Copiar a identidade do pacote
 
 1. Na aplicação, vai a **Gestão de produtos → Identidade do produto**.
-2. Copia estes três valores para o ficheiro `ferramentas/loja.json`:
+2. Copia estes três valores para o ficheiro `ferramentas/construir/loja.json`:
 
 ```json
 {
@@ -34,8 +34,8 @@ de Aplicações e desaparece o aviso «O Windows protegeu o computador».
 Na pasta do projeto:
 
 ```
-python ferramentas/construir_app.py
-python ferramentas/construir_msix.py
+python ferramentas/construir/construir_app.py
+python ferramentas/construir/construir_msix.py
 ```
 
 O pacote fica em `build_app/StickMania_1.<versão>.0.0_x64.msix`. O `makeappx.exe` tem de estar em

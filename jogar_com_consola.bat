@@ -1,7 +1,7 @@
 @echo off
 setlocal
 title StickMania PAP - Hoquei em Patins
-cd /d "%~dp0hockey_game" 2>nul
+cd /d "%~dp0jogo" 2>nul
 if not exist "main.py" goto sem_pasta
 
 rem --- 1. Procurar um Python 3.10+ que ja tenha o pygame-ce ---
@@ -43,7 +43,7 @@ if not errorlevel 1 set "PYBASE=%~1"
 exit /b
 
 :sem_pasta
-echo [ERRO] Nao encontrei a pasta hockey_game ao lado deste ficheiro.
+echo [ERRO] Nao encontrei a pasta jogo ao lado deste ficheiro.
 echo O jogar_com_consola.bat tem de estar na pasta principal do projeto.
 pause
 exit /b 1

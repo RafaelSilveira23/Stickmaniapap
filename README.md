@@ -1,236 +1,151 @@
-# Stickmaniapap
+# StickMania — Hóquei em Patins
 
-Projeto PAP Rafael 2026/2027 — **StickMania**, um jogo de hóquei em patins 2D feito em Python com `pygame-ce`.
+Projeto PAP 2026/2027 de **Rafael da Hora Silveira** e **Vasco Andreia**
+(Curso Profissional de Técnico de Gestão e Programação de Sistemas Informáticos).
 
-## Instalar o jogo (Windows)
+StickMania é um jogo de hóquei em patins para Windows, feito em **Python** com **pygame-ce**: jogo rápido,
+modo carreira com duas divisões e Taça Europeia, carreira de jogador, jogo online com contas e ranking,
+dois jogadores no mesmo computador e um tutorial para quem começa.
 
-**[⬇ Descarregar o StickMania-Instalar.exe](https://github.com/RafaelSilveira23/Stickmaniapap/raw/main/download/StickMania-Instalar.exe)** (57 MB)
+- **Site do jogo:** https://rafaelsilveira23.github.io/Stickmaniapap/
+- **Descarregar:** [StickMania-Instalar.exe](https://github.com/RafaelSilveira23/Stickmaniapap/raw/main/download/StickMania-Instalar.exe)
+- **Relatórios:** [docs/relatorio](docs/relatorio) (um relatório individual de cada aluno, em .docx e .pdf)
 
-Site do jogo: **https://rafaelsilveira23.github.io/Stickmaniapap/** (o código do site está em `site/`, publicado no ramo `gh-pages`).
+---
 
-1. Abre o `StickMania-Instalar.exe`. Como o programa não tem assinatura digital, o Windows pode mostrar
-   **«O Windows protegeu o computador»**: carrega em **Mais informações** e depois em **Executar mesmo assim**.
-2. Carrega em **INSTALAR** e depois em **JOGAR AGORA**.
+## 1. Jogar
 
-Não é preciso o Python nem permissões de administrador. O jogo fica em `%LOCALAPPDATA%\Programs\StickMania`,
-com atalhos no menu Iniciar e no ambiente de trabalho, e aparece em *Definições → Aplicações instaladas*, onde
-se pode desinstalar. Os jogos gravados ficam em `%APPDATA%\StickMania` (não se perdem ao instalar uma versão nova).
+**Com o instalador (recomendado):** abre o `StickMania-Instalar.exe`, carrega em **INSTALAR** e depois em
+**JOGAR AGORA**. Não é preciso o Python nem permissões de administrador. Se o Windows mostrar
+«O Windows protegeu o computador», carrega em *Mais informações* → *Executar mesmo assim* (o jogo não tem
+assinatura digital paga).
 
-Para criar o instalador: `python ferramentas/construir_app.py` (precisa do PyInstaller). O PyInstaller junta o
-jogo, o Python e o pygame-ce num programa (`StickMania.exe`) e o `ferramentas/instalador.py` faz a janela do
-instalador; o resultado é copiado para `download/`.
-
-## Relatório e divisão de tarefas
-
-O projeto é feito em dupla por **Rafael da Hora Silveira** e **Vasco Andreia**. Na pasta `docs/relatorio` há
-um relatório individual de cada um (`Relatorio_PAP_StickMania_Rafael_Silveira` e
-`Relatorio_PAP_StickMania_Vasco_Andreia`, em .docx e .pdf), com a divisão de tarefas na secção 5.4:
-
-| Parte | Quem fez |
-|---|---|
-| Inteligência artificial e guarda-redes, menus e interface, sons, base de dados, carreira de jogador e vida do jogador, remate na primeira pessoa e modo teste | Vasco Andreia |
-| Física da bola e dos jogadores, gráficos, sprites e câmara, jogo online com o servidor e aplicação para Windows | Rafael da Hora Silveira |
-| Ciclo principal, modo carreira, estilo arcade, análise, diagramas, testes e relatório | Os dois |
-
-Os relatórios individuais são gerados a partir do relatório conjunto (`Relatorio_PAP_StickMania.docx`, o
-único que se edita à mão) com `python docs/relatorio/gerar_individuais.py --pdf` (o `--pdf` precisa do Word).
-
-## Planeamento
-
-O diagrama de Gantt do projeto está em **[docs/GANTT.md](docs/GANTT.md)** — o GitHub desenha-o a partir de
-código Mermaid. É gerado pelo mesmo script da imagem do relatório (`docs/diagramas/gerar_gantt.py`).
-
-## Correr a partir do código
-
-Requisitos: **Python 3.10 ou superior** (com o instalador não é preciso).
+**A partir do código:** precisa do Python 3.10 ou mais recente.
 
 ```bash
-pip install -r hockey_game/requirements.txt
+pip install -r jogo/requirements.txt
 python main.py
 ```
 
-No Windows basta fazer duplo clique em `jogar.vbs`: o jogo abre **sem a janela preta da consola**.
-Se faltar o Python ou o pygame-ce, abre o `jogar_com_consola.bat`, que mostra o que se passa e instala o pygame-ce
-(também se pode abrir esse ficheiro diretamente para ver as mensagens do jogo). Se o jogo fechar com um erro,
-aparece uma janela com a mensagem, que também fica gravada em `hockey_game/saves/erro.txt`.
+No Windows também se pode fazer duplo clique em `jogar.vbs` (abre sem a janela da consola). Se faltar
+alguma coisa, o `jogar_com_consola.bat` mostra o que é e instala o pygame-ce.
 
-## Controlos
+| Tecla | Ação | | Tecla | Ação |
+|---|---|---|---|---|
+| WASD / setas | Mover | | V | Finta |
+| SHIFT | Acelerar | | F | Roleta |
+| Z | Passe | | C | Trocar de jogador |
+| X | Remate (na primeira pessoa) | | ESC | Pausa |
 
-| Tecla | Ação |
+Também dá para jogar com um comando (Xbox, PlayStation ou compatível).
+
+---
+
+## 2. O que tem o jogo
+
+| | |
 |---|---|
-| W A S D / Setas | Mover o jogador |
-| SHIFT | Sprint |
-| C / TAB / ESPAÇO | Trocar para o jogador mais perto da bola (na carreira de jogador: pedir a bola) |
-| Z | Passe |
-| X | Remate na primeira pessoa: rato/setas apontam à baliza, manter X (ou o botão do rato) dá a força, largar remata |
-| R | No MODO TESTE: novo remate noutro sítio |
-| ESC / P | Pausa (ESC também cancela a mira) |
-| F4 | Mudar a dificuldade da IA |
-| F11 | Ecrã inteiro |
-| F3 | Modo de depuração |
+| **Partida** | Física da bola e dos jogadores, IA com 3 níveis, guarda-redes que sai da baliza e se atira à bola, faltas com livres, penáltis, livres diretos e cartões, fintas e roleta, remate na primeira pessoa (stickada) |
+| **Modos** | Jogo rápido, modo carreira (2 divisões, subidas e descidas, Taça Europeia, jogos simulados), carreira de jogador com a vida fora do rinque, modo teste, tutorial com 8 missões, dois jogadores no mesmo PC |
+| **Online** | Jogo aleatório, sala privada com código e desafios pela alcunha; contas (alcunha + palavra-passe), carreiras guardadas na nuvem e ranking com pontos |
+| **Apresentação** | Câmara em perspetiva como na televisão, marcador e estatísticas, estilo arcade, repetição dos golos em câmara lenta, sons e cânticos dos clubes criados no código |
+| **Clubes** | 19 clubes (1.ª e 2.ª divisão portuguesas e 4 espanhóis) com emblemas, planteis e equipamentos com as cores de cada um |
 
-No **jogo online** os controlos são os mesmos, também com a **stickada** (o ecrã do remate na primeira
-pessoa): quando um jogador carrega em `X`, o jogo pára nos dois computadores e o outro vê o remate em direto
-(«REMATE DO ADVERSÁRIO»). Na pausa o jogo não pára, porque há outra pessoa a jogar.
+---
 
-## Jogar online
+## 3. Organização do projeto
 
-No menu principal escolhe **JOGAR ONLINE**. Em cima aparece quantos jogadores estão online e quantos estão a jogar.
+```
+stickmaniapap/
+├── jogo/                  o jogo (Python + pygame-ce)
+│   ├── main.py            ponto de entrada (mostra os erros numa janela)
+│   ├── game.py            ciclo principal e estados do jogo (menus, partida, pausa, fim)
+│   ├── settings.py        tamanhos, velocidades e cores
+│   ├── caminhos.py        onde está cada pasta (junta as subpastas ao Python)
+│   ├── partida/           o que acontece no rinque
+│   ├── modos/             modo carreira, carreira de jogador, tutorial, dois jogadores
+│   ├── clubes/            equipas, planteis, emblemas e cores
+│   ├── ecras/             menus, painel do jogo e peças da interface
+│   ├── multijogador/      jogo online e contas
+│   ├── som/               efeitos sonoros e cânticos
+│   └── recursos/          imagens, sons, emblemas e sprites
+├── servidor/              servidor do jogo online (Render) e contas (base de dados na Neon)
+├── site/                  site de download (publicado no GitHub Pages, ramo gh-pages)
+├── ferramentas/
+│   ├── construir/         cria o StickMania.exe, o instalador e o pacote da Microsoft Store
+│   ├── analise/           testes da simulação e da jogabilidade (IA contra IA)
+│   └── imagens/           preparar sprites, emblema e stick
+├── docs/
+│   ├── relatorio/         relatórios da PAP (o conjunto e os dois individuais)
+│   ├── diagramas/         diagramas e Gantt (com os programas que os desenham)
+│   ├── capturas/          capturas de ecrã do jogo
+│   ├── loja/              guia e imagens para a Microsoft Store
+│   └── GANTT.md           planeamento (o GitHub desenha-o)
+├── download/              StickMania-Instalar.exe (o instalador pronto)
+├── main.py, jogar.vbs, jogar_com_consola.bat     formas de abrir o jogo a partir do código
+└── render.yaml            configuração do servidor no Render
+```
 
-- **JOGO ALEATÓRIO**: joga contra outra pessoa que também esteja à procura de jogo. As equipas são sorteadas.
-- **CRIAR SALA PRIVADA**: aparece um código de 4 letras (ex.: `K7QZ`). Dá-o ao teu amigo.
-- **ENTRAR NUMA SALA**: escreve o código da sala do teu amigo (também se pode colar com CTRL+V).
+### O código do jogo, por pasta
 
-Quem cria a sala (ou estava há mais tempo à procura) é o *anfitrião* e joga com a equipa da casa; na sala
-privada é ele que escolhe as equipas. Não é preciso VPN nem abrir portas.
+| Pasta | Ficheiros | O que faz |
+|---|---|---|
+| `partida/` | `ball.py`, `player.py`, `goalkeeper.py`, `ai.py` | Bola, jogadores, guarda-redes e inteligência artificial |
+| | `faltas.py`, `fintas.py`, `remate_pov.py`, `pavilhao_pov.py` | Faltas e cartões, fintas, remate na primeira pessoa |
+| | `rink.py`, `baliza.py`, `camera.py`, `animation.py` | Ringue, balizas, câmara em perspetiva e animações |
+| | `efeitos.py`, `repeticao.py`, `comando.py` | Estilo arcade, repetição dos golos e comando |
+| `modos/` | `carreira.py`, `carreira_menu.py` | Modo carreira (base de dados SQLite, simulação, Taça Europeia) |
+| | `carreira_jogador.py`, `carreira_jogador_menu.py`, `vida.py` | Carreira de jogador e vida do jogador |
+| | `tutorial.py`, `dois_jogadores.py` | Tutorial com missões e dois jogadores no mesmo PC |
+| `clubes/` | `team.py`, `cores.py` | Clubes, planteis, emblemas e cores dos equipamentos |
+| `ecras/` | `menu.py`, `ui.py`, `componentes.py`, `graficos.py`, `fontes.py` | Menus, painel do jogo, botões, ícones e fontes |
+| `multijogador/` | `rede.py`, `online.py`, `online_menu.py` | Ligação ao servidor e jogo online |
+| | `conta.py`, `conta_menu.py` | Conta do jogador, progresso na nuvem e ranking |
+| `som/` | `sons.py`, `canticos.py` | Sons criados por síntese e cânticos dos clubes |
 
-Como funciona: os jogos ligam-se ao **servidor do jogo** (`servidor/servidor.py`) por WebSocket
-(`hockey_game/rede.py`). O servidor conta os jogadores, faz o emparelhamento e as salas, e passa as mensagens
-de um jogador para o outro. Só o computador do anfitrião corre o jogo (física, IA, golos); o outro envia as
-teclas que carrega e recebe 30 vezes por segundo o estado do jogo, que desenha com suavização
-(`hockey_game/online.py`).
+As subpastas são só para organizar: o `caminhos.py` junta-as ao caminho do Python, por isso cada ficheiro
+importa os outros só pelo nome (por exemplo `import comando`).
 
-### Servidor do jogo online (Render.com, grátis)
+---
 
-O servidor corre no [Render](https://render.com), no plano gratuito, na região de **Frankfurt**, com a
-configuração do `render.yaml`:
+## 4. Como funciona (resumo)
 
-1. Entrar em [dashboard.render.com](https://dashboard.render.com) com a conta do GitHub.
-2. **New → Blueprint**, escolher o repositório `Stickmaniapap` e carregar em **Apply**.
-3. O Render cria o serviço `stickmania-eu` em `https://stickmania-eu.onrender.com`
-   (se o endereço for outro, muda a constante `SERVIDOR` em `hockey_game/rede.py`).
-4. Quando o `render.yaml` muda, carregar em **Manual sync** na página do Blueprint.
+- **Ciclo do jogo** (`game.py`): 60 vezes por segundo lê as teclas, atualiza a física, a IA e as regras, e
+  desenha tudo. Um "estado" diz em que ecrã se está (menu, partida, pausa, fim...).
+- **Câmara**: a física e a IA usam um campo plano; só o desenho passa pela câmara em perspetiva.
+- **Jogo online**: o anfitrião corre o jogo inteiro; o convidado envia as teclas e recebe o estado do jogo
+  30 vezes por segundo, com previsão do próprio jogador e suavização dos outros. As mensagens passam pelo
+  servidor (WebSocket), por isso não é preciso abrir portas.
+- **Contas**: o servidor guarda a alcunha, a palavra-passe cifrada (PBKDF2), as carreiras e o ranking numa
+  base de dados Postgres (Neon). Não se pede email.
+- **Carreiras**: guardadas em SQLite no PC (`jogo/saves`, ou `%APPDATA%\StickMania` no programa instalado)
+  e, com conta, também na nuvem.
 
-A região conta muito: com o servidor nos EUA (a região por omissão do Render), uma mensagem entre dois
-jogadores em Portugal demorava ~0,5 s a ir e voltar; em Frankfurt demora ~0,15 s.
+---
 
-O plano gratuito adormece o servidor ao fim de 15 minutos sem jogadores; o primeiro a entrar espera até
-1 minuto e o jogo mostra «A acordar o servidor do jogo».
+## 5. Ferramentas
 
-Para testar no próprio PC: `python servidor/servidor.py` (porta 8765) e, antes de abrir o jogo,
-`set STICKMANIA_SERVIDOR=ws://localhost:8765`.
-
-## Funcionalidades
-
-- Menu principal com o pavilhão desfocado ao fundo e uma **engrenagem no canto** que abre as
-  **Definições** (lista de controlos e ecrã inteiro, que fica gravado); menu de pausa e ecrã de fim de jogo
-- Todos os menus com o mesmo estilo (painéis de vidro e botões com ícones); na **pausa** e no **fim de jogo**
-  o jogo fica desfocado por trás, e no fim cada equipa aparece com as suas cores, o vencedor destacado e confetes
-- **Transições suaves** (fade) entre todos os ecrãs
-- **Gráficos melhorados**: piso desenhado com o dobro da resolução (linhas e emblema suaves),
-  tábuas com veios e nós, reflexos das luzes no verniz, sombra junto às tabelas e sombras esbatidas
-  nos jogadores e na bola; vsync para a imagem não "rasgar"
-- **Modo carreira**: escolhes um clube da 1.ª ou da 2.ª divisão e jogas épocas seguidas: o campeonato da tua divisão (7 jornadas, os outros jogos são simulados) e, para os 4 primeiros da 1.ª divisão, a **Taça Europeia** (quartos, meias e final contra clubes espanhóis, com penáltis se houver empate). No fim da época o campeão da 2.ª divisão **sobe** e o último da 1.ª **desce**. Classificações das duas divisões, calendário, marcadores e o quadro da taça. O progresso fica gravado numa base de dados SQLite (`hockey_game/saves/carreira.db`)
-  - Podes **simular** o teu jogo (botão SIMULAR ou tecla `S`) ou a **época toda**
-  - Resultados realistas: força dos clubes, forma recente e "forma do dia", golos por distribuição binomial
-    (validado em 600 épocas com `ferramentas/analise_simulacao.py`)
-  - Classificação com a forma (últimos 5 jogos) e probabilidades de vitória/empate/derrota no próximo jogo
-  - A força do clube também conta no jogo (os clubes fortes patinam um pouco mais depressa)
-- **Carreira de jogador**: crias o teu jogador (nome, número, posição e clube) e nos jogos **só controlas esse jogador**;
-  os colegas são da IA e passam-te a bola quando a pedes (`C`, `TAB`, `ESPAÇO` ou `Z` sem bola)
-  - Nota de 0 a 10 em cada jogo (golos, assistências, passes certos, bolas recuperadas e perdidas, resultado),
-    com um cartão que a mostra ao vivo durante o jogo
-  - O geral e os atributos evoluem com as notas; no fim da época, com nota média 6,8 ou mais, há propostas de
-    clubes mais fortes
-  - Gravado à parte em `hockey_game/saves/carreira_jogador.db` (tabelas `atleta` e `atuacao`)
-  - **Vida do jogador** (ao estilo dos jogos de simulação de vida): idade, dinheiro, forma, moral, confiança do
-    treinador, fama e estudos. Depois de cada jornada há um **evento com escolhas** (festa na véspera do jogo,
-    teste na escola, patrocínio, polémica nas redes, convocatória da seleção, ...) e em cada semana uma
-    **atividade** (`V`): treino extra, ginásio, descansar, sair com os amigos, estudar, ... Tudo fica no **diário** (`L`)
-  - As escolhas mexem no hóquei: forma e moral somam-se aos atributos, pouca forma dá **lesões**, sem a
-    confiança do treinador vais para o **banco**, e a fama ajuda a ter propostas (`hockey_game/vida.py`)
-  - **Pessoas** (`P`): mãe, pai, melhor amigo e um namoro que pode começar nos eventos; cada uma tem uma relação
-    que desce se não lhe ligares; uma vez por semana podes passar tempo, conversar, pedir conselho ou dar uma prenda
-  - **42 eventos**, alguns com **consequências** mais tarde (a polémica nas redes dá um processo disciplinar,
-    o primeiro encontro pode dar um namoro, ...), **bens** (carta, carro, casa própria, agente, braçadeira de capitão)
-    e **14 conquistas** (`C`)
-- **Estilo arcade** (liga/desliga nas Definições): "GOLO!" gigante com o nome do marcador, câmara lenta e
-  confetes; nos impactos o jogo congela por um instante, o ecrã treme e saltam faíscas; textos de banda
-  desenhada ("DEFESA!", "POSTE!", "ROUBO!"), rasto da bola e contorno nos jogadores (`hockey_game/efeitos.py`)
-- **Sons** criados por síntese no código (sem ficheiros de fora): apito, tacadas, tabelas, postes,
-  defesas, golo com buzina e público; volume dos efeitos e do público nas Definições
-- **Guarda-redes melhorado**: sai da baliza para tapar o ângulo, tem inércia, atira-se à bola (estirada) e fica no chão depois, e afasta bolas soltas
-- **Fintas**: corte (V / Y no comando), engano para um lado e corte para o outro, e **roleta** (F / LB no comando), uma volta com a bola colada ao stick; os defesas podem ficar para trás
-- **Faltas a sério**: livre com o jogo parado até ser batido (escolhes passar ou fazer a stickada), penálti e livre direto batidos contra o guarda-redes, cartões amarelo (aviso), azul (30 s fora) e vermelho (expulso), e menos roubos de bola nos choques
-- **Jogar com um comando** (Xbox, PlayStation ou compatível): stick para mexer, A passe, B remate, X trocar, RB sprint, START pausa; também nos menus e no remate na primeira pessoa
-- **Interface do jogo**: marcador ao centro como na televisão (emblemas, nomes, faltas, golos e relógio), painel de baixo com mini-mapa, cartão do jogador e teclas das ações, e **estatísticas da partida** (remates, defesas, posse de bola e faltas) na pausa e no fim do jogo
-- **Cânticos dos clubes**: cada clube tem um cântico original, composto no código (`hockey_game/canticos.py`):
-  a bancada canta uma melodia a várias vozes, grita o nome do clube e bate palmas, com o ritmo e o
-  instrumento do clube (bombos e metais no FC Porto, fanfarra no Benfica, concertina no Barcelos, guitarra
-  na Oliveirense, batucada no Valongo...). Durante o jogo a bancada vai cantando e, quando há golo, ouve-se
-  logo o cântico de quem marcou
-  - **Melhores marcadores**: cada golo fica com o nome de quem marcou (no jogo e nos jogos simulados),
-    gravado nas tabelas `jogador` e `estatistica`; separador MARCADORES no ecrã do campeonato
-- **19 clubes** com emblemas: 8 da 1.ª divisão e 7 da 2.ª divisão portuguesas e 4 clubes espanhóis (FC Barcelona,
-  Deportivo Liceo, Reus Deportiu e CP Voltregà), escolhidos por separadores (1.ª divisão, 2.ª divisão, Europa)
-- **Planteis**: 4 jogadores de campo + guarda-redes, como no hóquei em patins (formação em losango: avançado,
-  dois médios e defesa). Os da 1.ª divisão e dos clubes espanhóis têm nomes reais; os da 2.ª divisão não estão
-  publicados e por isso têm nomes inventados (podem ser trocados em `hockey_game/team.py`)
-- Os nomes aparecem no cartão do jogador, nas faltas, nos golos ("GOLO! FC PORTO • Hélder Nunes") e no fim do jogo
-- **Equipamentos com as cores de cada clube**; se as cores das duas equipas forem parecidas, a equipa visitante joga com o equipamento alternativo
-- **Linhas do ringue na cor da equipa da casa**, ajustadas automaticamente para se verem bem no piso de madeira
-- IA com 3 níveis de dificuldade, sistema de faltas, livres diretos e penáltis
-- **Remate na primeira pessoa**: a câmara passa para os olhos do jogador; apontas a qualquer ponto da baliza
-  (também em altura) e escolhes a força — mais força é mais rápido mas menos preciso. O guarda-redes tem
-  tempo de reação, mergulho e pode adivinhar o lado (`hockey_game/remate_pov.py`)
-  - O jogador continua a patinar a 50 % enquanto carrega o remate (barra de velocidade)
-  - Os defesas que estão entre ti e a baliza aparecem no ecrã e podem **bloquear** o remate
-    (a mira fica vermelha com "LINHA TAPADA"); se passarem perto, tapam a vista ao guarda-redes
-  - Os defesas têm sempre o tamanho certo em perspetiva (crescem ao aproximar-te, já não encolhem nem desaparecem), com sprites HD nas cores do clube; quem tapa a linha do remate fica com contorno vermelho e o nome por cima
-- **MODO TESTE** no menu principal: só tu contra o guarda-redes, para treinar remates (golos / remates no marcador)
-- **Animações de patinagem melhoradas**: o jogador vira-se para o lado para onde patina,
-  inclina-se ao acelerar e para trás ao travar, balança a cada passada, tem sombra no chão
-  e larga raspas dos patins nas travagens e nas viragens rápidas
-- **Balizas desenhadas no código** (vista 3/4, rede em malha, sombra), em duas camadas:
-  a bola fica por baixo da rede quando entra e o guarda-redes fica à frente da baliza
-- Jogadores desenhados por ordem de profundidade (quem está mais abaixo no ecrã fica à frente)
-- **Jogar online**: dois jogadores em computadores diferentes, um em cada equipa (ver em cima)
-- **Câmara em perspetiva (vista de TV)**: o campo aparece em trapézio, os jogadores do fundo
-  ficam mais pequenos, as tabelas têm altura e publicidade, e há bancadas com público
-  nas cores da equipa da casa. A física e a IA continuam num campo plano; só o desenho
-  passa pela câmara (`hockey_game/camera.py`)
-
-## Estrutura
-
-| Ficheiro | Função |
+| Comando | O que faz |
 |---|---|
-| `hockey_game/game.py` | Ciclo principal e estados do jogo (menus, partida, pausa, fim) |
-| `hockey_game/menu.py` | Ecrãs de menu |
-| `hockey_game/carreira.py` | Modo carreira: duas divisões, Taça Europeia, subidas e descidas, jogos simulados e base de dados SQLite |
-| `hockey_game/carreira_menu.py` | Ecrãs do modo carreira (escolha do clube, classificações e quadro da Taça Europeia) |
-| `hockey_game/carreira_jogador.py` | Carreira de jogador: jogador criado, nota, evolução, propostas e base de dados |
-| `hockey_game/carreira_jogador_menu.py` | Ecrãs da carreira de jogador (criar o jogador e painel da carreira) |
-| `hockey_game/vida.py` | Vida do jogador: valores, eventos com escolhas, atividades, lesões, banco e diário |
-| `hockey_game/componentes.py` | Botões, painéis e fundos reutilizáveis da interface |
-| `hockey_game/graficos.py` | Efeitos gráficos: luzes, sombras suaves, ícones e título desenhados no código |
-| `hockey_game/remate_pov.py` | Remate na primeira pessoa (perspetiva, mira, força e modelo do guarda-redes) |
-| `hockey_game/efeitos.py` | Estilo arcade (tremer, pausa nos impactos, partículas, festa do golo) |
-| `hockey_game/sons.py` | Síntese e reprodução dos sons (os `.wav` ficam em `hockey_game/assets/sounds`) |
-| `hockey_game/canticos.py` | Compõe os cânticos dos clubes (`python canticos.py` cria `assets/sounds/canticos/*.wav`) |
-| `ferramentas/analise_simulacao.py` | Verifica se os resultados simulados do modo carreira fazem sentido |
-| `hockey_game/cores.py` | Cores dos equipamentos, contraste e recoloração dos sprites |
-| `hockey_game/team.py` | Dados das equipas (nome, sigla, cores, emblema) |
-| `hockey_game/player.py`, `goalkeeper.py`, `ai.py` | Jogadores, guarda-redes e inteligência artificial |
-| `hockey_game/ball.py`, `rink.py` | Física da bola e desenho do ringue |
-| `hockey_game/camera.py` | Câmara em perspetiva (converte campo plano <-> ecrã) |
-| `hockey_game/baliza.py` | Desenho das balizas (camada de fundo e da frente) |
-| `hockey_game/animation.py` | Carregamento de animações (redução suave e alinhamento pelos patins) |
-| `hockey_game/ui.py` | HUD (marcador, mini-mapa, cartão do jogador) |
-| `hockey_game/fontes.py` | Fontes do sistema com cache (cada fonte é criada uma só vez) |
-| `hockey_game/rede.py` | Ligação ao servidor do jogo (WebSocket, em threads): contagens, emparelhamento e mensagens |
-| `hockey_game/online.py` | Jogo online: o anfitrião corre o jogo e envia o estado; o convidado envia as teclas |
-| `hockey_game/online_menu.py` | Ecrã "Jogar online" (jogadores online, jogo aleatório, criar e entrar numa sala) |
-| `servidor/servidor.py` | Servidor do jogo online (Render): contagens, jogo aleatório, salas privadas |
-| `render.yaml` | Configuração do servidor no Render.com |
-| `ferramentas/construir_app.py` | Cria o `StickMania.exe` (PyInstaller) e o instalador |
-| `ferramentas/instalador.py` | Janela do instalador (instala, cria atalhos e desinstala) |
-| `download/StickMania-Instalar.exe` | O instalador do jogo, pronto a descarregar |
-| `jogar.vbs` / `jogar_com_consola.bat` | Arrancar o jogo sem consola / com consola (e instalar o pygame-ce) |
-| `sprites_v2/` | Sprites usados pelo jogo (jogadores, guarda-redes, bola e público) |
+| `python ferramentas/construir/construir_app.py` | Cria o `StickMania.exe` (PyInstaller) e o instalador em `download/` |
+| `python ferramentas/construir/construir_msix.py` | Cria o pacote da Microsoft Store (ver `docs/loja`) |
+| `python ferramentas/analise/analise_simulacao.py` | Simula 400 épocas e verifica se os resultados são realistas |
+| `python ferramentas/analise/medir_jogabilidade.py jogo` | Joga partidas IA contra IA e conta golos, faltas e problemas |
+| `python docs/relatorio/gerar_individuais.py --pdf` | Gera os dois relatórios individuais a partir do conjunto |
+| `python servidor/servidor.py` | Servidor online no próprio PC (para testar: `set STICKMANIA_SERVIDOR=ws://localhost:8765`) |
 
-Para mudar as cores de uma equipa, edita `cor_primaria`, `cor_secundaria` e `padrao` (`"liso"` ou `"riscas"`) em `hockey_game/team.py`.
-Para mudar os jogadores, edita `PLANTEIS` no mesmo ficheiro (guarda-redes + 4 jogadores de campo, pela ordem avançado, médio, médio, defesa).
+---
 
-## Créditos
+## 6. Divisão do trabalho
+
+| Quem | Partes |
+|---|---|
+| **Rafael da Hora Silveira** | Física da bola e dos jogadores, faltas e cartões, fintas, guarda-redes, gráficos e câmara, estilo arcade e repetição dos golos, remate na primeira pessoa e modo teste, comando e dois jogadores, jogo online, servidor e contas, aplicação para Windows e site |
+| **Vasco Andreia** | Inteligência artificial, modo carreira e base de dados, menus, interface e tutorial, sons e cânticos, carreira de jogador e vida do jogador |
+| **Os dois** | Ciclo principal do jogo, análise, testes e relatório |
+
+O pormenor está na secção 5.4 de cada relatório individual e no diagrama de Gantt ([docs/GANTT.md](docs/GANTT.md)).
+
+---
 
 Os nomes e emblemas dos clubes pertencem aos respetivos clubes e são usados apenas neste projeto escolar.

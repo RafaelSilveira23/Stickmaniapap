@@ -21,9 +21,10 @@ Desktop.ini
 .DS_Store
 
 # Gravações do modo carreira (progresso pessoal de cada jogador)
-hockey_game/saves/*.db
-hockey_game/saves/definicoes.json
-hockey_game/saves/erro.txt
+jogo/saves/*.db
+jogo/saves/*.json
+jogo/saves/*.antes_da_nuvem
+jogo/saves/erro.txt
 
 # Programa e instalador gerados pelo ferramentas/construir_app.py (o instalador fica em download/)
 build_app/
