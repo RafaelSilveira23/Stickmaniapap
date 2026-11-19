@@ -4,7 +4,9 @@ Projeto PAP Rafael 2026/2027 — **StickMania**, um jogo de hóquei em patins 2D
 
 ## Instalar o jogo (Windows)
 
-**[⬇ Descarregar o StickMania-Instalar.exe](https://github.com/RafaelSilveira23/Stickmaniapap/raw/main/download/StickMania-Instalar.exe)** (34 MB)
+**[⬇ Descarregar o StickMania-Instalar.exe](https://github.com/RafaelSilveira23/Stickmaniapap/raw/main/download/StickMania-Instalar.exe)** (57 MB)
+
+Site do jogo: **https://rafaelsilveira23.github.io/Stickmaniapap/** (o código do site está em `site/`, publicado no ramo `gh-pages`).
 
 1. Abre o `StickMania-Instalar.exe`. Como o programa não tem assinatura digital, o Windows pode mostrar
    **«O Windows protegeu o computador»**: carrega em **Mais informações** e depois em **Executar mesmo assim**.
