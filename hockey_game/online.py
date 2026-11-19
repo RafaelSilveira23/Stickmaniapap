@@ -2,9 +2,13 @@
 """online.py - modo online (dois jogadores em computadores diferentes).
 
 Os dois jogos encontram-se através do servidor do jogo (rede.py / servidor/servidor.py):
-  - JOGO ALEATÓRIO: o servidor junta duas pessoas que estejam à procura (as equipas são sorteadas);
-  - SALA PRIVADA: um cria a sala e recebe um código de 4 letras; o amigo entra com esse código.
-Quem criou a sala (ou estava há mais tempo na fila) é o anfitrião.
+  - JOGO ALEATÓRIO: o servidor junta duas pessoas que estejam à procura;
+  - SALA PRIVADA: um cria a sala e recebe um código de 4 letras; o amigo entra com esse código;
+  - DESAFIO: um desafia o outro pela alcunha da conta (conta.py).
+Quem criou a sala (ou estava há mais tempo na fila, ou desafiou) é o anfitrião.
+Depois de emparelhados, os dois vão ao ecrã das equipas e CADA UM ESCOLHE A SUA (o anfitrião a da
+casa, o convidado a de fora), vendo a do outro em direto (mensagens "eq"). O jogo começa quando os
+dois carregam em ESTOU PRONTO.
 
 Como funciona (modelo "anfitrião com autoridade"):
   - O ANFITRIÃO corre o jogo inteiro (física, IA, golos, faltas), como num jogo normal.
@@ -190,6 +194,13 @@ class OnlineMixin:
             self._online_pov_tick(dt)
         if self.online == "anfitriao" and self.estado == "jogo":
             self._online_enviar_estado(dt)
+        if self.estado == "menu_selecao" and getattr(self.menu, "online_lado", None):
+            # No ecrã das equipas, a escolha é repetida de segundo a segundo (para o outro a ver
+            # mesmo que tenha aberto o ecrã depois)
+            self._eq_t = getattr(self, "_eq_t", 0.0) + dt
+            if self._eq_t > 1.0:
+                self._eq_t = 0.0
+                self._online_enviar_eq()
 
     def _online_esperar_adversario(self):
         """No ecrã JOGAR ONLINE: vê se o servidor já encontrou adversário (ou se deu erro)."""
@@ -224,15 +235,20 @@ class OnlineMixin:
         som.ui("confirmar")
         if papel == "convidado":
             ecra.modo = self._online_modo
-            ecra.mudar_fase("espera")
-        elif self._online_modo == "aleatorio":
-            casa, fora = random.sample(EQUIPAS_LISTA, 2)     # jogo aleatório: equipas sorteadas
-            self._online_comecar(casa, fora)
+            ecra.mudar_fase("espera")                # o anfitrião abre já o ecrã das equipas
         else:
-            self._online_abrir_sala()                # sala privada: o anfitrião escolhe as equipas
+            self._online_abrir_sala()                # cada um escolhe a sua equipa
 
     def _online_mensagem(self, msg: dict):
         t = msg.get("t")
+        if t == "eq":
+            # O adversário mudou de equipa ou ficou pronto (no ecrã das equipas)
+            self._eq_adv = (msg.get("id"), bool(msg.get("p")))
+            if self.estado == "menu_selecao" and getattr(self.menu, "online_lado", None):
+                self.menu.por_adversario(*self._eq_adv)
+                if self.online == "anfitriao":
+                    self._online_talvez_comecar()
+            return
         if t == "ola":
             if msg.get("versao") != VERSAO:
                 self._online_terminar("O outro jogador tem outra versão do jogo. Atualizem os dois.")
@@ -260,12 +276,8 @@ class OnlineMixin:
                 self.iniciar_partida(msg["casa"], msg["fora"])
                 self._online_preparar_convidado()
             elif t == "sala":
-                # O anfitrião voltou à escolha das equipas: o convidado fica à espera
-                self.pausado = self.fim_jogo = self.jogo_ativo = False
-                self.estado = "online"
-                self.ecra_online = EcraOnline(self.screen, arena=self.rink._surf, servidor=self._servidor)
-                self.ecra_online.modo = "privado"
-                self.ecra_online.mudar_fase("espera")
+                # O anfitrião abriu o ecrã das equipas: o convidado escolhe a dele
+                self._online_abrir_escolha("fora")
             elif t == "e" and self.estado == "jogo":
                 self._online_aplicar_estado(msg)
             elif t == "pov_ini" and self.estado == "jogo":
@@ -314,10 +326,49 @@ class OnlineMixin:
     # ================================================================== #
 
     def _online_abrir_sala(self):
-        """Escolha das equipas (só o anfitrião escolhe). O convidado fica à espera."""
-        self.abrir_selecao_equipas()
+        """Anfitrião: abre o ecrã das equipas e avisa o convidado para abrir o dele."""
         if self.ligacao is not None:
             self.ligacao.enviar({"t": "sala"})
+        self._online_abrir_escolha("casa")
+
+    def _online_abrir_escolha(self, lado: str):
+        """Ecrã das equipas do jogo online: cada um escolhe a sua (lado "casa" ou "fora")."""
+        self.abrir_selecao_equipas()
+        m = self.menu
+        m.online_lado = lado
+        m.pronto = m.adv_pronto = False
+        m.adv_nome = self._servidor.adversario if self._servidor is not None else None
+        adv = getattr(self, "_eq_adv", None)
+        self._eq_adv = None
+        if adv is not None and adv[0]:
+            m.por_adversario(adv[0], False)
+        self._eq_t = 0.0
+        self._online_enviar_eq()
+
+    def _online_enviar_eq(self):
+        if self.ligacao is not None and getattr(self.menu, "online_lado", None):
+            self.ligacao.enviar({"t": "eq", "id": self.menu.minha_equipa(), "p": int(self.menu.pronto)})
+
+    def _online_talvez_comecar(self):
+        """Anfitrião: os dois prontos e com equipas diferentes → começa o jogo."""
+        m = self.menu
+        casa, fora = m.get_equipas()
+        if m.pronto and m.adv_pronto and casa != fora:
+            self._online_comecar(casa, fora)
+
+    def _online_eventos_escolha(self, res):
+        """Teclas e cliques no ecrã das equipas do jogo online."""
+        if res in ("mudou", "pronto"):
+            if res == "pronto":
+                self.menu.pronto = not self.menu.pronto
+            self._online_enviar_eq()
+            if self.online == "anfitriao":
+                self._online_talvez_comecar()
+        elif res == "voltar":
+            self.abrir_online()                   # sai do jogo online
+        elif res == "sair":
+            self._online_fechar_rede()
+            self.running = False
 
     def _online_comecar(self, casa_id: str, fora_id: str):
         self.iniciar_partida(casa_id, fora_id)

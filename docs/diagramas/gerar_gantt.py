@@ -80,6 +80,7 @@ TAREFAS = [
     ("", "Repetição dos golos em câmara lenta", date(2027, 6, 7), date(2027, 6, 11), "Concluído", RAFAEL),
     ("", "Tutorial com missões para quem começa", date(2027, 6, 12), date(2027, 6, 18), "Concluído", VASCO),
     ("", "Contas, progresso na nuvem e ranking online", date(2027, 6, 19), date(2027, 6, 30), "Concluído", RAFAEL),
+    ("", "Online: menos atraso e cada um escolhe a equipa", date(2027, 7, 1), date(2027, 7, 4), "Concluído", RAFAEL),
 
     ("Novas funcionalidades", None, None, None, None, None),
     ("", "Narrador e conquistas", date(2026, 11, 16), date(2026, 12, 31), "Planeado", DOIS),

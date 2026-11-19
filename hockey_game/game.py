@@ -693,8 +693,12 @@ class Game(OnlineMixin, FaltasMixin, FintasMixin, DoisJogadoresMixin, RepeticaoM
         if self.estado == "menu_selecao":
             for event in pygame.event.get():
                 res = self.menu.handle_event(event)
-                self._som_acao(res)
-                if res == "iniciar" and self.online == "anfitriao":
+                self._som_acao(res if res != "mudou" else "mover")
+                if self.online and self.menu.online_lado:
+                    self._online_eventos_escolha(res)   # online: cada um escolhe a sua equipa
+                    if self.estado != "menu_selecao":
+                        return
+                elif res == "iniciar" and self.online == "anfitriao":
                     self._online_comecar(*self.menu.get_equipas())
                 elif res == "iniciar":
                     c_id, f_id = self.menu.get_equipas()

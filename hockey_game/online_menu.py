@@ -275,7 +275,7 @@ class EcraOnline:
         pygame.draw.rect(s, (12, 20, 44), caixa, border_radius=16)
         pygame.draw.rect(s, (255, 120, 160), caixa, 2, border_radius=16)
         texto(s, f"{nome} desafia-te para um jogo!", 26, (255, 170, 200), (WIDTH // 2, caixa.top + 46), sombra=True)
-        texto(s, "Conta para o ranking. Quem desafiou escolhe as equipas.", 14, COR_TEXTO_SUAVE,
+        texto(s, "Conta para o ranking. Cada um escolhe a sua equipa.", 14, COR_TEXTO_SUAVE,
               (WIDTH // 2, caixa.top + 84), negrito=False)
         mpos = pygame.mouse.get_pos()
         for r, txt, cor in zip(self._botoes_convite(), ("ACEITAR", "RECUSAR"), ((40, 190, 100), (230, 70, 70))):
@@ -319,7 +319,8 @@ class EcraOnline:
             else:
                 linha = f"Há mais {outros} pessoa{'s' if outros != 1 else ''} online. Quando alguém procurar jogo, começa logo."
             texto(s, linha, 14, COR_TEXTO_SUAVE, (WIDTH // 2, caixa.top + 250), negrito=False)
-        texto(s, "As equipas são sorteadas.", 13, (150, 175, 215), (WIDTH // 2, caixa.top + 280), negrito=False)
+        texto(s, "Quando encontrares adversário, cada um escolhe a sua equipa.", 13, (150, 175, 215),
+              (WIDTH // 2, caixa.top + 280), negrito=False)
 
     def _desenhar_criar(self, s, caixa):
         codigo = self.servidor.codigo if self.servidor is not None else None
@@ -353,14 +354,14 @@ class EcraOnline:
         adv = self.servidor.adversario if self.servidor is not None else None
         if self.modo == "desafio":
             texto(s, f"Desafio aceite{' (' + adv + ')' if adv else ''}!", 30, (90, 230, 140), (WIDTH // 2, caixa.top + 168))
-            texto(s, "Quem te desafiou está a escolher as equipas" + self._pontos(), 18, COR_TEXTO,
+            texto(s, "A abrir a escolha das equipas" + self._pontos(), 18, COR_TEXTO,
                   (WIDTH // 2, caixa.top + 214))
         elif self.modo == "aleatorio":
             texto(s, f"Adversário encontrado{': ' + adv if adv else ''}!", 30, (90, 230, 140), (WIDTH // 2, caixa.top + 168))
             texto(s, "O jogo vai começar" + self._pontos(), 18, COR_TEXTO, (WIDTH // 2, caixa.top + 214))
         else:
             texto(s, "Entraste na sala!", 30, (90, 230, 140), (WIDTH // 2, caixa.top + 168))
-            texto(s, "O teu amigo está a escolher as equipas" + self._pontos(), 18, COR_TEXTO,
+            texto(s, "A abrir a escolha das equipas" + self._pontos(), 18, COR_TEXTO,
                   (WIDTH // 2, caixa.top + 214))
         texto(s, "Vais jogar com a equipa de fora, que começa do lado esquerdo do campo.", 14, COR_TEXTO_SUAVE,
               (WIDTH // 2, caixa.top + 250), negrito=False)

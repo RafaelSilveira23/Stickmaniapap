@@ -798,6 +798,12 @@ class TeamSelectMenu:
                  dois_jogadores: bool = False):
         self.screen = screen
         self.dois_jogadores = dois_jogadores   # jogador 2 com a equipa de fora (dois_jogadores.py)
+        # Jogo online: cada jogador escolhe só a sua equipa ("casa" = anfitrião, "fora" = convidado)
+        # e vê a do adversário a mudar em direto. Começa quando os dois carregam em ESTOU PRONTO.
+        self.online_lado = None
+        self.pronto = False
+        self.adv_pronto = False
+        self.adv_nome = None
         self.arena = arena                  # pavilhão do jogo (fundo desfocado, como no menu principal)
         self.casa_idx = EQUIPAS_LISTA.index(casa_id) if casa_id in EQUIPAS_LISTA else 0
         self.fora_idx = EQUIPAS_LISTA.index(fora_id) if fora_id in EQUIPAS_LISTA else 1
@@ -895,8 +901,85 @@ class TeamSelectMenu:
         idx = ordem.index(self.dificuldade) if self.dificuldade in ordem else 1
         self.dificuldade = ordem[(idx + 1) % len(ordem)]
 
+    # ------------------------------------------------------------------ #
+    # Jogo online                                                        #
+    # ------------------------------------------------------------------ #
+    def minha_equipa(self) -> str:
+        return EQUIPAS_LISTA[self.casa_idx if self.online_lado == "casa" else self.fora_idx]
+
+    def _mudar_minha(self, delta: int = 0, idx: int = None) -> str | None:
+        if self.pronto:
+            return None                          # pronto: para mudar, primeiro cancela
+        antes = self.minha_equipa()
+        outro = self.fora_idx if self.online_lado == "casa" else self.casa_idx
+        if idx is not None and idx == outro:
+            return None                          # é a equipa do adversário
+        if self.online_lado == "casa":
+            self.escolher_casa(idx) if idx is not None else self.mudar_casa(delta)
+        else:
+            self.escolher_fora(idx) if idx is not None else self.mudar_fora(delta)
+        if self.online_lado == "fora":
+            self.mudar_aba(competicao_da_equipa(self.minha_equipa()))
+        return "mudou" if self.minha_equipa() != antes else None
+
+    def por_adversario(self, equipa_id: str, pronto: bool):
+        """O adversário mudou de equipa (chega pela rede)."""
+        if equipa_id not in EQUIPAS_LISTA:
+            return
+        idx = EQUIPAS_LISTA.index(equipa_id)
+        self.adv_pronto = bool(pronto)
+        if self.online_lado == "casa":
+            if idx != self.casa_idx:
+                self.fora_idx = idx
+        else:
+            if idx == self.fora_idx:              # escolheram a mesma: o convidado muda
+                self.pronto = False
+                self.fora_idx = (idx + 1) % len(EQUIPAS_LISTA)
+            self.casa_idx = idx
+
+    def _evento_online(self, event) -> str | None:
+        if event.type == pygame.QUIT:
+            return "sair"
+        if event.type == pygame.KEYDOWN:
+            k = event.key
+            if k in (pygame.K_RETURN, pygame.K_SPACE, pygame.K_KP_ENTER):
+                return "pronto"
+            if k in (pygame.K_ESCAPE, pygame.K_BACKSPACE):
+                return "voltar"
+            if k in (pygame.K_LEFT, pygame.K_a, pygame.K_UP, pygame.K_w):
+                return self._mudar_minha(-1)
+            if k in (pygame.K_RIGHT, pygame.K_d, pygame.K_DOWN, pygame.K_s):
+                return self._mudar_minha(1)
+            if k in (pygame.K_q, pygame.K_e, pygame.K_PAGEUP, pygame.K_PAGEDOWN):
+                self.mudar_aba(self.aba + (1 if k in (pygame.K_e, pygame.K_PAGEDOWN) else -1))
+            elif pygame.K_1 <= k <= pygame.K_8:
+                i = k - pygame.K_1
+                if 0 <= i < len(self.grid_rects):
+                    return self._mudar_minha(idx=self.grid_rects[i][1])
+        elif event.type == pygame.MOUSEBUTTONDOWN and event.button in (1, 3):
+            mpos = event.pos
+            if self.btn_jogar.por_cima(mpos):
+                return "pronto"
+            if self.btn_voltar.por_cima(mpos):
+                return "voltar"
+            for i, rr in enumerate(self.rects_abas):
+                if rr.collidepoint(mpos):
+                    self.mudar_aba(i)
+                    return None
+            meu = "casa" if self.online_lado == "casa" else "fora"
+            if getattr(self, f"btn_{meu}_prev").collidepoint(mpos):
+                return self._mudar_minha(-1)
+            if getattr(self, f"btn_{meu}_next").collidepoint(mpos):
+                return self._mudar_minha(1)
+            for _eq, idx, rr in self.grid_rects:
+                if rr.collidepoint(mpos):
+                    return self._mudar_minha(idx=idx)
+        return None
+
     def handle_event(self, event: pygame.event.Event) -> str | None:
-        """Devolve 'iniciar', 'voltar', 'sair' ou None."""
+        """Devolve 'iniciar', 'voltar', 'sair' ou None (online: 'pronto', 'mudou', 'voltar')."""
+        if self.online_lado:
+            return self._evento_online(event)
         if event.type == pygame.QUIT:
             return "sair"
 
@@ -991,15 +1074,23 @@ class TeamSelectMenu:
 
         # Cabeçalho
         texto(s, "SELEÇÃO DE EQUIPAS", 34, COR_TEXTO, (WIDTH // 2, 34), sombra=True)
-        texto(s, "Escolhe a tua equipa e o adversário  •  as cores do equipamento e do ringue mudam com a escolha",
-              14, COR_TEXTO_SUAVE, (WIDTH // 2, 68), negrito=False)
+        sub = ("Escolhe a tua equipa  •  o adversário escolhe a dele e vês a escolha em direto" if self.online_lado
+               else "Escolhe a tua equipa e o adversário  •  as cores do equipamento e do ringue mudam com a escolha")
+        texto(s, sub, 14, COR_TEXTO_SUAVE, (WIDTH // 2, 68), negrito=False)
         self.btn_voltar.draw(s, mpos)
 
         # Cartões principais
         dois = self.dois_jogadores
-        self._desenhar_card(self.rect_casa, "JOGADOR 1  •  CASA" if dois else "A TUA EQUIPA  •  CASA", info_casa,
+        if self.online_lado:
+            adv = f"ADVERSÁRIO{' (' + self.adv_nome + ')' if self.adv_nome else ''}"
+            tit_casa = "A TUA EQUIPA  •  CASA" if self.online_lado == "casa" else adv + "  •  CASA"
+            tit_fora = "A TUA EQUIPA  •  FORA" if self.online_lado == "fora" else adv + "  •  FORA"
+        else:
+            tit_casa = "JOGADOR 1  •  CASA" if dois else "A TUA EQUIPA  •  CASA"
+            tit_fora = "JOGADOR 2  •  VISITANTE" if dois else "ADVERSÁRIO  •  VISITANTE (IA)"
+        self._desenhar_card(self.rect_casa, tit_casa, info_casa,
                             kit_casa, self.btn_casa_prev, self.btn_casa_next, virar=False)
-        self._desenhar_card(self.rect_fora, "JOGADOR 2  •  VISITANTE" if dois else "ADVERSÁRIO  •  VISITANTE (IA)",
+        self._desenhar_card(self.rect_fora, tit_fora,
                             info_fora, kit_fora,
                             self.btn_fora_prev, self.btn_fora_next, virar=True)
 
@@ -1016,42 +1107,69 @@ class TeamSelectMenu:
             texto(s, nome, 13, COR_TEXTO if ativa else COR_TEXTO_SUAVE, r.center)
             if tem_escolhida and not ativa:
                 pygame.draw.circle(s, (255, 205, 60), (r.right - 10, r.top + 7), 4)   # há uma equipa escolhida aqui
-        texto(s, "clique esquerdo = casa  •  direito = visitante", 11, (140, 170, 220),
+        texto(s, "clica numa equipa para a escolheres" if self.online_lado else
+              "clique esquerdo = casa  •  direito = visitante", 11, (140, 170, 220),
               (self.rects_abas[-1].right + 16, self.rects_abas[-1].centery), ancora="midleft", negrito=False)
         for k, (eq_id, idx, r) in enumerate(self.grid_rects):
             self._desenhar_mini_card(eq_id, idx, r, mpos, k)
 
-        # Jogadores e dificuldade
-        if self.botoes_jog:
-            texto(s, "JOGADORES  [J]", 14, (200, 220, 255),
-                  ((self.botoes_jog[0].rect.left + self.botoes_jog[1].rect.right) // 2, 496))
-        for b in self.botoes_jog:
-            b.ativo = (b.acao == "2") == dois
-            b.draw(s, mpos)
-        if dois:
-            texto(s, "OS DOIS NO MESMO PC", 14, (200, 220, 255), (WIDTH // 2 + 110, 496))
-            texto(s, "Colegas e guarda-redes das duas equipas no nível normal", 13, (160, 195, 240),
-                  (WIDTH // 2 + 110, 531), negrito=False)
-            if comando.ligado():
-                ajuda = "O jogador 2 joga com o comando (o último ligado); o jogador 1 com o teclado ou o outro comando"
-            else:
-                ajuda = ("Sem comando: J1 com WASD, Z, X, C, V, F e SHIFT esq.  •  J2 com as setas, "
-                         "vírgula, ponto, hífen, CTRL dir., ENTER e SHIFT dir.")
-            texto(s, ajuda, 13, (255, 200, 140), (WIDTH // 2, 568), negrito=False)
+        if self.online_lado:
+            self._desenhar_estado_online(s)
         else:
-            texto(s, "DIFICULDADE DA IA", 14, (200, 220, 255), (WIDTH // 2, 496))
-            for b in self.botoes_dif:
-                b.ativo = (b.acao == self.dificuldade)
+            # Jogadores e dificuldade
+            if self.botoes_jog:
+                texto(s, "JOGADORES  [J]", 14, (200, 220, 255),
+                      ((self.botoes_jog[0].rect.left + self.botoes_jog[1].rect.right) // 2, 496))
+            for b in self.botoes_jog:
+                b.ativo = (b.acao == "2") == dois
                 b.draw(s, mpos)
-            desc = DIFICULDADES.get(self.dificuldade, {}).get("descricao", "")
-            texto(s, desc, 13, (160, 195, 240), (WIDTH // 2, 568), negrito=False)
+            if dois:
+                texto(s, "OS DOIS NO MESMO PC", 14, (200, 220, 255), (WIDTH // 2 + 110, 496))
+                texto(s, "Colegas e guarda-redes das duas equipas no nível normal", 13, (160, 195, 240),
+                      (WIDTH // 2 + 110, 531), negrito=False)
+                if comando.ligado():
+                    ajuda = "O jogador 2 joga com o comando (o último ligado); o jogador 1 com o teclado ou o outro comando"
+                else:
+                    ajuda = ("Sem comando: J1 com WASD, Z, X, C, V, F e SHIFT esq.  •  J2 com as setas, "
+                             "vírgula, ponto, hífen, CTRL dir., ENTER e SHIFT dir.")
+                texto(s, ajuda, 13, (255, 200, 140), (WIDTH // 2, 568), negrito=False)
+            else:
+                texto(s, "DIFICULDADE DA IA", 14, (200, 220, 255), (WIDTH // 2, 496))
+                for b in self.botoes_dif:
+                    b.ativo = (b.acao == self.dificuldade)
+                    b.draw(s, mpos)
+                desc = DIFICULDADES.get(self.dificuldade, {}).get("descricao", "")
+                texto(s, desc, 13, (160, 195, 240), (WIDTH // 2, 568), negrito=False)
 
         # Botão principal (pulsa ligeiramente para chamar a atenção)
+        if self.online_lado:
+            self.btn_jogar.texto = "CANCELAR (À ESPERA)" if self.pronto else "ESTOU PRONTO"
+            self.btn_jogar.ativo = self.pronto
         self.btn_jogar.draw(s, mpos, focado=(math.sin(self.anim_t * 3) > 0.6))
+        if self.online_lado:
+            texto(s, "← →  mudar a tua equipa   [Q/E] divisão   [1-8] escolher   [ENTER] pronto   [ESC] sair do jogo",
+                  12, (110, 140, 190), (WIDTH // 2, 682), negrito=False)
+            return
 
         texto(s, "[A/D] casa   [W/S] visitante   [Q/E] divisão   [1-8] escolher casa   [TAB] dificuldade   [J] jogadores   "
                  "[ENTER] começar   [ESC] voltar",
               12, (110, 140, 190), (WIDTH // 2, 682), negrito=False)
+
+    def _desenhar_estado_online(self, s):
+        """Online: quem já está pronto (em vez da dificuldade, que não existe no online)."""
+        for lado, x in (("casa", WIDTH // 2 - 200), ("fora", WIDTH // 2 + 200)):
+            meu = lado == self.online_lado
+            pronto = self.pronto if meu else self.adv_pronto
+            nome = "TU" if meu else (self.adv_nome or "ADVERSÁRIO")
+            cor = (90, 230, 130) if pronto else (240, 200, 90)
+            caixa = pygame.Rect(0, 0, 300, 44)
+            caixa.center = (x, 520)
+            pygame.draw.rect(s, (10, 16, 34), caixa, border_radius=22)
+            pygame.draw.rect(s, cor, caixa, 2, border_radius=22)
+            estado = "PRONTO" if pronto else "a escolher" + "." * (1 + int(self.anim_t * 2.5) % 3)
+            texto(s, f"{nome}: {estado}", 17, cor, caixa.center)
+        texto(s, "Cada um escolhe a sua equipa. O jogo começa quando os dois estiverem prontos.", 13,
+              (160, 195, 240), (WIDTH // 2, 568), negrito=False)
 
     def _desenhar_card(self, rect, titulo, info, kit, btn_prev, btn_next, virar: bool):
         s = self.screen
@@ -1084,7 +1202,12 @@ class TeamSelectMenu:
         amostra_cor(s, kit["principal"], (x0, rect.top + 228, 22, 14))
         amostra_cor(s, kit["secundaria"], (x0 + 30, rect.top + 228, 22, 14))
 
+        lado_card = "casa" if btn_prev is self.btn_casa_prev else "fora"
+        if self.online_lado and lado_card != self.online_lado:
+            btn_prev = btn_next = None                # online: o cartão do adversário não se muda
         for btn, seta in ((btn_prev, "◄"), (btn_next, "►")):
+            if btn is None:
+                continue
             hover = btn.collidepoint(mpos)
             pygame.draw.rect(s, (35, 65, 130) if hover else (22, 38, 76), btn, border_radius=8)
             pygame.draw.rect(s, (110, 160, 255) if hover else (45, 80, 160), btn, 1, border_radius=8)

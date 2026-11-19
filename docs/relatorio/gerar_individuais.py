@@ -58,6 +58,7 @@ DONO_32 = {
     "Mais faltas e menos roubos de bola": R, "Livre parado até ser batido": R, "Fintas": R, "Roleta": R,
     "Guarda-redes melhorado": R, "Dois jogadores no mesmo computador": R, "Site do jogo e Microsoft Store": R,
     "Repetição dos golos": R, "Tutorial": V, "Contas, progresso na nuvem e ranking": R,
+    "Menos atraso no online e escolha das equipas": R,
     "Gráficos": R,
     "Sons": V, "Sons no jogo": V, "Cânticos dos clubes": V, "Cânticos no jogo": V,
     "Estilo arcade": R, "Tempo de jogo e ecrã a tremer": R,
