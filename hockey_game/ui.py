@@ -156,8 +156,11 @@ class HUDController:
         if getattr(game, "modo_teste", False):
             # MODO TESTE: em vez do tempo, mostra golos / remates
             t = game.teste
-            t_cron = self.font_time.render(f"{t['golos']}/{t['remates']}", True, (255, 220, 80))
-            nome = {"colega": "TESTE + COLEGA", "adversario": "TESTE vs DEFESA"}.get(
+            if getattr(game, "teste_variante", "") == "tutorial":
+                t_cron = self.font_time.render(f"{t.get('missao', 1)}/8", True, (255, 220, 80))
+            else:
+                t_cron = self.font_time.render(f"{t['golos']}/{t['remates']}", True, (255, 220, 80))
+            nome = {"colega": "TESTE + COLEGA", "adversario": "TESTE vs DEFESA", "tutorial": "TUTORIAL"}.get(
                 getattr(game, "teste_variante", "sozinho"), "MODO TESTE")
             t_parte = self.font_mini.render(nome, True, (170, 195, 235))
         else:

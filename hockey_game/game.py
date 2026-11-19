@@ -30,6 +30,7 @@ from faltas import FaltasMixin
 from fintas import FintasMixin
 from dois_jogadores import DoisJogadoresMixin
 from repeticao import RepeticaoMixin
+from tutorial import TutorialMixin
 import comando
 
 DURACAO_PARTE = 60 * 5   # 5 minutos por parte
@@ -48,13 +49,15 @@ FORMACAO = [
 CAMINHO_DEFINICOES = os.path.join(PASTA_SAVES, "definicoes.json")
 
 
-class Game(OnlineMixin, FaltasMixin, FintasMixin, DoisJogadoresMixin, RepeticaoMixin):
+class Game(OnlineMixin, FaltasMixin, FintasMixin, DoisJogadoresMixin, RepeticaoMixin, TutorialMixin):
     def __init__(self):
         pygame.init()
         definicoes = self._ler_definicoes()
         self.ecra_inteiro = bool(definicoes.get("ecra_inteiro", False))
         self.estilo_arcade = bool(definicoes.get("estilo_arcade", True))
         self.repeticao_golos = bool(definicoes.get("repeticao_golos", True))   # repeticao.py
+        self.tutorial_visto = bool(definicoes.get("tutorial_visto", False))    # tutorial.py
+        self._convite_tutorial = not self.tutorial_visto   # convite no menu principal na 1.ª vez
         # Tipo de passe: "z" (tecla Z, o jogo escolhe o colega) ou "clique" (clicar no colega)
         self.tipo_passe = "clique" if definicoes.get("tipo_passe") == "clique" else "z"
         self.screen = self._criar_janela()
@@ -352,7 +355,7 @@ class Game(OnlineMixin, FaltasMixin, FintasMixin, DoisJogadoresMixin, RepeticaoM
             os.makedirs(os.path.dirname(CAMINHO_DEFINICOES), exist_ok=True)
             with open(CAMINHO_DEFINICOES, "w", encoding="utf-8") as f:
                 json.dump({"ecra_inteiro": self.ecra_inteiro, "estilo_arcade": self.estilo_arcade,
-                           "repeticao_golos": self.repeticao_golos,
+                           "repeticao_golos": self.repeticao_golos, "tutorial_visto": self.tutorial_visto,
                            "tipo_passe": self.tipo_passe, "vol_efeitos": som.vol_efeitos, "vol_publico": som.vol_publico}, f)
         except OSError:
             pass          # não conseguir gravar não impede de jogar
@@ -531,6 +534,8 @@ class Game(OnlineMixin, FaltasMixin, FintasMixin, DoisJogadoresMixin, RepeticaoM
         # ── Menus (cada ecrã devolve uma "ação") ──────────────────────────
         if self.estado == "menu_principal":
             for event in pygame.event.get():
+                if self._convite_evento(event):
+                    continue                     # convite para o tutorial (1.ª vez)
                 acao = self.menu_principal.handle_event(event)
                 self._som_acao(acao)
                 if acao == "jogar":
@@ -556,6 +561,8 @@ class Game(OnlineMixin, FaltasMixin, FintasMixin, DoisJogadoresMixin, RepeticaoM
                 self._som_acao(acao)
                 if acao in ("teste_sozinho", "teste_colega", "teste_adversario"):
                     self.iniciar_teste(acao.removeprefix("teste_"))
+                elif acao == "teste_tutorial":
+                    self.iniciar_tutorial()
                 elif acao == "voltar":
                     self.estado = "menu_principal"
                 elif acao == "sair":
@@ -704,6 +711,9 @@ class Game(OnlineMixin, FaltasMixin, FintasMixin, DoisJogadoresMixin, RepeticaoM
                 self._som_acao(acao)
                 if acao == "continuar":
                     self.pausado = False
+                elif acao == "saltar":
+                    self.pausado = False
+                    self.tut_saltar()                # tutorial: passa à missão seguinte
                 elif acao == "reiniciar":
                     self._reiniciar_partida()
                 elif acao == "controlos":
@@ -759,6 +769,8 @@ class Game(OnlineMixin, FaltasMixin, FintasMixin, DoisJogadoresMixin, RepeticaoM
         for event in pygame.event.get():
             if self._rep_evento(event):
                 continue                             # repetição do golo: qualquer tecla salta
+            if self._tut_evento(event):
+                continue                             # teclas do tutorial
             if self.dois_jogadores and self._dois_evento(event):
                 continue                             # tecla do jogador 2
             if event.type == pygame.QUIT:
@@ -1083,6 +1095,9 @@ class Game(OnlineMixin, FaltasMixin, FintasMixin, DoisJogadoresMixin, RepeticaoM
 
     def _teste_novo_remate(self):
         """Põe o jogador com a bola num sítio novo à frente da baliza."""
+        if self._tut_ativo():
+            self._tut_preparar()               # no tutorial, cada missão põe tudo no sítio
+            return
         r = self.rink.rect
         gx, cy = self.rink.linha_golo_esq_x, r.centery
         j = self.jogador_humano
@@ -1121,6 +1136,9 @@ class Game(OnlineMixin, FaltasMixin, FintasMixin, DoisJogadoresMixin, RepeticaoM
 
     def _update_teste(self, dt: float):
         """Depois de cada remate (ou se a bola ficar perdida), o jogador volta a ter a bola."""
+        if self._tut_ativo():
+            self._tut_update(dt)               # tutorial: verifica a missão (tutorial.py)
+            return
         if self._reposicao_pendente is not None:
             return
         if self._teste_espera > 0:
@@ -1652,7 +1670,8 @@ class Game(OnlineMixin, FaltasMixin, FintasMixin, DoisJogadoresMixin, RepeticaoM
         if self.jogo_ativo and not self.fim_jogo:
             self._cancelar_mira()
             self.pausado = True
-            self.menu_pausa = MenuPausa(self.screen, modo_carreira=self.modo_carreira, modo_teste=self.modo_teste)
+            self.menu_pausa = MenuPausa(self.screen, modo_carreira=self.modo_carreira, modo_teste=self.modo_teste,
+                                        tutorial=self._tut_ativo())
 
     def _reiniciar_partida(self):
         """Jogar de novo com as mesmas equipas (e, se era a dois, outra vez a dois)."""
@@ -2159,6 +2178,7 @@ class Game(OnlineMixin, FaltasMixin, FintasMixin, DoisJogadoresMixin, RepeticaoM
     def draw(self):
         if self.estado == "menu_principal":
             self.menu_principal.draw()
+            self._desenhar_convite()
         elif self.estado == "menu_selecao":
             self.menu.draw()
         elif self.estado == "online":
@@ -2320,6 +2340,7 @@ class Game(OnlineMixin, FaltasMixin, FintasMixin, DoisJogadoresMixin, RepeticaoM
         self._desenhar_suspensos(self.screen)
         self._desenhar_fintas(self.screen)
         self._desenhar_dois(self.screen)
+        self._desenhar_tutorial(self.screen)
         self.hud.draw_foul_banner(self.screen, self)
 
         # 7. Painel Inferior (Mini-mapa, Cartão de Jogador e Controlos)

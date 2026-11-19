@@ -78,9 +78,10 @@ TAREFAS = [
     ("", "Guarda-redes: saída, inércia e estiradas", date(2027, 5, 24), date(2027, 5, 30), "Concluído", RAFAEL),
     ("", "Dois jogadores no mesmo PC, site e Microsoft Store", date(2027, 5, 31), date(2027, 6, 6), "Concluído", RAFAEL),
     ("", "Repetição dos golos em câmara lenta", date(2027, 6, 7), date(2027, 6, 11), "Concluído", RAFAEL),
+    ("", "Tutorial com missões para quem começa", date(2027, 6, 12), date(2027, 6, 18), "Concluído", VASCO),
 
     ("Novas funcionalidades", None, None, None, None, None),
-    ("", "Tutorial para quem joga pela primeira vez", date(2026, 11, 16), date(2026, 12, 31), "Planeado", DOIS),
+    ("", "Narrador e conquistas", date(2026, 11, 16), date(2026, 12, 31), "Planeado", DOIS),
     ("", "Mais estatísticas e transferências", date(2027, 1, 7), date(2027, 3, 31), "Planeado", DOIS),
 
     ("Validação e entrega", None, None, None, None, None),

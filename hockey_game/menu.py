@@ -252,7 +252,7 @@ class MenuPrincipal:
                       "carreira", (255, 175, 40), "trofeu"),
             BotaoMenu((x, 446, bw, 60), "CARREIRA DE JOGADOR", "Cria o teu jogador e joga só com ele",
                       "carreira_jogador", (255, 110, 160), "jogador"),
-            BotaoMenu((x, 514, bw, 60), "MODO TESTE", "Treina remates, passes e jogadas contra um defesa",
+            BotaoMenu((x, 514, bw, 60), "MODO TESTE", "Tutorial com missões e treinos de remates, passes e fintas",
                       "teste", (80, 170, 255), "alvo"),
             BotaoMenu((x + 90, 584, bw - 180, 44), "SAIR", "", "sair", (230, 70, 70), "sair", seta=False, tamanho=19),
             self.engrenagem,
@@ -399,6 +399,8 @@ class MenuPrincipal:
 
 # (ação, título, descrição, cor, ícone)
 MODOS_TESTE = [
+    ("teste_tutorial", "TUTORIAL", "Missões curtas: fintas, roleta, stickada, livres e cartões",
+     (255, 190, 50), "estrela"),
     ("teste_sozinho", "SOZINHO", "Só tu contra o guarda-redes: treina os remates",
      (80, 170, 255), "alvo"),
     ("teste_colega", "COM UM COLEGA", "Tu e um colega da tua equipa: treina os passes",
@@ -418,7 +420,7 @@ class EcraEscolhaTeste:
         bw, x = 560, WIDTH // 2 - 280
         botoes = [BotaoMenu((x, 210 + i * 78, bw, 62), titulo, desc, acao, cor, ic)
                   for i, (acao, titulo, desc, cor, ic) in enumerate(MODOS_TESTE)]
-        botoes.append(BotaoMenu((x + 140, 470, bw - 280, 46), "VOLTAR", "", "voltar", (150, 110, 255), "casa",
+        botoes.append(BotaoMenu((x + 140, 210 + len(MODOS_TESTE) * 78 + 4, bw - 280, 46), "VOLTAR", "", "voltar", (150, 110, 255), "casa",
                                 seta=False, tamanho=19))
         self.lista = ListaBotoes(botoes)
 
@@ -1166,7 +1168,7 @@ class MenuPausa:
     """
 
     def __init__(self, screen: pygame.Surface, modo_carreira: bool = False, modo_teste: bool = False,
-                 modo_online: bool = False):
+                 modo_online: bool = False, tutorial: bool = False):
         self.screen = screen
         self.t = 0.0
         self.modo_carreira = modo_carreira
@@ -1178,6 +1180,11 @@ class MenuPausa:
             itens = [("CONTINUAR", "continuar", (40, 190, 100), "jogar"),
                      ("ABANDONAR O JOGO", "menu", (150, 110, 255), "casa"),
                      ("SAIR DO JOGO", "sair", (230, 70, 70), "sair")]
+        elif tutorial:
+            itens = [("CONTINUAR", "continuar", (40, 190, 100), "jogar"),
+                     ("SALTAR A MISSÃO", "saltar", (255, 180, 40), "recomecar"),
+                     ("DEFINIÇÕES", "controlos", (50, 140, 255), "engrenagem"),
+                     ("MENU PRINCIPAL", "menu", (150, 110, 255), "casa")]
         elif modo_teste:
             itens = [("CONTINUAR", "continuar", (40, 190, 100), "jogar"),
                      ("DEFINIÇÕES", "controlos", (50, 140, 255), "engrenagem"),
@@ -1245,7 +1252,9 @@ class MenuPausa:
             logo = carregar_logo_equipa(eq, (32, 32))
             if logo:
                 s.blit(logo, logo.get_rect(center=(x, pilula.centery)))
-        if self.modo_teste:
+        if self.modo_teste and getattr(game, "teste_variante", "") == "tutorial":
+            texto(s, f"TUTORIAL  •  missão {game.teste.get('missao', 1)}", 17, COR_DESTAQUE, pilula.center)
+        elif self.modo_teste:
             t = game.teste
             pct = round(100 * t["golos"] / t["remates"]) if t["remates"] else 0
             texto(s, f"{t['golos']} golos  /  {t['remates']} remates", 17, COR_DESTAQUE, pilula.center)

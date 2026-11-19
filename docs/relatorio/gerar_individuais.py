@@ -57,7 +57,7 @@ DONO_32 = {
     "Jogar com um comando": R, "Faltas, bolas paradas e cartões": R, "Cartões": R,
     "Mais faltas e menos roubos de bola": R, "Livre parado até ser batido": R, "Fintas": R, "Roleta": R,
     "Guarda-redes melhorado": R, "Dois jogadores no mesmo computador": R, "Site do jogo e Microsoft Store": R,
-    "Repetição dos golos": R,
+    "Repetição dos golos": R, "Tutorial": V,
     "Gráficos": R,
     "Sons": V, "Sons no jogo": V, "Cânticos dos clubes": V, "Cânticos no jogo": V,
     "Estilo arcade": R, "Tempo de jogo e ecrã a tremer": R,
@@ -92,7 +92,7 @@ DONO_34 = {
 # Tabela da divisão de tarefas (secção 5.4)
 DIVISAO = [
     ("Inteligência artificial dos jogadores", "ai.py", V),
-    ("Menus e interface", "menu.py, ui.py, componentes.py, graficos.py", V),
+    ("Menus, interface e tutorial", "menu.py, ui.py, componentes.py, graficos.py, tutorial.py", V),
     ("Sons e cânticos dos clubes", "sons.py, canticos.py", V),
     ("Base de dados (SQLite)", "carreira.py, carreira_jogador.py (parte da base de dados)", V),
     ("Carreira de jogador e vida do jogador", "carreira_jogador.py, carreira_jogador_menu.py, vida.py", V),
@@ -117,7 +117,7 @@ QUEM = {V: "Vasco Andreia", R: "Rafael da Hora Silveira", C: "Os dois"}
 # O que cada um fez, em poucas palavras (para a secção 3.2.1)
 LISTA = {
     V: "a inteligência artificial dos jogadores, o modo carreira com a base de dados, os menus e a "
-       "interface com as estatísticas da partida, os sons e os cânticos dos clubes e a carreira de jogador "
+       "interface com as estatísticas da partida e o tutorial, os sons e os cânticos dos clubes e a carreira de jogador "
        "com a vida do jogador",
     R: "a física da bola e dos jogadores, as faltas e os cartões, as fintas, o guarda-redes, os gráficos "
        "com a câmara em perspetiva, o estilo arcade, o remate na primeira pessoa com o modo teste, o comando, "
@@ -177,7 +177,8 @@ RESUMO = {
          "usam as mesmas peças (painel de vidro e botões com ícone, em componentes.py), a pausa e o fim de "
          "jogo mostram o jogo desfocado por trás e há transições suaves entre ecrãs. Os 14 sons (apito, "
          "tacadas, tabela, poste, público e buzina do golo) são criados por síntese em sons.py, a partir "
-         "de ondas sinusoidais e ruído, sem ficheiros de fora."),
+         "de ondas sinusoidais e ruído, sem ficheiros de fora. Para quem joga pela primeira vez há um "
+         "tutorial com oito missões curtas (tutorial.py)."),
         ("Carreira de jogador.", "O utilizador cria o seu jogador e joga a época só com ele, com uma nota "
          "em cada jogo e propostas de outros clubes no fim. Fora do rinque tem uma vida (vida.py): forma, "
          "moral, confiança do treinador, fama, estudos e dinheiro, eventos com escolhas e consequências, "
@@ -187,7 +188,7 @@ RESUMO = {
 
 CONTRIBUTO = {
     V: "No StickMania, o Vasco Andreia programou a inteligência artificial dos jogadores, a base de "
-       "dados, os menus e a interface, os sons e os cânticos dos clubes e a carreira de jogador com a vida "
+       "dados, os menus e a interface com o tutorial, os sons e os cânticos dos clubes e a carreira de jogador com a vida "
        "do jogador. Nestas partes, as maiores dificuldades foram pôr a IA a jogar de forma credível sem ser "
        "perfeita, simular os jogos do campeonato com resultados realistas e criar os sons e os cânticos só "
        "com o código. O ciclo principal do jogo, a análise, os testes e o relatório foram feitos em conjunto "
