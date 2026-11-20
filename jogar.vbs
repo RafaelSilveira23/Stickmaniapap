@@ -3,7 +3,8 @@
 ' 1. Procura um Python 3.10 ou mais recente que ja tenha o pygame-ce, usando a versao
 '    "sem janela" do Python (pythonw / pyw).
 ' 2. Se encontrar, abre o jogo escondendo a consola.
-' 3. Se nao encontrar, abre o jogar_com_consola.bat, que mostra o que falta e instala o pygame-ce.
+' 3. Se nao encontrar, explica numa janela o que falta (para so jogar, o melhor e o instalador).
+' Se o jogo fechar com um erro, o proprio jogo mostra a mensagem numa janela (ver jogo/main.py).
 Option Explicit
 
 Dim sh, fso, pasta, candidatos, c, codigo, py, teste
@@ -37,6 +38,11 @@ If py <> "" Then
     ' (Com 0 o Windows escondia tambem a janela do proprio jogo: o jogo corria, mas invisivel.)
     sh.Run """" & py & """ main.py", 1, False
 Else
-    ' Falta o Python ou o pygame-ce: a versao com consola mostra o que se passa e instala o que falta
-    sh.Run """" & pasta & "\jogar_com_consola.bat""", 1, False
+    ' Falta o Python ou o pygame-ce: explica o que fazer
+    MsgBox "Para abrir o StickMania a partir do codigo e preciso o Python 3.10 (ou mais recente) " & _
+           "com o pygame-ce." & vbCrLf & vbCrLf & _
+           "Para so jogar, o mais simples e o instalador:" & vbCrLf & _
+           "   download\StickMania-Instalar.exe" & vbCrLf & vbCrLf & _
+           "Para instalar o que falta, abre uma linha de comandos nesta pasta e escreve:" & vbCrLf & _
+           "   pip install -r jogo\requirements.txt", vbExclamation, "StickMania"
 End If

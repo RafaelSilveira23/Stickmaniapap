@@ -28,7 +28,8 @@ python main.py
 ```
 
 No Windows também se pode fazer duplo clique em `jogar.vbs` (abre sem a janela da consola). Se faltar
-alguma coisa, o `jogar_com_consola.bat` mostra o que é e instala o pygame-ce.
+o Python ou o pygame-ce, aparece uma janela a explicar o que instalar; se o jogo fechar com um erro, a
+mensagem aparece numa janela e fica gravada em `jogo/saves/erro.txt`.
 
 | Tecla | Ação | | Tecla | Ação |
 |---|---|---|---|---|
@@ -82,7 +83,7 @@ stickmaniapap/
 │   ├── loja/              guia e imagens para a Microsoft Store
 │   └── GANTT.md           planeamento (o GitHub desenha-o)
 ├── download/              StickMania-Instalar.exe (o instalador pronto)
-├── main.py, jogar.vbs, jogar_com_consola.bat     formas de abrir o jogo a partir do código
+├── main.py, jogar.vbs     formas de abrir o jogo a partir do código
 └── render.yaml            configuração do servidor no Render
 ```
 
