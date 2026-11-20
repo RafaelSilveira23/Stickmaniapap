@@ -4,6 +4,13 @@ import json
 import math
 import caminhos  # noqa: F401  (junta as subpastas ao sys.path; tem de ser o primeiro)
 import os
+
+# Nitidez em ecrãs com zoom do Windows (125 %, 150 %, 200 %...): o jogo trata ele da resolução,
+# em vez de o Windows esticar a janela já ampliada, e o pygame amplia a imagem com suavização
+# (por omissão copiava os pixels, o que deixava as letras em blocos). Tem de vir antes de abrir a janela.
+os.environ.setdefault("SDL_WINDOWS_DPI_AWARENESS", "permonitorv2")
+os.environ.setdefault("SDL_RENDER_SCALE_QUALITY", "1")
+
 import pygame
 import fontes
 from settings import *

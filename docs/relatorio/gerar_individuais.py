@@ -59,6 +59,7 @@ DONO_32 = {
     "Guarda-redes melhorado": R, "Dois jogadores no mesmo computador": R, "Site do jogo e Microsoft Store": R,
     "Repetição dos golos": R, "Tutorial": V, "Contas, progresso na nuvem e ranking": R,
     "Menos atraso no online e escolha das equipas": R, "Ecrã da conta mais simples": V,
+    "Imagem nítida em ecrãs com zoom": R,
     "Gráficos": R,
     "Sons": V, "Sons no jogo": V, "Cânticos dos clubes": V, "Cânticos no jogo": V,
     "Estilo arcade": R, "Tempo de jogo e ecrã a tremer": R,
