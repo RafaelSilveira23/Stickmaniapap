@@ -4,7 +4,7 @@ Planeamento do projeto da PAP, de setembro de 2026 a junho de 2027. O GitHub des
 a partir do código Mermaid abaixo. As barras escuras são tarefas concluídas, as realçadas estão
 em curso e as claras estão planeadas.
 
-**Divisão de tarefas:** o projeto é feito em dupla. Cada tarefa diz entre parênteses quem a fez (Vasco Andreia: 17 tarefas; Rafael da Hora Silveira: 25; os dois: 6). Na imagem do relatório ([`09_gantt.png`](diagramas/09_gantt.png)) a cor de cada barra mostra quem fez a tarefa.
+**Divisão de tarefas:** o projeto é feito em dupla. Cada tarefa diz entre parênteses quem a fez (Vasco Andreia: 18 tarefas; Rafael da Hora Silveira: 25; os dois: 6). Na imagem do relatório ([`09_gantt.png`](diagramas/09_gantt.png)) a cor de cada barra mostra quem fez a tarefa.
 
 > Este ficheiro é gerado pelo script [`docs/diagramas/gerar_gantt.py`](diagramas/gerar_gantt.py),
 > o mesmo que faz a imagem do relatório ([`09_gantt.png`](diagramas/09_gantt.png)): os dois têm
@@ -62,13 +62,14 @@ gantt
     Tutorial com missões para quem começa (Vasco) :done, t41, 2027-06-12, 2027-06-18
     Contas, progresso na nuvem e ranking online (Rafael) :done, t42, 2027-06-19, 2027-06-30
     Online - menos atraso e cada um escolhe a equipa (Rafael) :done, t43, 2027-07-01, 2027-07-04
+    Ecrã da conta mais simples (Vasco) :done, t44, 2027-07-05, 2027-07-07
     section Novas funcionalidades
-    Narrador e conquistas (Os dois) :t44, 2026-11-16, 2026-12-31
-    Mais estatísticas e transferências (Os dois) :t45, 2027-01-07, 2027-03-31
+    Narrador e conquistas (Os dois) :t45, 2026-11-16, 2026-12-31
+    Mais estatísticas e transferências (Os dois) :t46, 2027-01-07, 2027-03-31
     section Validação e entrega
-    Testes com colegas, correção de erros, sprites (Os dois) :t46, 2027-03-01, 2027-04-30
-    Relatório final, manual e apresentação (Os dois) :active, t47, 2027-04-01, 2027-05-31
-    Defesa da PAP (Os dois) :t48, 2027-06-01, 2027-06-30
+    Testes com colegas, correção de erros, sprites (Os dois) :t47, 2027-03-01, 2027-04-30
+    Relatório final, manual e apresentação (Os dois) :active, t48, 2027-04-01, 2027-05-31
+    Defesa da PAP (Os dois) :t49, 2027-06-01, 2027-06-30
 ```
 
 ## Tarefas
@@ -118,8 +119,9 @@ gantt
 | 41 | Desenvolvimento (versões 1 a 37) | Tutorial com missões para quem começa | **Vasco Andreia** | 12/06/2027 | 18/06/2027 | Concluído |
 | 42 | Desenvolvimento (versões 1 a 37) | Contas, progresso na nuvem e ranking online | **Rafael da Hora Silveira** | 19/06/2027 | 30/06/2027 | Concluído |
 | 43 | Desenvolvimento (versões 1 a 37) | Online: menos atraso e cada um escolhe a equipa | **Rafael da Hora Silveira** | 01/07/2027 | 04/07/2027 | Concluído |
-| 44 | Novas funcionalidades | Narrador e conquistas | **Os dois** | 16/11/2026 | 31/12/2026 | Planeado |
-| 45 | Novas funcionalidades | Mais estatísticas e transferências | **Os dois** | 07/01/2027 | 31/03/2027 | Planeado |
-| 46 | Validação e entrega | Testes com colegas, correção de erros, sprites | **Os dois** | 01/03/2027 | 30/04/2027 | Planeado |
-| 47 | Validação e entrega | Relatório final, manual e apresentação | **Os dois** | 01/04/2027 | 31/05/2027 | Em curso |
-| 48 | Validação e entrega | Defesa da PAP | **Os dois** | 01/06/2027 | 30/06/2027 | Planeado |
+| 44 | Desenvolvimento (versões 1 a 37) | Ecrã da conta mais simples | **Vasco Andreia** | 05/07/2027 | 07/07/2027 | Concluído |
+| 45 | Novas funcionalidades | Narrador e conquistas | **Os dois** | 16/11/2026 | 31/12/2026 | Planeado |
+| 46 | Novas funcionalidades | Mais estatísticas e transferências | **Os dois** | 07/01/2027 | 31/03/2027 | Planeado |
+| 47 | Validação e entrega | Testes com colegas, correção de erros, sprites | **Os dois** | 01/03/2027 | 30/04/2027 | Planeado |
+| 48 | Validação e entrega | Relatório final, manual e apresentação | **Os dois** | 01/04/2027 | 31/05/2027 | Em curso |
+| 49 | Validação e entrega | Defesa da PAP | **Os dois** | 01/06/2027 | 30/06/2027 | Planeado |

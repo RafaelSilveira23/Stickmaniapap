@@ -81,6 +81,7 @@ TAREFAS = [
     ("", "Tutorial com missões para quem começa", date(2027, 6, 12), date(2027, 6, 18), "Concluído", VASCO),
     ("", "Contas, progresso na nuvem e ranking online", date(2027, 6, 19), date(2027, 6, 30), "Concluído", RAFAEL),
     ("", "Online: menos atraso e cada um escolhe a equipa", date(2027, 7, 1), date(2027, 7, 4), "Concluído", RAFAEL),
+    ("", "Ecrã da conta mais simples", date(2027, 7, 5), date(2027, 7, 7), "Concluído", VASCO),
 
     ("Novas funcionalidades", None, None, None, None, None),
     ("", "Narrador e conquistas", date(2026, 11, 16), date(2026, 12, 31), "Planeado", DOIS),

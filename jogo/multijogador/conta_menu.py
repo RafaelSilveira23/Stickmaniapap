@@ -3,8 +3,8 @@
 conta_menu.py - ecrã "A MINHA CONTA" (abre no botão da conta, no canto do menu principal).
 
 Fases:
-  "fora"       entrar (alcunha + palavra-passe)
-  "criar"      criar conta (alcunha + palavra-passe duas vezes)
+  "fora"       separador «JÁ TENHO CONTA»: entrar (alcunha + palavra-passe)
+  "criar"      separador «CRIAR CONTA» (o primeiro a aparecer num PC sem conta), com as regras verificadas ao escrever
   "recuperar"  esqueci-me da palavra-passe (alcunha + código de recuperação + nova palavra-passe)
   "codigo"     mostra o código de recuperação depois de criar a conta (para escrever num papel)
   "dentro"     o perfil (pontos, lugar no ranking, jogos) e o progresso na nuvem
@@ -16,7 +16,7 @@ O ecrã só desenha e devolve ações; quem fala com o servidor é o Game (conta
 import pygame
 
 from settings import WIDTH, HEIGHT
-from componentes import texto, ListaBotoes, painel_vidro, COR_DESTAQUE, COR_TEXTO, COR_TEXTO_SUAVE
+from componentes import texto, fonte, ListaBotoes, painel_vidro, COR_DESTAQUE, COR_TEXTO, COR_TEXTO_SUAVE
 from graficos import icone, luz
 from menu import BotaoMenu, _fundo_arena
 from conta import FICHEIROS_SAVE, NOMES_SAVE, ContaLocal, data_curta
@@ -34,11 +34,30 @@ class Campo:
 FASES_CAMPOS = {
     "fora": [("alcunha", "Alcunha", False, 16), ("senha", "Palavra-passe", True, 64)],
     "criar": [("alcunha", "Alcunha (é o nome que os outros veem)", False, 16),
-              ("senha", "Palavra-passe (pelo menos 6 caracteres)", True, 64),
+              ("senha", "Palavra-passe", True, 64),
               ("senha2", "Repete a palavra-passe", True, 64)],
     "recuperar": [("alcunha", "Alcunha", False, 16), ("codigo", "Código de recuperação (STK-....-....)", False, 14),
                   ("senha", "Nova palavra-passe", True, 64)],
 }
+
+# Coluna da esquerda: para que serve a conta (separadores "criar" e "entrar") e os passos para recuperar
+VANTAGENS = (("globo", "Carreiras na nuvem", "Continua noutro computador"),
+             ("trofeu", "Ranking online", "Ganha pontos nos jogos online"),
+             ("jogador", "Desafia amigos", "Pela alcunha, sem códigos"),
+             ("escudo", "Sem email", "Só uma alcunha e uma palavra-passe"))
+PASSOS_RECUPERAR = (("1", "A tua alcunha", ""),
+                    ("2", "O código de recuperação", "que o jogo te deu ao criar a conta"),
+                    ("3", "Uma palavra-passe nova", "pelo menos 6 caracteres"))
+
+
+def erro_alcunha(alcunha: str) -> str:
+    """As mesmas regras do servidor (servidor/contas.py), para avisar logo enquanto se escreve."""
+    a = " ".join(alcunha.split())
+    if not all(ch.isalnum() or ch in " _-." for ch in a):
+        return "A alcunha só pode ter letras, números, espaços e _ - ."
+    if not 3 <= len(a) <= 16:
+        return "A alcunha tem de ter entre 3 e 16 letras."
+    return ""
 
 
 class EcraConta:
@@ -60,36 +79,49 @@ class EcraConta:
         self.caixa = pygame.Rect(WIDTH // 2 - 400, 132, 800, 500)
         self.campos = []
         self.foco_campo = 0
-        self.mudar_fase("dentro" if conta is not None and conta.ligada else "fora")
+        self.foco_abas = False         # o teclado está nos separadores CRIAR CONTA / JÁ TENHO CONTA
+        self.mostrar_senha = False
+        if conta is not None and conta.ligada:
+            self.mudar_fase("dentro")
+        elif conta is not None and conta.alcunha:
+            # Já houve uma conta neste PC: o mais provável é querer entrar outra vez
+            self.mudar_fase("fora")
+            self.campos[0].valor = conta.alcunha
+            self.foco_campo = 1
+        else:
+            self.mudar_fase("criar")
 
     # ------------------------------------------------------------------ #
     def limpar_campos(self):
         for c in self.campos:
             c.valor = ""
 
+    def com_formulario(self) -> bool:
+        return self.fase in ("fora", "criar", "recuperar")
+
     def mudar_fase(self, fase: str):
         guardados = {c.nome: c.valor for c in self.campos if not c.segredo}
         self.fase = fase
         self.erro = self.info = "" if fase not in ("dentro",) else self.info
+        self.foco_abas = False
+        self.mostrar_senha = False
         cx, cx0 = WIDTH // 2, self.caixa.left
         base = self.caixa.bottom - 70
         self.campos = []
         for i, (nome, rot, seg, mx) in enumerate(FASES_CAMPOS.get(fase, [])):
             c = Campo(nome, rot, seg, mx)
             c.valor = guardados.get(nome, "")
-            c.rect = pygame.Rect(cx - 220, self.caixa.top + 108 + i * 78, 440, 44)
+            c.rect = pygame.Rect(cx0 + 330, self.caixa.top + 118 + i * 92, 440, 44)
             self.campos.append(c)
         self.foco_campo = 0 if self.campos else None
-        if fase == "fora":
-            botoes = [BotaoMenu((cx - 290, base, 280, 54), "ENTRAR", "", "ok", (40, 190, 100), "jogar",
-                                seta=False, tamanho=20),
-                      BotaoMenu((cx + 10, base, 280, 54), "VOLTAR", "", "voltar", (150, 110, 255), "casa",
-                                seta=False, tamanho=18)]
-        elif fase in ("criar", "recuperar"):
-            nome = "CRIAR CONTA" if fase == "criar" else "MUDAR A PALAVRA-PASSE"
+        if self.campos and self.campos[0].valor and len(self.campos) > 1:
+            self.foco_campo = 1                     # a alcunha já está escrita
+        if fase in ("fora", "criar", "recuperar"):
+            nome, cor_v = {"fora": ("ENTRAR", "voltar"), "criar": ("CRIAR CONTA", "voltar"),
+                           "recuperar": ("MUDAR PALAVRA-PASSE", "voltar_fora")}[fase]
             botoes = [BotaoMenu((cx - 290, base, 280, 54), nome, "", "ok", (40, 190, 100), "jogar",
-                                seta=False, tamanho=18),
-                      BotaoMenu((cx + 10, base, 280, 54), "VOLTAR", "", "voltar_fora", (150, 110, 255), "casa",
+                                seta=False, tamanho=16 if fase == "recuperar" else 20),
+                      BotaoMenu((cx + 10, base, 280, 54), "VOLTAR", "", cor_v, (150, 110, 255), "casa",
                                 seta=False, tamanho=18)]
         elif fase == "codigo":
             botoes = [BotaoMenu((cx - 170, base, 340, 54), "JÁ ESCREVI O CÓDIGO", "", "continuar", (40, 190, 100),
@@ -120,25 +152,58 @@ class EcraConta:
             pass
 
     # ------------------------------------------------------------------ #
+    def _valores(self) -> dict:
+        return {c.nome: c.valor.strip() if not c.segredo else c.valor for c in self.campos}
+
+    def verificacoes(self) -> list:
+        """Regras do separador CRIAR CONTA, uma por campo: (texto, None = ainda vazio / True / False)."""
+        v = self._valores()
+        alc, s1, s2 = v.get("alcunha", ""), v.get("senha", ""), v.get("senha2", "")
+        e_alc = erro_alcunha(alc) if alc else ""
+        return [("Só letras, números, espaços e _ - ." if "só pode" in e_alc else "Entre 3 e 16 letras ou números",
+                 None if not alc else not e_alc),
+                (f"Pelo menos 6 caracteres ({len(s1)}/6)" if 0 < len(s1) < 6 else "Pelo menos 6 caracteres",
+                 None if not s1 else len(s1) >= 6),
+                ("As duas palavras-passe são iguais" if not s2 or s1 == s2 else "As duas palavras-passe não são iguais",
+                 None if not s2 else s1 == s2)]
+
     def _acao_ok(self):
-        v = {c.nome: c.valor.strip() if not c.segredo else c.valor for c in self.campos}
+        v = self._valores()
         if any(not c.valor for c in self.campos):
+            vazio = next(i for i, c in enumerate(self.campos) if not c.valor)
+            self.foco_campo, self.foco_abas = vazio, False
             self.erro = "Preenche todos os campos."
             return None
         if self.fase == "fora":
             return ("entrar", v["alcunha"], v["senha"])
         if self.fase == "criar":
+            self.erro = (erro_alcunha(v["alcunha"])
+                         or ("A palavra-passe tem de ter pelo menos 6 caracteres." if len(v["senha"]) < 6 else "")
+                         or ("As duas palavras-passe não são iguais." if v["senha"] != v["senha2"] else ""))
+            if self.erro:
+                return None
             return ("criar", v["alcunha"], v["senha"], v["senha2"])
         return ("recuperar", v["alcunha"], v["codigo"], v["senha"])
 
-    def _links(self):
-        """Ligações de texto da fase "fora": criar conta e esqueci-me da palavra-passe."""
-        y = self.caixa.top + 290
-        criar = pygame.Rect(0, 0, 300, 26)
-        criar.center = (WIDTH // 2, y)
-        rec = pygame.Rect(0, 0, 300, 26)
-        rec.center = (WIDTH // 2, y + 34)
-        return criar, rec
+    def _abas(self):
+        """Os dois separadores do topo da caixa: CRIAR CONTA e JÁ TENHO CONTA."""
+        a = pygame.Rect(0, 0, 260, 44)
+        a.center = (WIDTH // 2 - 136, self.caixa.top + 42)
+        return a, a.move(272, 0)
+
+    def _link_esqueci(self):
+        """Ligação «Esqueci-me da palavra-passe», por baixo da palavra-passe (separador JÁ TENHO CONTA)."""
+        c = self.campos[1].rect
+        return pygame.Rect(c.right - 230, c.bottom + 6, 230, 24)
+
+    def _botao_mostrar(self, c: Campo):
+        return pygame.Rect(c.rect.right - 96, c.rect.top + 6, 88, c.rect.height - 12)
+
+    def _ir_para_aba(self, fase: str):
+        if fase != self.fase:
+            self.mudar_fase(fase)
+        self.foco_abas = True
+        self.foco_campo = None
 
     def handle_event(self, event):
         if event.type == pygame.QUIT:
@@ -150,6 +215,18 @@ class EcraConta:
                     return "enviar_nuvem"
                 if r_tra.collidepoint(event.pos):
                     return "trazer_nuvem"
+        if event.type == pygame.KEYDOWN and event.key == pygame.K_F2 and self.campos:
+            self.mostrar_senha = not self.mostrar_senha
+            return None
+        tem_abas = self.fase in ("fora", "criar")
+        if self.foco_abas and event.type == pygame.KEYDOWN:
+            if event.key in (pygame.K_LEFT, pygame.K_RIGHT, pygame.K_a, pygame.K_d):
+                self._ir_para_aba("fora" if self.fase == "criar" else "criar")
+            elif event.key in (pygame.K_DOWN, pygame.K_s, pygame.K_TAB, pygame.K_RETURN, pygame.K_KP_ENTER):
+                self.foco_abas, self.foco_campo = False, 0
+            elif event.key == pygame.K_ESCAPE:
+                return "voltar"
+            return None
         if self.campos and self.foco_campo is not None:
             campo = self.campos[self.foco_campo]
             if event.type == pygame.TEXTINPUT:
@@ -170,7 +247,10 @@ class EcraConta:
                         self.foco_campo = 0
                     return None
                 if event.key == pygame.K_UP:
-                    self.foco_campo = max(0, self.foco_campo - 1)
+                    if self.foco_campo == 0 and tem_abas:
+                        self.foco_campo, self.foco_abas = None, True
+                    else:
+                        self.foco_campo = max(0, self.foco_campo - 1)
                     return None
                 if event.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
                     if self.foco_campo + 1 < len(self.campos) and not self.campos[self.foco_campo + 1].valor:
@@ -178,7 +258,7 @@ class EcraConta:
                         return None
                     return self._acao_ok()
                 if event.key == pygame.K_ESCAPE:
-                    return "voltar" if self.fase == "fora" else self._voltar_fora()
+                    return "voltar" if tem_abas else self._voltar_fora()
                 if event.key == pygame.K_v and event.mod & pygame.KMOD_CTRL:
                     self._colar(campo)
                     return None
@@ -187,24 +267,25 @@ class EcraConta:
             self.foco_campo = len(self.campos) - 1
             return None
         if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-            return {"fora": "voltar", "dentro": "voltar", "ranking": "voltar_dentro",
+            return {"fora": "voltar", "criar": "voltar", "dentro": "voltar", "ranking": "voltar_dentro",
                     "codigo": "continuar"}.get(self.fase, self._voltar_fora())
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            if tem_abas:
+                for r, fase in zip(self._abas(), ("criar", "fora")):
+                    if r.collidepoint(event.pos):
+                        self._ir_para_aba(fase)
+                        self.foco_abas, self.foco_campo = False, (1 if self.campos[0].valor else 0)
+                        return None
+            for c in self.campos:
+                if c.segredo and self._botao_mostrar(c).collidepoint(event.pos):
+                    self.mostrar_senha = not self.mostrar_senha
+                    return None
             for i, c in enumerate(self.campos):
                 if c.rect.collidepoint(event.pos):
-                    self.foco_campo = i
+                    self.foco_campo, self.foco_abas = i, False
                     return None
-            if self.fase == "fora":
-                criar, rec = self._links()
-                if criar.collidepoint(event.pos):
-                    self.mudar_fase("criar")
-                    return None
-                if rec.collidepoint(event.pos):
-                    self.mudar_fase("recuperar")
-                    return None
-        if self.fase == "fora" and event.type == pygame.KEYDOWN and self.foco_campo is None:
-            if event.key == pygame.K_c:
-                self.mudar_fase("criar")
+            if self.fase == "fora" and self._link_esqueci().collidepoint(event.pos):
+                self.mudar_fase("recuperar")
                 return None
         acao = self.lista.handle_event(event)
         if acao == "ok":
@@ -229,7 +310,7 @@ class EcraConta:
     def update(self, dt: float):
         self.t += dt
         for i, b in enumerate(self.lista.botoes):
-            b.animar(dt, i == self.lista.foco and self.foco_campo is None)
+            b.animar(dt, i == self.lista.foco and self.foco_campo is None and not self.foco_abas)
 
     # ------------------------------------------------------------------ #
     def draw(self):
@@ -239,59 +320,143 @@ class EcraConta:
         s.blit(brilho, brilho.get_rect(center=(WIDTH // 2, 360)), special_flags=pygame.BLEND_RGB_ADD)
         ic = icone("jogador", 42, COR_CONTA)
         s.blit(ic, ic.get_rect(center=(WIDTH // 2, 46)))
-        titulos = {"fora": "ENTRAR NA CONTA", "criar": "CRIAR CONTA", "recuperar": "RECUPERAR A CONTA",
+        titulos = {"fora": "A TUA CONTA", "criar": "A TUA CONTA", "recuperar": "RECUPERAR A CONTA",
                    "codigo": "CÓDIGO DE RECUPERAÇÃO", "dentro": "A MINHA CONTA", "ranking": "RANKING ONLINE"}
         texto(s, titulos[self.fase], 34, COR_TEXTO, (WIDTH // 2, 94), sombra=True)
         painel_vidro(s, self.caixa, 20, 230, (150, 110, 60))
         getattr(self, "_desenhar_" + self.fase)(s, self.caixa)
-        for c in self.campos:
-            self._desenhar_campo(s, c, self.campos.index(c) == self.foco_campo)
+        for i, c in enumerate(self.campos):
+            self._desenhar_campo(s, c, i == self.foco_campo)
+        if self.fase == "criar":
+            for c, (txt, ok) in zip(self.campos, self.verificacoes()):
+                self._desenhar_regra(s, c.rect.left + 6, c.rect.bottom + 13, txt, ok)
         self.lista.draw(s)
-        y = self.caixa.bottom + 22
+        self._desenhar_mensagem(s)
+        if self.com_formulario():
+            dica = "TAB  próximo campo     ENTER  confirmar     F2  ver a palavra-passe     CTRL+V  colar     ESC  voltar"
+        else:
+            dica = "↑ ↓  escolher     ENTER  confirmar     ESC  voltar"
+        texto(s, dica, 12, (120, 145, 195), (WIDTH // 2, HEIGHT - 18), negrito=False)
+
+    def _desenhar_mensagem(self, s):
+        """A falar com o servidor / erro / informação. Nos formulários fica dentro da caixa, por cima dos botões."""
         if self.ocupado:
             txt = "A falar com o servidor" + "." * (1 + int(self.t * 2.5) % 3)
             if self.servidor is not None and self.servidor.a_acordar():
                 txt = "A acordar o servidor do jogo (pode demorar até 1 minuto)" + "." * (1 + int(self.t * 2.5) % 3)
-            texto(s, txt, 15, (240, 200, 90), (WIDTH // 2, y))
+            cor = (240, 200, 90)
         elif self.erro:
-            texto(s, self.erro, 15, (255, 110, 100), (WIDTH // 2, y))
+            txt, cor = self.erro, (255, 110, 100)
         elif self.info:
-            texto(s, self.info, 15, (110, 230, 150), (WIDTH // 2, y))
-        dica = ("TAB  próximo campo     ENTER  confirmar     CTRL+V  colar     ESC  voltar" if self.campos
-                else "↑ ↓  escolher     ENTER  confirmar     ESC  voltar")
-        texto(s, dica, 12, (120, 145, 195), (WIDTH // 2, HEIGHT - 18), negrito=False)
+            txt, cor = self.info, (110, 230, 150)
+        else:
+            return
+        if not self.com_formulario():
+            texto(s, txt, 15, cor, (WIDTH // 2, self.caixa.bottom + 22))
+            return
+        y = self.caixa.bottom - 88
+        largura = fonte(15, True).size(txt)[0] + 44
+        r = pygame.Rect(0, 0, largura, 30)
+        r.center = (WIDTH // 2, y)
+        fundo = pygame.Surface(r.size, pygame.SRCALPHA)
+        pygame.draw.rect(fundo, (*cor, 40), fundo.get_rect(), border_radius=15)
+        pygame.draw.rect(fundo, (*cor, 150), fundo.get_rect(), 1, border_radius=15)
+        s.blit(fundo, r)
+        texto(s, txt, 15, cor, r.center)
+
+    def _desenhar_regra(self, s, x, y, txt, ok):
+        """Uma regra do CRIAR CONTA: bola cinzenta (ainda vazio), visto verde ou cruz vermelha."""
+        cor = (130, 145, 175) if ok is None else ((90, 220, 140) if ok else (255, 110, 100))
+        pygame.draw.circle(s, cor, (x + 6, y), 7, 0 if ok is not None else 2)
+        if ok:
+            pygame.draw.lines(s, (10, 30, 20), False, [(x + 2, y), (x + 5, y + 3), (x + 10, y - 3)], 2)
+        elif ok is False:
+            pygame.draw.line(s, (40, 10, 10), (x + 3, y - 3), (x + 9, y + 3), 2)
+            pygame.draw.line(s, (40, 10, 10), (x + 9, y - 3), (x + 3, y + 3), 2)
+        texto(s, txt, 13, cor, (x + 20, y), ancora="midleft", negrito=False)
 
     def _desenhar_campo(self, s, c: Campo, focado: bool):
         texto(s, c.rotulo, 14, (200, 215, 245), (c.rect.left + 4, c.rect.top - 14), ancora="midleft", negrito=False)
         pygame.draw.rect(s, (8, 14, 30), c.rect, border_radius=10)
         pygame.draw.rect(s, COR_CONTA if focado else (70, 90, 130), c.rect, 2, border_radius=10)
-        mostrar = "•" * len(c.valor) if c.segredo else c.valor
-        r = texto(s, mostrar, 20, (255, 255, 255), (c.rect.left + 16, c.rect.centery), ancora="midleft",
-                  negrito=False) if mostrar else pygame.Rect(c.rect.left + 16, c.rect.centery, 0, 0)
+        escondido = c.segredo and not self.mostrar_senha
+        mostrar = "•" * len(c.valor) if escondido else c.valor
+        direita = self._botao_mostrar(c).left - 8 if c.segredo else c.rect.right - 14
+        area = pygame.Rect(c.rect.left + 12, c.rect.top, direita - c.rect.left - 12, c.rect.height)
+        antes = s.get_clip()
+        s.set_clip(area)
+        if mostrar:
+            img = fonte(20, False).render(mostrar, True, (255, 255, 255))
+            x = min(c.rect.left + 16, area.right - 6 - img.get_width())   # textos compridos: vê-se o fim
+            r = s.blit(img, img.get_rect(midleft=(x, c.rect.centery)))
+        else:
+            r = pygame.Rect(c.rect.left + 16, c.rect.centery, 0, 0)
         if focado and int(self.t * 2) % 2 == 0:
-            x = (r.right if mostrar else c.rect.left + 16) + 3
-            pygame.draw.line(s, COR_CONTA, (x, c.rect.centery - 11), (x, c.rect.centery + 11), 2)
+            xc = (r.right if mostrar else c.rect.left + 16) + 3
+            pygame.draw.line(s, COR_CONTA, (xc, c.rect.centery - 11), (xc, c.rect.centery + 11), 2)
+        s.set_clip(antes)
+        if c.segredo:
+            b = self._botao_mostrar(c)
+            por_cima = b.collidepoint(pygame.mouse.get_pos())
+            pygame.draw.rect(s, (40, 56, 92) if por_cima else (20, 30, 54), b, border_radius=8)
+            texto(s, "ESCONDER" if self.mostrar_senha else "MOSTRAR", 12,
+                  (255, 255, 255) if por_cima else (170, 190, 230), b.center)
 
     # ------------------------------------------------------------------ fases
-    def _desenhar_fora(self, s, caixa):
-        texto(s, "Com uma conta, as tuas carreiras ficam guardadas na nuvem e os jogos online contam para o ranking.",
-              14, COR_TEXTO_SUAVE, (WIDTH // 2, caixa.top + 36), negrito=False)
-        texto(s, "Não pedimos email nem dados pessoais: só uma alcunha e uma palavra-passe.", 13,
-              (150, 175, 215), (WIDTH // 2, caixa.top + 60), negrito=False)
-        criar, rec = self._links()
+    def _desenhar_coluna(self, s, caixa, titulo, linhas, numerada=False):
+        """Coluna da esquerda: para que serve a conta, ou os passos para a recuperar."""
+        r = pygame.Rect(caixa.left + 28, caixa.top + 100, 272, 284)
+        fundo = pygame.Surface(r.size, pygame.SRCALPHA)
+        pygame.draw.rect(fundo, (255, 170, 60, 18), fundo.get_rect(), border_radius=16)
+        pygame.draw.rect(fundo, (255, 170, 60, 70), fundo.get_rect(), 1, border_radius=16)
+        s.blit(fundo, r)
+        texto(s, titulo, 14, COR_CONTA, (r.left + 20, r.top + 26), ancora="midleft")
+        for i, (ic, l1, l2) in enumerate(linhas):
+            y = r.top + 74 + i * (70 if numerada else 60)
+            pygame.draw.circle(s, (45, 34, 18), (r.left + 36, y), 19)
+            if numerada:
+                texto(s, ic, 18, COR_CONTA, (r.left + 36, y))
+            else:
+                img = icone(ic, 22, COR_CONTA)
+                s.blit(img, img.get_rect(center=(r.left + 36, y)))
+            texto(s, l1, 15, COR_TEXTO, (r.left + 66, y - (9 if l2 else 0)), ancora="midleft")
+            if l2:
+                texto(s, l2, 12, COR_TEXTO_SUAVE, (r.left + 66, y + 11), ancora="midleft", negrito=False)
+
+    def _desenhar_abas(self, s):
         mpos = pygame.mouse.get_pos()
-        texto(s, "Ainda não tens conta?  CRIAR CONTA  (C)", 16,
-              (255, 220, 120) if criar.collidepoint(mpos) else COR_CONTA, criar.center)
+        for r, fase, nome in zip(self._abas(), ("criar", "fora"), ("CRIAR CONTA", "JÁ TENHO CONTA")):
+            ativa = self.fase == fase
+            por_cima = r.collidepoint(mpos)
+            if ativa:
+                pygame.draw.rect(s, (120, 80, 30), r, border_radius=22)
+                pygame.draw.rect(s, COR_CONTA, r, 2, border_radius=22)
+                if self.foco_abas:
+                    pygame.draw.rect(s, (255, 230, 170), r.inflate(8, 8), 2, border_radius=26)
+            else:
+                pygame.draw.rect(s, (30, 40, 70) if por_cima else (14, 22, 44), r, border_radius=22)
+                pygame.draw.rect(s, (90, 100, 130), r, 1, border_radius=22)
+            texto(s, nome, 16, (255, 255, 255) if ativa or por_cima else (160, 175, 210), r.center)
+        y = self.caixa.top + 78
+        pygame.draw.line(s, (90, 80, 70), (self.caixa.left + 30, y), (self.caixa.right - 30, y), 1)
+
+    def _desenhar_fora(self, s, caixa):
+        self._desenhar_abas(s)
+        self._desenhar_coluna(s, caixa, "COM UMA CONTA", VANTAGENS)
+        link = self._link_esqueci()
         texto(s, "Esqueci-me da palavra-passe", 14,
-              (255, 255, 255) if rec.collidepoint(mpos) else (170, 190, 230), rec.center, negrito=False)
+              (255, 255, 255) if link.collidepoint(pygame.mouse.get_pos()) else (170, 190, 230),
+              (link.right - 4, link.centery), ancora="midright", negrito=False)
 
     def _desenhar_criar(self, s, caixa):
-        texto(s, "Escolhe uma alcunha e uma palavra-passe. Não precisas de email.", 14, COR_TEXTO_SUAVE,
-              (WIDTH // 2, caixa.top + 40), negrito=False)
+        self._desenhar_abas(s)
+        self._desenhar_coluna(s, caixa, "COM UMA CONTA", VANTAGENS)
 
     def _desenhar_recuperar(self, s, caixa):
-        texto(s, "Usa o código que o jogo te mostrou quando criaste a conta.", 14, COR_TEXTO_SUAVE,
-              (WIDTH // 2, caixa.top + 40), negrito=False)
+        texto(s, "Mudas a palavra-passe com o código que o jogo te mostrou quando criaste a conta.", 14,
+              COR_TEXTO_SUAVE, (WIDTH // 2, caixa.top + 44), negrito=False)
+        pygame.draw.line(s, (90, 80, 70), (caixa.left + 30, caixa.top + 78), (caixa.right - 30, caixa.top + 78), 1)
+        self._desenhar_coluna(s, caixa, "PRECISAS DE", PASSOS_RECUPERAR, numerada=True)
 
     def _desenhar_codigo(self, s, caixa):
         texto(s, "Escreve este código num papel e guarda-o bem.", 18, COR_TEXTO, (WIDTH // 2, caixa.top + 60))
