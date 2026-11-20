@@ -101,20 +101,22 @@ class BotaoMenu:
 
         surf.blit(_fundo_botao(r.size, self.cor, k, raio), (r.x, r.y))
 
-        # Ícone dentro de um círculo
-        cx, cy = r.x + 40, r.centery
+        # Ícone dentro de um círculo, que cabe sempre dentro do botão (nos botões baixos, como o SAIR,
+        # um círculo fixo de 25 px saía por cima e por baixo)
+        rc = min(25, r.height // 2 - 3)
+        cx, cy = r.x + 15 + rc, r.centery
         cor_circ = misturar(escurecer(self.cor, 0.3), (255, 255, 255), k)
-        pygame.draw.circle(surf, misturar(cor_circ, (0, 0, 0), 0.5), (cx, cy + 2), 25)
-        pygame.draw.circle(surf, cor_circ, (cx, cy), 25)
-        pygame.draw.circle(surf, clarear(self.cor, 0.5), (cx, cy), 25, 2)
+        pygame.draw.circle(surf, misturar(cor_circ, (0, 0, 0), 0.5), (cx, cy + 2), rc)
+        pygame.draw.circle(surf, cor_circ, (cx, cy), rc)
+        pygame.draw.circle(surf, clarear(self.cor, 0.5), (cx, cy), rc, 2)
         cor_ic = misturar((255, 255, 255), self.cor, k)
-        ic = icone(self.nome_icone, 26, cor_ic)
+        ic = icone(self.nome_icone, round(rc * 1.04), cor_ic)
         surf.blit(ic, ic.get_rect(center=(cx, cy)))
 
         # Textos
         cor_tit = misturar((225, 232, 250), (255, 255, 255), k)
         cor_desc = misturar((130, 150, 195), (235, 240, 255), k)
-        x_txt = r.x + 82
+        x_txt = cx + rc + 17
         if self.descricao:
             texto(surf, self.titulo, 24, cor_tit, (x_txt, cy - 10), ancora="midleft")
             texto(surf, self.descricao, 14, cor_desc, (x_txt, cy + 15), ancora="midleft", negrito=False)
