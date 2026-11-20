@@ -1271,6 +1271,10 @@ class Game(OnlineMixin, FaltasMixin, FintasMixin, DoisJogadoresMixin, RepeticaoM
         self._atualizar_canticos(dt)
         self._online_tick(dt)                  # mensagens da rede (só no jogo online)
         self._cq_update(dt)                    # mensagem «conquista desbloqueada»
+        if self._online_parado():
+            if self.pausado:
+                self.menu_pausa.update(dt)
+            return                             # online: à espera que a ligação volte (o jogo pára)
         if self.estado != "jogo":
             self._nuvem_tick(dt)                   # progresso das carreiras para a nuvem (conta.py)
         if self.estado == "online":
@@ -2268,6 +2272,7 @@ class Game(OnlineMixin, FaltasMixin, FintasMixin, DoisJogadoresMixin, RepeticaoM
             self.remate_pov.draw()
         else:
             self._draw_cena()
+            self._online_desenhar_espera(self.screen)   # «a ligação caiu» / «à espera do adversário»
             if self.pausado:
                 self.menu_pausa.draw(self)
             elif self.fim_jogo:

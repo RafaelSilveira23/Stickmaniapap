@@ -120,6 +120,8 @@ importa os outros só pelo nome (por exemplo `import comando`).
 - **Jogo online**: o anfitrião corre o jogo inteiro; o convidado envia as teclas e recebe o estado do jogo
   30 vezes por segundo, com previsão do próprio jogador e suavização dos outros. As mensagens passam pelo
   servidor (WebSocket), por isso não é preciso abrir portas.
+- **Voltar a ligar**: se a internet falhar a meio de um jogo online, o jogo pára e volta a ligar sozinho
+  (o servidor guarda o jogo 45 segundos e cada jogo tem uma chave secreta para voltar ao mesmo jogo).
 - **Contas**: o servidor guarda a alcunha, a palavra-passe cifrada (PBKDF2), as carreiras e o ranking numa
   base de dados Postgres (Neon). Não se pede email.
 - **Carreiras**: guardadas em SQLite no PC (`jogo/saves`, ou `%APPDATA%\StickMania` no programa instalado)

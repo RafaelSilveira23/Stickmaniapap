@@ -30,6 +30,16 @@ Como funciona (modelo "anfitrião com autoridade"):
     resultado e envia-o; o anfitrião aplica-o no jogo 2D e avisa o convidado.
 
 Assim os dois veem sempre o mesmo jogo (só existe uma simulação: a do anfitrião).
+
+Se a internet falhar a meio da partida, o jogo não acaba logo:
+  - de segundo a segundo cada jogo manda um "eco" ao servidor, que responde logo. Se passarem
+    SEM_SERVIDOR_S segundos sem chegar nada do servidor, foi a NOSSA ligação que caiu: o jogo pára,
+    mostra «A LIGAÇÃO CAIU» e tenta ligar outra vez de 2 em 2 segundos, com a chave secreta que o
+    servidor deu ao emparelhar (rede.py). O servidor põe-nos outra vez no mesmo jogo;
+  - se o servidor avisa que o OUTRO caiu ("caiu"), ou se não chega nada dele há SEM_ADVERSARIO_S
+    segundos, o jogo pára e mostra «À ESPERA DO ADVERSÁRIO» até ele voltar.
+O anfitrião tem o jogo todo guardado, por isso, quando a ligação volta, os estados que ele envia
+30 vezes por segundo põem os dois outra vez iguais.
 O Game herda desta classe (class Game(OnlineMixin)).
 """
 import math
@@ -51,6 +61,10 @@ from sons import som
 import comando
 
 ESTADOS_POR_SEGUNDO = 30
+SEM_SERVIDOR_S = 5.0            # sem nada do servidor durante este tempo: a nossa ligação caiu
+SEM_ADVERSARIO_S = 3.0          # sem nada do outro jogador: está com problemas na ligação
+VOLTAR_A_LIGAR_S = 40.0         # quanto tempo se tenta voltar a ligar antes de desistir
+ESPERAR_ADVERSARIO_S = 55.0     # (o servidor desiste aos 45 s e avisa; isto é só uma segurança)
 DIFICULDADE_ONLINE = "normal"   # colegas e guarda-redes das duas equipas jogam ao mesmo nível
 
 
@@ -85,6 +99,11 @@ class OnlineMixin:
         self._pov_quem = None
         self._pov_t = self._pov_env_t = 0.0
         self._pov_enviado = False
+        # Voltar a ligar
+        self._retoma = None              # a nossa ligação caiu: {"inicio", "chave", "srv", "prox", "tent", "adv"}
+        self._adv_espera_desde = None    # a ligação do outro caiu: desde quando se espera por ele
+        self._rede_rx = 0.0              # quando chegou a última mensagem do outro jogador
+        self._eco_t = 0.0
 
     # ================================================================== #
     # Ecrã "Jogar online"                                               #
@@ -176,15 +195,29 @@ class OnlineMixin:
             if self._servidor is not None and self.estado == "online":
                 self._online_esperar_adversario()
             return
+        if self._retoma is not None:
+            self._online_retoma_tick()           # a nossa ligação caiu: a tentar voltar
+            return
         # Primeiro as mensagens que já chegaram (a última pode ser o "adeus" do outro jogador)
         ligacao = self.ligacao
-        for msg in ligacao.mensagens():
+        msgs = ligacao.mensagens()
+        if msgs:
+            self._rede_rx = time.perf_counter()
+        for msg in msgs:
             self._online_mensagem(msg)
             if self.ligacao is not ligacao:      # a ligação acabou a meio (ex.: "adeus")
                 return
         if not ligacao.ativa:
+            srv = self._servidor
+            if self._online_em_jogo() and srv is not None and srv.estado == "erro" and srv.chave:
+                self._online_comecar_retoma()    # foi a nossa internet: tenta voltar ao jogo
+                return
             self._online_terminar(ligacao.erro or "O outro jogador saiu do jogo.")
             return
+        if self._online_em_jogo():
+            self._online_vigiar(dt)
+            if self._retoma is not None or self.ligacao is not ligacao:
+                return
         if self.fim_jogo and not self._resultado_enviado and self._servidor is not None:
             # Fim do jogo: os dois jogos enviam o resultado; se for igual, conta para o ranking
             self._servidor._enviar({"t": "resultado", "casa": self.golos_azul, "fora": self.golos_vermelho})
@@ -289,12 +322,121 @@ class OnlineMixin:
             elif t == "pov_fim":
                 self.remate_pov = None                    # o anfitrião já aplicou o remate
 
+    # ================================================================== #
+    # Voltar a ligar                                                      #
+    # ================================================================== #
+
+    def _online_em_jogo(self) -> bool:
+        return bool(self.online) and self.estado == "jogo" and not self.fim_jogo
+
+    def _online_parado(self) -> bool:
+        """O jogo está parado à espera da ligação (a nossa ou a do outro)."""
+        return self._online_em_jogo() and (self._retoma is not None or self._adv_espera_desde is not None)
+
+    def _online_vigiar(self, dt: float):
+        """Durante a partida: vê se a nossa ligação e a do outro jogador estão vivas."""
+        srv, agora = self._servidor, time.perf_counter()
+        self._eco_t += dt
+        if self._eco_t >= 1.0:
+            self._eco_t = 0.0
+            srv.eco()
+        if agora - srv.t_rx > SEM_SERVIDOR_S:
+            self._online_comecar_retoma()
+            return
+        if not self._rede_rx:
+            self._rede_rx = agora
+        # Na stickada o outro pode passar uns segundos sem enviar nada: aí só conta o aviso do servidor
+        calado = self.remate_pov is None and agora - self._rede_rx > SEM_ADVERSARIO_S
+        if self.ligacao.adversario_caiu or calado:
+            if self._adv_espera_desde is None:
+                self._adv_espera_desde = agora
+            elif agora - self._adv_espera_desde > ESPERAR_ADVERSARIO_S:
+                self._online_terminar("O outro jogador perdeu a ligação e não voltou.")
+        elif self._adv_espera_desde is not None:
+            self._adv_espera_desde = None
+            self._msg_texto, self._msg_timer, self._msg_equipa = "O ADVERSÁRIO VOLTOU", 2.0, "azul"
+
+    def _online_comecar_retoma(self):
+        """A nossa ligação caiu a meio do jogo: fecha-a (sem dizer adeus) e começa a tentar voltar."""
+        velho = self._servidor
+        agora = time.perf_counter()
+        self._retoma = {"inicio": agora, "chave": velho.chave, "srv": None, "prox": agora, "tent": 0,
+                        "adv": velho.adversario}
+        self._adv_espera_desde = None
+        velho.fechar(despedir=False)
+        velho.estado, velho.erro = "erro", "Perdeu-se a ligação ao servidor do jogo."
+        self._cancelar_mira()
+
+    def _online_retoma_tick(self):
+        r, agora = self._retoma, time.perf_counter()
+        if agora - r["inicio"] > VOLTAR_A_LIGAR_S:
+            self._online_terminar("A ligação à internet caiu e não voltou a tempo.")
+            return
+        s = r["srv"]
+        if s is None:
+            if agora >= r["prox"]:
+                r["tent"] += 1
+                r["srv"] = Servidor(token=self.conta.token if self.conta.ligada else None, retomar=r["chave"])
+            return
+        if s.retomado:
+            # Voltámos ao mesmo jogo: o anfitrião continua a simulação e o convidado volta a recebê-la
+            self._servidor, self.ligacao = s, s.ligacao
+            s.adversario = r["adv"]
+            self._retoma = None
+            self._rede_rx = self._eco_t = 0.0
+            self._input_enviado = None
+            self._msg_texto, self._msg_timer, self._msg_equipa = "LIGAÇÃO RECUPERADA", 2.0, "azul"
+            som.ui("confirmar")
+            return
+        if s.retomado is False:
+            s.fechar(despedir=False)
+            r["srv"] = None
+            self._online_terminar("Voltaste a ligar, mas o jogo já tinha acabado.")
+            return
+        a_ligar_ha_muito = s.estado == "a_ligar" and agora - s.t_inicio > 6
+        if s.estado == "erro" or a_ligar_ha_muito:
+            s.fechar(despedir=False)
+            r["srv"], r["prox"] = None, agora + 2.0      # tenta outra vez daqui a 2 segundos
+
+    def _online_desenhar_espera(self, s):
+        if not self._online_parado():
+            return
+        from componentes import texto
+        sombra = pygame.Surface(s.get_size(), pygame.SRCALPHA)
+        sombra.fill((0, 0, 0, 150))
+        s.blit(sombra, (0, 0))
+        caixa = pygame.Rect(0, 0, 600, 170)
+        caixa.center = (s.get_width() // 2, s.get_height() // 2 - 40)
+        pygame.draw.rect(s, (12, 20, 44), caixa, border_radius=16)
+        agora = time.perf_counter()
+        pontos = "." * (1 + int(agora * 2.5) % 3)
+        if self._retoma is not None:
+            r = self._retoma
+            falta = max(0, int(VOLTAR_A_LIGAR_S - (agora - r["inicio"])))
+            cor, titulo = (255, 170, 70), "A LIGAÇÃO CAIU"
+            linha1 = "A voltar a ligar" + pontos
+            linha2 = f"Tentativa {max(1, r['tent'])}  •  desistimos daqui a {falta} s"
+        else:
+            cor, titulo = (120, 200, 255), "À ESPERA DO ADVERSÁRIO"
+            linha1 = "A ligação do outro jogador falhou. O jogo está parado" + pontos
+            linha2 = "Esperamos até 45 s  •  ESC para abandonar"
+        pygame.draw.rect(s, cor, caixa, 2, border_radius=16)
+        texto(s, titulo, 30, cor, (caixa.centerx, caixa.top + 44), sombra=True)
+        texto(s, linha1, 16, (225, 233, 252), (caixa.centerx, caixa.top + 94), negrito=False)
+        texto(s, linha2, 13, (150, 170, 215), (caixa.centerx, caixa.top + 126), negrito=False)
+
     def _online_titulo(self) -> str:
         adv = self._servidor.adversario if self._servidor is not None else None
         return f"JOGO ONLINE vs {adv}  •  " if adv else "JOGO ONLINE  •  "
 
     def _online_largar_jogo(self):
         """Sai do jogo com o outro jogador (despedindo-se dele), mas fica ligado ao servidor."""
+        if self._retoma is not None:
+            if self._retoma["srv"] is not None:
+                self._retoma["srv"].fechar()             # se já tinha voltado ao jogo, despede-se
+            self._retoma = None
+        self._adv_espera_desde = None
+        self._rede_rx = 0.0
         if self.ligacao is not None:
             self.ligacao.terminar()              # envia "adeus" ao outro jogador
         if self._servidor is not None:

@@ -9,7 +9,11 @@ Faz quatro coisas:
   4. depois de emparelhados, passa as mensagens de um jogador para o outro (o servidor não
      simula nada: quem simula o jogo é o anfitrião, como no modo online por endereço);
   5. contas (contas.py): entrar com alcunha e palavra-passe, guardar o progresso das carreiras
-     na nuvem, ranking dos jogos online e desafios a um amigo pela alcunha.
+     na nuvem, ranking dos jogos online e desafios a um amigo pela alcunha;
+  6. voltar a ligar: se a internet de um jogador cai a meio da partida, o jogo fica guardado
+     ESPERA_RETOMAR segundos. Cada jogador recebe uma chave secreta quando é emparelhado; um jogo
+     que volta a ligar com essa chave ("retomar") volta para o mesmo jogo, no lugar da ligação antiga.
+     O outro jogador recebe "caiu" e depois "voltou" (ou "saiu", se o tempo acabar).
 
 A ligação é um WebSocket (funciona em qualquer rede, porque passa pela porta normal da web).
 Cada mensagem é um dicionário em JSON com o tipo em "t".
@@ -22,6 +26,7 @@ import json
 import logging
 import os
 import random
+import secrets
 import time
 from http import HTTPStatus
 
@@ -30,12 +35,13 @@ from websockets.exceptions import ConnectionClosed
 
 from contas import BaseDados, Contas, ErroConta, TIPOS_SAVE
 
-VERSAO = 3                  # tem de ser igual à VERSAO do jogo (jogo/multijogador/rede.py)
+VERSAO = 4                  # tem de ser igual à VERSAO do jogo (jogo/multijogador/rede.py)
 LETRAS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"     # sem O/0 e I/1, que se confundem
 MAX_MENSAGEM = 2 * 1024 * 1024    # o progresso das carreiras vai numa mensagem só
 MAX_FALHAS = 5                    # tentativas erradas de entrar antes de ter de esperar
 ESPERA_FALHAS = 30.0
 INTERVALO_CONTAGEM = 2.0    # segundos entre os avisos de quantos estão online
+ESPERA_RETOMAR = float(os.environ.get("STICKMANIA_ESPERA_RETOMAR", "45"))   # segundos à espera de quem caiu
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
 log = logging.getLogger("stickmania")
@@ -55,6 +61,9 @@ class Cliente:
         self.espera_ate = 0.0
         self.resultado = None        # resultado que este jogo enviou no fim da partida
         self.convites = set()        # quem o desafiou (clientes)
+        self.chave = None            # chave secreta para voltar ao jogo se a ligação cair
+        self.caido_desde = None      # a ligação caiu a meio do jogo (à espera que volte)
+        self.substituido = False     # voltou a ligar: esta ligação antiga já não conta
 
     async def enviar(self, msg):
         try:
@@ -68,6 +77,7 @@ class Servidor:
         self.clientes = set()
         self.fila = []               # à procura de jogo aleatório
         self.salas = {}              # código -> cliente que criou a sala
+        self.retomas = {}            # chave secreta -> cliente que está no jogo com essa chave
         self.inicio = time.time()
         self.contas = None           # fica None se a base de dados não abrir (o online continua)
 
@@ -96,10 +106,14 @@ class Servidor:
         anfitriao.parceiro, convidado.parceiro = convidado, anfitriao
         anfitriao.papel, convidado.papel = "anfitriao", "convidado"
         anfitriao.resultado = convidado.resultado = None
+        for c in (anfitriao, convidado):
+            self._largar_chave(c)
+            c.chave = secrets.token_hex(12)
+            self.retomas[c.chave] = c
         await anfitriao.enviar({"t": "emparelhado", "papel": "anfitriao", "modo": modo,
-                                "adversario": convidado.alcunha})
+                                "adversario": convidado.alcunha, "chave": anfitriao.chave})
         await convidado.enviar({"t": "emparelhado", "papel": "convidado", "modo": modo,
-                                "adversario": anfitriao.alcunha})
+                                "adversario": anfitriao.alcunha, "chave": convidado.chave})
         await self.enviar_contagem_a(anfitriao, convidado)
         log.info("jogo %s começou (%d online)", modo, len(self.clientes))
 
@@ -117,8 +131,16 @@ class Servidor:
         if c.estado in ("fila", "sala"):
             c.estado = "lobby"
 
-    async def sair_do_jogo(self, c: Cliente):
+    def _largar_chave(self, c: Cliente):
+        if c.chave and self.retomas.get(c.chave) is c:
+            del self.retomas[c.chave]
+        c.chave = None
+
+    async def sair_do_jogo(self, c: Cliente, motivo: str = ""):
         p = c.parceiro
+        self._largar_chave(c)
+        if p is not None:
+            self._largar_chave(p)
         c.parceiro = None
         if c.estado == "jogo":
             c.estado = "lobby"
@@ -127,7 +149,35 @@ class Servidor:
             p.parceiro = None
             p.resultado = None
             p.estado = "lobby"
-            await p.enviar({"t": "saiu"})
+            await p.enviar({"t": "saiu", "motivo": motivo})
+
+    async def retomar(self, c: Cliente, chave: str):
+        """Um jogo voltou a ligar com a chave do jogo em que estava: fica no lugar da ligação antiga."""
+        antigo = self.retomas.get(chave) if chave else None
+        p = antigo.parceiro if antigo is not None else None
+        if antigo is None or antigo is c or p is None:
+            await c.enviar({"t": "retomar_falhou"})
+            return
+        self.sair_da_espera(c)
+        c.estado, c.papel, c.chave, c.parceiro = "jogo", antigo.papel, chave, p
+        c.conta_id = c.conta_id or antigo.conta_id
+        c.alcunha = c.alcunha or antigo.alcunha
+        p.parceiro = c
+        self.retomas[chave] = c
+        antigo.substituido = True                # a ligação antiga (se ainda não caiu) já não conta
+        antigo.parceiro, antigo.estado, antigo.chave = None, "lobby", None
+        if antigo.caido_desde is None:
+            asyncio.create_task(antigo.ws.close())
+        await c.enviar({"t": "retomado", "papel": c.papel})
+        await p.enviar({"t": "voltou"})
+        log.info("um jogador voltou ao jogo (%s)", c.papel)
+
+    async def esperar_retoma(self, c: Cliente):
+        """A ligação de c caiu a meio do jogo: se não voltar a tempo, o jogo acaba para o outro."""
+        await asyncio.sleep(ESPERA_RETOMAR)
+        if not c.substituido and c.parceiro is not None:
+            log.info("um jogador não voltou a tempo")
+            await self.sair_do_jogo(c, "caiu")
 
     def novo_codigo(self) -> str:
         while True:
@@ -151,6 +201,10 @@ class Servidor:
         if t == "jogo":
             if c.parceiro is not None:
                 await c.parceiro.enviar({"t": "jogo", "m": msg.get("m")})
+        elif t == "eco":
+            await c.enviar({"t": "eco"})         # o jogo usa-o para saber se a ligação dele está viva
+        elif t == "retomar":
+            await self.retomar(c, str(msg.get("chave", "")))
         elif t == "procurar":
             if c.estado == "jogo":
                 await self.sair_do_jogo(c)
@@ -327,7 +381,16 @@ class Servidor:
             for o in self.clientes:
                 o.convites.discard(c)
             self.sair_da_espera(c)
-            await self.sair_do_jogo(c)
+            p = c.parceiro
+            if c.substituido:
+                pass                             # voltou a ligar: o jogo continua na ligação nova
+            elif c.estado == "jogo" and p is not None and p.caido_desde is None and c.chave:
+                # A meio do jogo: espera um pouco que volte (o outro jogo fica parado à espera)
+                c.caido_desde = time.time()
+                await p.enviar({"t": "caiu"})
+                asyncio.create_task(self.esperar_retoma(c))
+            else:
+                await self.sair_do_jogo(c)
 
 
 def pagina(connection, request):

@@ -15,6 +15,11 @@ Classes:
               a ligação direta antiga (enviar, mensagens, ativa, terminar), por isso o resto do
               modo online (online.py) não precisou de mudar.
 
+Voltar a ligar (online.py): ao ser emparelhado, o jogo recebe uma chave secreta. Se a ligação cair
+a meio da partida, cria-se um Servidor novo com retomar=chave e o servidor põe-no outra vez no
+mesmo jogo ("retomado"). eco() e t_rx servem para saber se a ligação está viva: o servidor
+responde logo a cada eco, por isso, se passarem uns segundos sem chegar nada, a ligação caiu.
+
 Contas (conta.py): o jogo faz pedidos com pedir() e vai buscar a resposta com resposta(). Se o
 jogador tem a conta aberta, o Servidor envia logo o token da sessão quando se liga, por isso os
 jogos online ficam associados à conta (ranking) e pode receber desafios de amigos.
@@ -28,7 +33,7 @@ import time
 # Endereço do servidor. Para testar com o servidor no próprio PC:
 #   set STICKMANIA_SERVIDOR=ws://localhost:8765
 SERVIDOR = os.environ.get("STICKMANIA_SERVIDOR", "wss://stickmania-eu.onrender.com")
-VERSAO = 3                  # tem de ser igual à do servidor e à do outro jogo
+VERSAO = 4                  # tem de ser igual à do servidor e à do outro jogo
 TEMPO_LIGAR = 90.0          # o servidor gratuito do Render "adormece" e pode demorar ~1 min a acordar
 
 
@@ -39,6 +44,7 @@ class Ligacao:
         self._srv = servidor
         self.ativa = True
         self.erro = ""
+        self.adversario_caiu = False     # o servidor avisou que a ligação do outro caiu (à espera que volte)
         self._entrada = queue.Queue()
 
     def enviar(self, msg: dict):
@@ -76,7 +82,7 @@ class Servidor:
     online / a_jogar / a_procurar: contagens que o servidor envia de 2 em 2 segundos.
     """
 
-    def __init__(self, endereco: str = None, token: str = None):
+    def __init__(self, endereco: str = None, token: str = None, retomar: str = None):
         self.endereco = endereco or SERVIDOR
         self.estado = "a_ligar"
         self.erro = ""
@@ -98,9 +104,15 @@ class Servidor:
         self.ranking_mudou = None    # (pontos ganhos ou perdidos, perfil) no fim de um jogo online
         self._respostas = {}
         self._n_pedido = 0
+        # Voltar a ligar
+        self.chave = retomar         # chave secreta do jogo em que se está (o servidor dá-a ao emparelhar)
+        self.retomado = None         # None à espera; True voltou ao jogo; False o jogo já não existe
+        self.t_rx = time.perf_counter()   # quando chegou a última mensagem do servidor
         self._enviar({"t": "ola", "versao": VERSAO})
         if token:
             self._enviar({"t": "conta_sessao", "token": token, "pedido": "sessao"})
+        if retomar:
+            self._enviar({"t": "retomar", "chave": retomar})
         threading.Thread(target=self._correr, daemon=True).start()
 
     # ------------------------------------------------------------------ pedidos do jogo
@@ -142,10 +154,18 @@ class Servidor:
         """Está a demorar a ligar: o servidor gratuito estava a dormir."""
         return self.estado == "a_ligar" and time.perf_counter() - self.t_inicio > 4
 
-    def fechar(self):
+    def eco(self):
+        """Pede ao servidor que responda logo (para saber se a ligação ainda está viva)."""
+        self._enviar({"t": "eco"})
+
+    def fechar(self, despedir: bool = True):
+        """Fecha a ligação. despedir=False: sem avisar o outro jogador (a ligação caiu e vai-se voltar)."""
         self._fechado = True
         if self.ligacao is not None:
-            self.ligacao.terminar()
+            if despedir:
+                self.ligacao.terminar()
+            else:
+                self.ligacao.fechar()
         self._saida.put(None)
         if self._ws is not None:
             threading.Thread(target=self._fechar_ws, daemon=True).start()
@@ -227,7 +247,10 @@ class Servidor:
             pass
 
     def _receber(self, msg: dict):
+        self.t_rx = time.perf_counter()
         t = msg.get("t")
+        if t == "eco":
+            return
         if t == "jogo":
             if self.ligacao is not None and isinstance(msg.get("m"), dict):
                 self.ligacao._entrada.put(msg["m"])
@@ -254,11 +277,24 @@ class Servidor:
         elif t == "emparelhado":
             self.adversario = msg.get("adversario")
             self.codigo = None
+            self.chave = msg.get("chave")
             self.ligacao = Ligacao(self)
             self._emparelhado = (msg["papel"], msg["modo"])
+        elif t == "retomado":
+            self.ligacao = Ligacao(self)
+            self.retomado = True
+        elif t == "retomar_falhou":
+            self.retomado = False
+        elif t == "caiu":
+            if self.ligacao is not None:
+                self.ligacao.adversario_caiu = True
+        elif t == "voltou":
+            if self.ligacao is not None:
+                self.ligacao.adversario_caiu = False
         elif t == "saiu":
             if self.ligacao is not None:
-                self.ligacao.fechar("O outro jogador saiu do jogo.")
+                self.ligacao.fechar("O outro jogador perdeu a ligação e não voltou." if msg.get("motivo") == "caiu"
+                                    else "O outro jogador saiu do jogo.")
         elif t == "erro":
             if msg.get("erro") == "sala":
                 self.aviso = "Não existe nenhuma sala com esse código. Confirma as letras."
