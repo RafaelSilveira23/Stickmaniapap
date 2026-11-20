@@ -14,38 +14,44 @@ PASTA = os.path.dirname(os.path.abspath(__file__))
 # 1. Casos de uso
 # ═══════════════════════════════════════════════════════════════════════
 def casos_de_uso():
-    d = Diagrama("01_casos_de_uso", 1010, 880, "Casos de uso")
-    d.caixa("sis", 190, 10, 630, 860, "Sistema: StickMania", "grupo", "cinza", tam=15)
-    d.caixa("jog", 60, 290, 50, 90, "Jogador", "ator", "azul")
-    d.caixa("ia", 905, 290, 50, 90, "Computador (IA)", "ator", "vermelho")
+    d = Diagrama("01_casos_de_uso", 1180, 1060, "Casos de uso")
+    d.caixa("sis", 180, 10, 830, 1040, "Sistema: StickMania", "grupo", "cinza", tam=15)
+    d.caixa("jog", 60, 470, 50, 90, "Jogador", "ator", "azul")
+    d.caixa("ia", 1085, 520, 50, 90, "Computador (IA)", "ator", "vermelho")
+    d.caixa("amigo", 1085, 690, 50, 90, "Amigo", "ator", "verde")
+    d.caixa("srv", 1085, 880, 50, 90, "Servidor do jogo\n(Render + Neon)", "ator", "laranja")
 
-    esq = [("uc1", "Escolher equipas"), ("uc2", "Escolher dificuldade"), ("uc3", "Ver definições\n(controlos, ecrã inteiro)"),
-           ("uc4", "Jogar partida"), ("uc5", "Pausar / continuar"), ("uc6", "Ver resultado final"),
-           ("uc7", "Jogar o modo carreira\n(campeonato)"), ("uc8", "Consultar classificação,\ncalendário e marcadores"),
-           ("uc15", "Treinar remates\n(modo teste)"),
-           ("uc16", "Jogar a carreira de jogador\n(só o meu jogador)"),
-           ("uc17", "Jogar online (aleatório\nou sala privada)")]
+    esq = [("uc1", "Escolher equipas\ne dificuldade"), ("uc3", "Ver definições\n(controlos, som, ecrã)"),
+           ("uc4", "Jogar partida"), ("uc5", "Pausar / continuar"),
+           ("uc7", "Jogar o modo carreira"), ("uc16", "Jogar a carreira\nde jogador"),
+           ("uc15", "Treinar no modo teste"), ("uc18", "Fazer o tutorial\n(8 missões)"),
+           ("uc19", "Jogar a dois\nno mesmo PC"), ("uc17", "Jogar online (aleatório,\nsala ou desafio)"),
+           ("uc20", "Criar conta / entrar"), ("uc21", "Guardar as carreiras\nna nuvem"),
+           ("uc22", "Ver o ranking\ne os últimos jogos")]
+    ys = {}
     for i, (id, txt) in enumerate(esq):
-        planeado = "implementar" in txt
-        d.caixa(id, 215, 50 + i * 74, 225, 54, txt, "elipse", "amarelo" if planeado else "azul",
-                tracejado=planeado, negrito=(id == "uc4"))
-        d.seta("jog", id, ponta=False, exato=True, pontos=[(110, 330), (215, 50 + i * 74 + 27)])
+        y = 40 + i * 77
+        ys[id] = y + 27
+        d.caixa(id, 210, y, 240, 54, txt, "elipse", "azul", negrito=(id == "uc4"))
+        d.seta("jog", id, ponta=False, exato=True, pontos=[(110, 515), (210, y + 27)])
 
-    dir_ = [("uc9", "Mover o jogador", 160), ("uc10", "Passar a bola", 230), ("uc11", "Rematar na 1.ª pessoa", 300),
-            ("uc12", "Trocar de jogador", 370)]
-    for id, txt, y in dir_:
-        d.caixa(id, 565, y, 200, 50, txt, "elipse", "verde")
+    inc = [("uc9", "Mover o jogador"), ("uc10", "Passar a bola"), ("uc11", "Rematar na 1.ª pessoa"),
+           ("uc23", "Fintar (corte e roleta)"), ("uc12", "Trocar de jogador")]
+    for i, (id, txt) in enumerate(inc):
+        d.caixa(id, 540, 40 + i * 72, 210, 50, txt, "elipse", "verde")
         d.seta("uc4", id, "«include»", tracejado=True, pos_texto=0.62)
 
-    d.caixa("uc13", 565, 480, 200, 54, "Controlar a equipa\nadversária", "elipse", "vermelho")
-    d.caixa("uc14", 565, 560, 200, 54, "Defender a baliza\n(guarda-redes)", "elipse", "vermelho")
-    d.seta("ia", "uc13", ponta=False, exato=True, pontos=[(905, 335), (765, 507)])
-    d.seta("ia", "uc14", ponta=False, exato=True, pontos=[(905, 335), (765, 587)])
-    d.seta("uc4", "uc13", "«include»", tracejado=True, pos_texto=0.6)
+    d.caixa("uc13", 790, 470, 200, 54, "Controlar a equipa\nadversária", "elipse", "vermelho")
+    d.caixa("uc14", 790, 550, 200, 54, "Defender a baliza\n(guarda-redes)", "elipse", "vermelho")
+    d.seta("ia", "uc13", ponta=False, exato=True, pontos=[(1085, 565), (990, 497)])
+    d.seta("ia", "uc14", ponta=False, exato=True, pontos=[(1085, 565), (990, 577)])
+    d.seta("uc4", "uc13", "«include»", tracejado=True, exato=True,
+           pontos=[(450, 230), (495, 230), (495, 497), (790, 497)], pos_texto=0.75)
 
-    # Jogo online: o amigo joga noutro computador, com a equipa de fora
-    d.caixa("amigo", 905, 700, 50, 90, "Amigo\n(noutro PC)", "ator", "verde")
-    d.seta("amigo", "uc17", ponta=False, exato=True, pontos=[(905, 745), (440, 817)])
+    for alvo in ("uc19", "uc17"):
+        d.seta("amigo", alvo, ponta=False, exato=True, pontos=[(1085, 735), (450, ys[alvo])])
+    for alvo in ("uc17", "uc20", "uc21", "uc22"):
+        d.seta("srv", alvo, ponta=False, exato=True, pontos=[(1085, 925), (450, ys[alvo])])
     return d
 
 
@@ -53,40 +59,50 @@ def casos_de_uso():
 # 2. Arquitetura (diagrama de blocos: entrada → controlo → saída)
 # ═══════════════════════════════════════════════════════════════════════
 def arquitetura():
-    d = Diagrama("02_arquitetura", 1100, 560, "Arquitetura do sistema")
-    d.caixa("gE", 10, 50, 200, 310, "ENTRADA", "grupo", "cinza", tam=14)
-    d.caixa("tec", 30, 110, 160, 70, "Teclado\nWASD · Z · X · TAB · ESC", "arredondado", "azul")
-    d.caixa("rato", 30, 220, 160, 70, "Rato\npontaria do remate", "arredondado", "azul")
+    d = Diagrama("02_arquitetura", 1200, 790, "Arquitetura do sistema")
+    d.caixa("gE", 10, 50, 200, 380, "ENTRADA", "grupo", "cinza", tam=14)
+    d.caixa("tec", 30, 105, 160, 70, "Teclado\nWASD · Z · X · V · F · ESC", "arredondado", "azul")
+    d.caixa("rato", 30, 205, 160, 70, "Rato\npontaria do remate", "arredondado", "azul")
+    d.caixa("cmd", 30, 305, 160, 80, "Comando\nXbox / PlayStation\npartida/comando.py", "arredondado", "azul")
 
-    d.caixa("gC", 270, 50, 520, 310, "CONTROLO — ciclo principal (game.py, 60 FPS)", "grupo", "cinza", tam=14)
-    d.caixa("men", 290, 100, 230, 66, "Menus e modo carreira\nmenu.py · carreira_menu.py", "arredondado", "verde")
-    d.caixa("reg", 540, 100, 230, 66, "Regras: tempo, golos, faltas\ngame.py", "arredondado", "verde")
-    d.caixa("fis", 290, 190, 230, 66, "Física da bola e dos jogadores\nball.py · player.py", "arredondado", "verde")
-    d.caixa("ia", 540, 190, 230, 66, "Inteligência artificial\nai.py · goalkeeper.py", "arredondado", "verde")
-    d.caixa("ani", 290, 280, 480, 56, "Animações e equipamentos das equipas — animation.py · cores.py",
+    d.caixa("gC", 260, 50, 640, 380, "CONTROLO — ciclo principal (jogo/game.py, 60 vezes por segundo)",
+            "grupo", "cinza", tam=14)
+    d.caixa("par", 280, 100, 295, 80, "partida/\nbola, jogadores, guarda-redes, IA,\nfaltas, fintas, remate, repetição",
+            "arredondado", "verde")
+    d.caixa("mod", 590, 100, 290, 80, "modos/\nmodo carreira, carreira de jogador,\ntutorial, dois jogadores",
+            "arredondado", "verde")
+    d.caixa("ecr_", 280, 200, 295, 80, "ecras/\nmenus, painel do jogo\ne peças da interface",
+            "arredondado", "verde")
+    d.caixa("mul", 590, 200, 290, 80, "multijogador/\njogo online (anfitrião e convidado)\ne contas",
+            "arredondado", "verde")
+    d.caixa("som_", 280, 300, 295, 80, "som/\nsons e cânticos criados no código", "arredondado", "verde")
+    d.caixa("clu", 590, 300, 290, 80, "clubes/\nequipas, planteis, emblemas\ne cores dos equipamentos",
             "arredondado", "verde")
 
-    d.caixa("gS", 850, 50, 240, 310, "SAÍDA", "grupo", "cinza", tam=14)
-    d.caixa("ecr", 870, 100, 200, 66, "Ecrã 1280×720\ncamera.py · rink.py · baliza.py", "arredondado", "laranja")
-    d.caixa("hud", 870, 190, 200, 66, "Interface e efeitos\nui.py · componentes.py\ngraficos.py", "arredondado", "laranja")
-    d.caixa("som", 870, 280, 200, 56, "Som\nsons.py · assets/sounds", "arredondado", "laranja")
+    d.caixa("gS", 950, 50, 240, 380, "SAÍDA", "grupo", "cinza", tam=14)
+    d.caixa("ecr", 970, 120, 200, 90, "Ecrã 1280×720\ncâmara em perspetiva\n(partida/camera.py)", "arredondado", "laranja")
+    d.caixa("som", 970, 270, 200, 90, "Som\nefeitos e cânticos\n(recursos/sons)", "arredondado", "laranja")
 
-    d.caixa("gD", 270, 420, 520, 130, "DADOS", "grupo", "cinza", tam=14)
-    d.caixa("cfg", 290, 465, 150, 66, "Configuração\nsettings.py", "arredondado", "roxo")
-    d.caixa("eq", 455, 465, 160, 66, "Equipas e símbolos\nteam.py · simbolos/", "arredondado", "roxo")
-    d.caixa("spr", 630, 465, 140, 66, "Sprites\nsprites_v2/", "arredondado", "roxo")
-    d.caixa("bd", 850, 440, 240, 90, "Base de dados SQLite\ncampeonato do modo carreira\ncarreira.py · saves/carreira.db",
+    d.caixa("gD", 260, 490, 640, 140, "DADOS DO JOGO", "grupo", "cinza", tam=14)
+    d.caixa("cfg", 280, 540, 180, 70, "Configuração\nsettings.py", "arredondado", "roxo")
+    d.caixa("cam_", 480, 540, 190, 70, "Onde está cada pasta\ncaminhos.py", "arredondado", "roxo")
+    d.caixa("rec", 690, 540, 190, 70, "recursos/\nimagens, sons, sprites", "arredondado", "roxo")
+    d.caixa("bd", 950, 490, 240, 140, "Base de dados SQLite (no PC)\ncarreiras gravadas\nsaves/carreira.db\nsaves/carreira_jogador.db",
             "arredondado", "roxo")
 
-    d.seta("gE", "gC", "eventos")
-    d.seta("gC", "gS", "desenho")
-    d.seta("gD", "gC", "carrega")
-    d.caixa("net", 10, 440, 200, 90, "Rede (jogo online)\nrede.py ↔ servidor do jogo\n(WebSocket, no Render)", "arredondado",
+    d.caixa("gI", 10, 490, 200, 290, "INTERNET", "grupo", "cinza", tam=14)
+    d.caixa("srv", 25, 540, 170, 100, "Servidor do jogo\n(Render, Frankfurt)\nservidor.py · contas.py", "arredondado",
             "laranja")
-    d.seta("net", "gC", "comandos e\nestado do jogo", exato=True, ambos=True,
-           pontos=[(210, 485), (240, 485), (240, 330), (270, 330)])
-    d.seta("gC", "bd", "grava e lê\no campeonato", exato=True, ambos=True,
-           pontos=[(790, 330), (820, 330), (820, 485), (850, 485)])
+    d.caixa("neon", 25, 680, 170, 85, "Base de dados\nPostgres (Neon)\ncontas · nuvem · ranking", "arredondado", "roxo")
+
+    d.seta("gE", "gC", "eventos")
+    d.seta("gC", "gS", "desenho\ne som")
+    d.seta("gD", "gC", "carrega")
+    d.seta("srv", "neon", "SQL", ambos=True)
+    d.seta("srv", "gC", "teclas, estado do jogo,\ncontas e ranking\n(WebSocket)", exato=True, ambos=True,
+           pontos=[(195, 590), (235, 590), (235, 400), (260, 400)], pos_texto=0.25)
+    d.seta("gC", "bd", "grava e lê\nas carreiras", exato=True, ambos=True,
+           pontos=[(900, 400), (925, 400), (925, 560), (950, 560)], pos_texto=0.5)
     return d
 
 
@@ -94,38 +110,46 @@ def arquitetura():
 # 3. Máquina de estados do jogo
 # ═══════════════════════════════════════════════════════════════════════
 def estados_jogo():
-    d = Diagrama("03_estados_jogo", 1210, 490, "Máquina de estados do jogo")
+    d = Diagrama("03_estados_jogo", 1240, 650, "Máquina de estados do jogo")
     d.caixa("i", 20, 73, 24, 24, "", "inicio")
     d.caixa("menu", 80, 55, 180, 60, "Menu principal", "arredondado", "azul", negrito=True)
-    d.caixa("sel", 380, 55, 200, 60, "Seleção de equipas\ne dificuldade", "arredondado", "azul")
+    d.caixa("sel", 380, 55, 200, 60, "Seleção de equipas\n(1 ou 2 jogadores)", "arredondado", "azul")
     d.caixa("jogo", 700, 55, 200, 60, "Partida a decorrer", "arredondado", "verde", negrito=True)
-    d.caixa("pausa", 980, 55, 190, 60, "Pausa", "arredondado", "amarelo")
-    d.caixa("ctrl", 80, 300, 180, 60, "Definições\n(controlos, ecrã inteiro)", "arredondado", "azul")
-    d.caixa("golo", 700, 300, 200, 60, "Golo / intervalo\n(repor posições)", "arredondado", "verde")
-    d.caixa("fim", 980, 300, 190, 60, "Fim de jogo\n(resultado final)", "arredondado", "vermelho")
-    d.caixa("f", 330, 195, 30, 30, "", "fim")
+    d.caixa("pausa", 1010, 55, 190, 60, "Pausa", "arredondado", "amarelo")
+    d.caixa("ctrl", 40, 250, 170, 60, "Definições\n(controlos, som, ecrã)", "arredondado", "azul")
+    d.caixa("onl", 380, 250, 200, 60, "Jogar online\n(aleatório, sala, desafio)", "arredondado", "azul")
+    d.caixa("conta", 380, 430, 200, 60, "Conta\n(nuvem e ranking)", "arredondado", "azul")
+    d.caixa("golo", 610, 250, 170, 60, "Golo\n(festa)", "arredondado", "verde")
+    d.caixa("rep", 820, 250, 170, 60, "Repetição do golo\n(câmara lenta)", "arredondado", "verde")
+    d.caixa("fim", 1010, 250, 190, 60, "Fim de jogo\n(resultado final)", "arredondado", "vermelho")
+    d.caixa("f", 30, 170, 30, 30, "", "fim")
 
     d.seta("i", "menu")
-    d.seta("menu", "sel", "Jogar", desvio=(0, -14))
+    d.seta("menu", "sel", "Jogo rápido", desvio=(0, -14))
     d.seta("sel", "menu", "Voltar", desvio=(0, 14))
     d.seta("sel", "jogo", "Começar")
-    d.seta("jogo", "pausa", "ESC / P", desvio=(0, -14))
+    d.seta("jogo", "pausa", "ESC", desvio=(0, -14))
     d.seta("pausa", "jogo", "Continuar /\nReiniciar", desvio=(0, 14))
-    d.seta("jogo", "golo", "golo ou fim\nda 1.ª parte", desvio=(-45, 0))
-    d.seta("golo", "jogo", "recomeça", desvio=(45, 0))
-    d.seta("jogo", "fim", "fim da 2.ª parte", desvio=(14, -12), pos_texto=0.3)
-    d.seta("fim", "jogo", "Jogar de novo", desvio=(-14, 12), pos_texto=0.68)
-    d.seta("menu", "ctrl", "Engrenagem", desvio=(-35, 0))
-    d.seta("ctrl", "menu", "Voltar", desvio=(35, 0))
-    d.seta("menu", "f", "Sair")
+    d.seta("menu", "f", "Sair", exato=True, pontos=[(95, 115), (95, 185), (60, 185)], pos_texto=0.3)
+    d.seta("menu", "ctrl", "Engrenagem", exato=True, pontos=[(115, 115), (115, 250)], pos_texto=0.5)
+    d.seta("ctrl", "menu", "Voltar", exato=True, pontos=[(185, 250), (185, 115)], pos_texto=0.5)
+    d.seta("menu", "onl", "Jogar online", exato=True, pontos=[(245, 115), (245, 280), (380, 280)], pos_texto=0.75)
+    d.seta("menu", "conta", "Conta", exato=True, pontos=[(230, 115), (230, 460), (380, 460)], pos_texto=0.8)
+    d.seta("onl", "sel", "emparelhados: cada um\nescolhe a sua equipa", exato=True,
+           pontos=[(480, 250), (480, 115)], pos_texto=0.5)
+    d.seta("jogo", "golo", "golo", exato=True, pontos=[(735, 115), (735, 250)])
+    d.seta("golo", "rep", "fim da\nfesta")
+    d.seta("rep", "jogo", "acaba ou\nqualquer tecla", exato=True, pontos=[(865, 250), (865, 115)], pos_texto=0.28)
+    d.seta("jogo", "fim", "fim da 2.ª parte", exato=True,
+           pontos=[(885, 115), (885, 180), (1050, 180), (1050, 250)], pos_texto=0.55)
+    d.seta("fim", "jogo", "Jogar de novo", exato=True,
+           pontos=[(1160, 250), (1160, 150), (895, 150), (895, 115)], pos_texto=0.25)
     d.seta("pausa", "menu", "Menu principal", exato=True,
-           pontos=[(1075, 55), (1075, 22), (170, 22), (170, 55)])
-    d.seta("pausa", "ctrl", "Definições / voltar à pausa", exato=True, ambos=True,
-           pontos=[(1170, 85), (1195, 85), (1195, 440), (170, 440), (170, 360)], pos_texto=0.55)
-    d.seta("fim", "sel", "Mudar equipas", exato=True,
-           pontos=[(1010, 360), (1010, 405), (480, 405), (480, 115)], pos_texto=0.4)
+           pontos=[(1105, 55), (1105, 22), (170, 22), (170, 55)])
     d.seta("fim", "menu", "Menu principal", exato=True,
-           pontos=[(1130, 360), (1130, 475), (30, 475), (30, 140), (110, 140), (110, 115)], pos_texto=0.3)
+           pontos=[(1105, 310), (1105, 560), (10, 560), (10, 108), (80, 108)], pos_texto=0.3)
+    d.seta("pausa", "ctrl", "Definições / voltar à pausa", exato=True, ambos=True,
+           pontos=[(1200, 85), (1225, 85), (1225, 620), (125, 620), (125, 310)], pos_texto=0.55)
     return d
 
 
@@ -237,9 +261,10 @@ def classes():
     d = Diagrama("06_classes", 1180, 730, "Diagrama de classes")
     C = lambda id, x, y, w, h, t, a, m, cor="azul": d.caixa(id, x, y, w, h, tipo="classe", cor=cor, tam=12,
                                                             linhas=(t, [a, m]))
-    C("game", 420, 10, 300, 230, "Game",
+    C("game", 400, 10, 340, 290, "Game",
       ["- estado: str", "- pausado: bool", "- golos_azul, golos_vermelho: int", "- parte: int",
-       "- tempo_restante: float", "- dificuldade: str"],
+       "- tempo_restante: float", "- dificuldade: str", "«junta» OnlineMixin · FaltasMixin · FintasMixin",
+       "DoisJogadoresMixin · RepeticaoMixin", "TutorialMixin · ContaMixin"],
       ["+ run()", "+ handle_events()", "+ update(dt)", "+ draw()", "+ iniciar_partida(casa, fora)",
        "+ assinalar_falta(infrator, vitima)"], "verde")
     C("rink", 20, 10, 290, 150, "Rink",
@@ -251,9 +276,9 @@ def classes():
     C("hud", 840, 10, 320, 110, "HUDController",
       ["- fontes, cores"],
       ["+ draw_top_bar(screen, game)", "+ draw_bottom_panel(screen, game)", "+ draw_foul_banner(...)"])
-    C("menus", 840, 180, 320, 120, "«ecrãs» menu.py · carreira_menu.py",
+    C("menus", 840, 180, 320, 120, "«ecrãs» (pasta ecras/ e menus dos modos)",
       ["MenuPrincipal · EcraControlos · MenuPausa", "TeamSelectMenu · EcraFimJogo",
-       "EcraCarreiraEscolha · EcraCampeonato"],
+       "EcraCampeonato · EcraOnline · EcraConta"],
       ["+ handle_event(event) → ação", "+ update(dt)", "+ draw()"], "cinza")
     C("camp", 20, 395, 290, 135, "Campeonato (carreira.py)",
       ["- torneio_id: int", "- con: sqlite3.Connection"],
@@ -265,14 +290,14 @@ def classes():
     C("player", 700, 420, 290, 195, "Player",
       ["- pos_x, pos_y, vel_x, vel_y", "- equipa, numero, papel", "- tem_bola: bool", "- humano: bool"],
       ["+ update(dt, rink_rect, bola)", "+ set_target(vx, vy)", "+ fazer_passe(bola, dir)",
-       "+ fazer_remate(bola, dir)", "+ sofrer_queda(...)", "+ empurrar_separar(outro)"])
+       "+ fazer_remate(bola, dir)", "+ comecar_finta(lado, tipo)", "+ empurrar_separar(outro)"])
     C("ia", 1040, 440, 130, 170, "AgentIA",
       ["- jogador", "- papel", "- cfg"],
       ["+ update(...)", "- _estado_atacar", "- _estado_defender", "- _estado_apoiar", "- _estado_perseguir"],
       "vermelho")
     C("gr", 380, 560, 260, 110, "Goalkeeper",
-      ["- pos_x_fixo, pos_y", "- equipa, dificuldade"],
-      ["+ update(dt, bola)", "+ bloquear_bola(bola)"])
+      ["- pos_x, pos_y", "- equipa, dificuldade"],
+      ["+ update(dt, bola)", "+ repor()"])
     C("anim", 20, 540, 290, 110, "AnimationController",
       ["- estado: str", "- animacoes: dict"],
       ["+ update(dt)", "+ imagem: Surface"], "roxo")
@@ -281,12 +306,12 @@ def classes():
     d.seta("rink", "cam", "1")
     d.seta("game", "hud", "1")
     d.seta("game", "menus", "1..7", pontos=[(780, 230)])
-    d.seta("game", "camp", "0..1", exato=True, pontos=[(420, 225), (362, 225), (362, 460), (310, 460)],
+    d.seta("game", "camp", "0..1", exato=True, pontos=[(400, 285), (362, 285), (362, 460), (310, 460)],
            pos_texto=0.55)
     d.seta("game", "ball", "1")
     d.seta("game", "player", "8", pontos=[(700, 330)])
-    d.seta("game", "gr", "2", exato=True, pontos=[(440, 240), (440, 295), (345, 295), (345, 590), (380, 590)], pos_texto=0.55)
-    d.seta("game", "ia", "7", exato=True, pontos=[(720, 150), (790, 150), (790, 395), (1105, 395), (1105, 440)], pos_texto=0.75)
+    d.seta("game", "gr", "2", exato=True, pontos=[(420, 300), (420, 315), (345, 315), (345, 590), (380, 590)], pos_texto=0.55)
+    d.seta("game", "ia", "7", exato=True, pontos=[(740, 150), (815, 150), (815, 395), (1105, 395), (1105, 440)], pos_texto=0.75)
     d.seta("ia", "player")
     d.caixa("tctrl", 985, 490, 60, 20, "controla", "texto", tam=11)
     d.seta("player", "anim", "1", exato=True, pontos=[(760, 615), (760, 715), (165, 715), (165, 650)], pos_texto=0.5)
@@ -299,7 +324,7 @@ def classes():
 # 7. Modelo de dados (base de dados SQLite do modo carreira)
 # ═══════════════════════════════════════════════════════════════════════
 def modelo_dados():
-    d = Diagrama("07_modelo_dados", 1120, 1150, "Modelo de dados (SQLite)")
+    d = Diagrama("07_modelo_dados", 1120, 1520, "Modelo de dados (SQLite no PC e Postgres no servidor)")
     T = lambda id, x, y, w, h, t, campos, cor="roxo", tr=False: d.caixa(
         id, x, y, w, h, tipo="classe", cor=cor, tam=12, linhas=(t, [campos]), tracejado=tr)
     T("equipa", 20, 20, 240, 100, "Equipa",
@@ -347,6 +372,24 @@ def modelo_dados():
     for alvo, x in (("pessoa", 200), ("seguimento", 560), ("marca", 980)):
         d.seta("atleta", alvo, "1 : N", ponta=False, exato=True,
                pontos=[(140, 700), (140, 945), (x, 945), (x, 970)], pos_texto=0.97)
+
+    # Servidor do jogo (servidor/contas.py): Postgres na Neon
+    d.caixa("gsrv", 8, 1155, 1104, 360, "SERVIDOR DO JOGO — Postgres na Neon (servidor/contas.py)", "grupo", "cinza",
+            tam=14)
+    T("conta", 20, 1205, 240, 280, "Conta",
+      ["PK id", "alcunha", "alcunha_min (única)", "senha_hash", "rec_hash", "criada", "pontos", "jogos", "vitorias",
+       "empates", "derrotas", "golos_marcados", "golos_sofridos"], cor="azul")
+    T("sessao", 440, 1205, 240, 100, "Sessao",
+      ["PK token_hash", "FK conta_id", "criada"], cor="azul")
+    T("progresso", 440, 1345, 240, 120, "Progresso (nuvem)",
+      ["PK, FK conta_id", "PK tipo", "dados", "versao"], cor="azul")
+    T("ponline", 860, 1205, 240, 195, "Partida_online",
+      ["PK id", "FK casa_id", "FK fora_id", "golos_casa", "golos_fora", "pontos_casa", "pontos_fora", "data"],
+      cor="azul")
+    d.seta("conta", "sessao", "1 : N", ponta=False, exato=True, pontos=[(260, 1255), (440, 1255)])
+    d.seta("conta", "progresso", "1 : N", ponta=False, exato=True, pontos=[(260, 1405), (440, 1405)])
+    d.seta("conta", "ponline", "1 : N\n(casa / fora)", ponta=False, exato=True,
+           pontos=[(260, 1470), (260, 1495), (980, 1495), (980, 1400)], pos_texto=0.5)
 
     d.seta("equipa", "torneio", "1 : N\n(equipa do jogador)", ponta=False, exato=True,
            pontos=[(260, 70), (440, 70)])
