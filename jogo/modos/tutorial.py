@@ -58,6 +58,11 @@ class TutorialMixin:
     def _tut_ativo(self) -> bool:
         return self.modo_teste and getattr(self, "teste_variante", "") == "tutorial"
 
+    def _tut_obrigatorio(self) -> bool:
+        """Conta criada neste PC que ainda não fez o tutorial: tem de o acabar antes de jogar."""
+        conta = getattr(self, "conta", None)
+        return bool(conta is not None and conta.precisa_tutorial())
+
     def iniciar_tutorial(self):
         self.iniciar_partida(self.equipa_casa_id, self.equipa_fora_id)
         self.modo_teste = True
@@ -72,6 +77,8 @@ class TutorialMixin:
         self._marcar_tutorial_visto()
         self._msg_timer = 0.0
         self._tut_preparar()
+        if self._tut_obrigatorio():
+            self._tut["aviso"] = ("Conta nova! Acaba o tutorial para começares a jogar.", (255, 215, 80), 4.5)
 
     def _marcar_tutorial_visto(self):
         self._convite_tutorial = False
@@ -242,7 +249,9 @@ class TutorialMixin:
         t["aviso"] = (msg, (255, 150, 90), ESPERA_FALHA + 0.3)
 
     def tut_saltar(self):
-        """Saltar a missão (na pausa)."""
+        """Saltar a missão (na pausa). Não se pode no tutorial obrigatório da conta nova."""
+        if self._tut_obrigatorio():
+            return
         self._tut["feito"] = True
         if self._tut_chave() == "cartoes":
             self._tut_terminar()
@@ -254,6 +263,8 @@ class TutorialMixin:
         t["fim"] = True
         t["espera"] = 4.0
         som.tocar("golo", 0.6)
+        if self._tut_obrigatorio():
+            self.conta.tutorial_feito()          # a conta nova já pode jogar tudo
 
     def _tut_evento(self, event) -> bool:
         """Teclas próprias do tutorial. True se tratou o evento."""
@@ -311,7 +322,7 @@ class TutorialMixin:
         if t["aviso"] is not None:
             msg, cor, _r = t["aviso"]
             texto(s, msg, 34, cor, (s.get_width() // 2, 262), sombra=True)
-        texto(s, "R  recomeçar a missão     ESC  pausa (saltar a missão)", 12, (190, 205, 235),
+        texto(s, "R  recomeçar a missão     ESC  pausa" + ("" if self._tut_obrigatorio() else " (saltar a missão)"), 12, (190, 205, 235),
               (s.get_width() // 2, 528), sombra=True, negrito=False)
 
     def _tut_pontos(self, s, direita, y):
@@ -363,10 +374,24 @@ class TutorialMixin:
     # Convite na primeira vez (menu principal)                             #
     # ------------------------------------------------------------------ #
 
+    def _convite_ativo(self) -> bool:
+        return getattr(self, "_convite_tutorial", False) or self._tut_obrigatorio()
+
     def _convite_evento(self, event) -> bool:
         """Enquanto o convite está aberto, trata as teclas e cliques. True se tratou o evento."""
-        if not getattr(self, "_convite_tutorial", False):
+        if not self._convite_ativo():
             return False
+        if self._tut_obrigatorio():
+            # Conta nova que ainda não acabou o tutorial: só dá para o fazer ou sair do jogo
+            sim, sair = self._convite_botoes()
+            if event.type == pygame.KEYDOWN and event.key in (pygame.K_RETURN, pygame.K_KP_ENTER, pygame.K_SPACE):
+                self.iniciar_tutorial()
+            elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                if sim.collidepoint(event.pos):
+                    self.iniciar_tutorial()
+                elif sair.collidepoint(event.pos):
+                    self.running = False
+            return event.type != pygame.QUIT
         if event.type == pygame.KEYDOWN:
             if event.key in (pygame.K_RETURN, pygame.K_KP_ENTER, pygame.K_SPACE):
                 self.iniciar_tutorial()
@@ -390,8 +415,36 @@ class TutorialMixin:
         nao.midtop = (cx + 130, cy + 34)
         return sim, nao
 
+    def _desenhar_convite_obrigatorio(self):
+        s = self.screen
+        sombra = pygame.Surface(s.get_size(), pygame.SRCALPHA)
+        sombra.fill((0, 0, 0, 170))
+        s.blit(sombra, (0, 0))
+        cx, cy = s.get_width() // 2, s.get_height() // 2
+        caixa = pygame.Rect(0, 0, 620, 230)
+        caixa.center = (cx, cy)
+        pygame.draw.rect(s, (12, 20, 44), caixa, border_radius=16)
+        pygame.draw.rect(s, (255, 205, 60), caixa, 2, border_radius=16)
+        texto(s, "FALTA O TUTORIAL", 28, (255, 215, 80), (cx, caixa.top + 40), sombra=True)
+        alcunha = (self.conta.alcunha or "") if getattr(self, "conta", None) else ""
+        texto(s, f"A conta {alcunha} é nova: antes de jogar tens de acabar o tutorial.", 15, (225, 233, 252),
+              (cx, caixa.top + 84), negrito=False)
+        texto(s, "São 8 missões curtas e demora uns 3 minutos.", 15, (225, 233, 252),
+              (cx, caixa.top + 106), negrito=False)
+        sim, sair = self._convite_botoes()
+        mpos = pygame.mouse.get_pos()
+        for r, nome, cor in ((sim, "FAZER O TUTORIAL", (40, 190, 100)), (sair, "SAIR DO JOGO", (230, 70, 70))):
+            pygame.draw.rect(s, cor if r.collidepoint(mpos) or r is sim else (30, 40, 70), r, border_radius=12)
+            pygame.draw.rect(s, (255, 255, 255) if r is sim else (120, 135, 180), r, 2, border_radius=12)
+            texto(s, nome, 17, (255, 255, 255), r.center)
+        tecla = "A" if comando.ligado() else "ENTER"
+        texto(s, f"{tecla}  fazer o tutorial", 12, (150, 170, 215), (cx, caixa.bottom - 18), negrito=False)
+
     def _desenhar_convite(self):
-        if not getattr(self, "_convite_tutorial", False):
+        if not self._convite_ativo():
+            return
+        if self._tut_obrigatorio():
+            self._desenhar_convite_obrigatorio()
             return
         s = self.screen
         sombra = pygame.Surface(s.get_size(), pygame.SRCALPHA)

@@ -1704,7 +1704,8 @@ class Game(OnlineMixin, FaltasMixin, FintasMixin, DoisJogadoresMixin, RepeticaoM
             self._cancelar_mira()
             self.pausado = True
             self.menu_pausa = MenuPausa(self.screen, modo_carreira=self.modo_carreira, modo_teste=self.modo_teste,
-                                        tutorial=self._tut_ativo())
+                                        tutorial=self._tut_ativo(),
+                                        obrigatorio=self._tut_ativo() and self._tut_obrigatorio())
 
     def _reiniciar_partida(self):
         """Jogar de novo com as mesmas equipas (e, se era a dois, outra vez a dois)."""

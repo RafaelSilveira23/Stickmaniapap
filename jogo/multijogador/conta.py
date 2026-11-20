@@ -44,11 +44,13 @@ class ContaLocal:
         self.token = None
         self.perfil = None           # último perfil recebido (para o menu mostrar logo)
         self.sinc = {}               # alcunha (minúsculas) -> {"ok", "versoes", "mtimes"}
+        self.tutorial_por_fazer = []  # alcunhas (minúsculas) de contas criadas neste PC que ainda não fizeram o tutorial
         try:
             with open(ficheiro, encoding="utf-8") as f:
                 d = json.load(f)
             self.alcunha, self.token = d.get("alcunha"), d.get("token")
             self.perfil, self.sinc = d.get("perfil"), d.get("sinc", {})
+            self.tutorial_por_fazer = list(d.get("tutorial_por_fazer", []))
         except (OSError, ValueError, AttributeError):
             pass
 
@@ -57,7 +59,7 @@ class ContaLocal:
             os.makedirs(os.path.dirname(self.ficheiro), exist_ok=True)
             with open(self.ficheiro, "w", encoding="utf-8") as f:
                 json.dump({"alcunha": self.alcunha, "token": self.token, "perfil": self.perfil,
-                           "sinc": self.sinc}, f, ensure_ascii=False)
+                           "sinc": self.sinc, "tutorial_por_fazer": self.tutorial_por_fazer}, f, ensure_ascii=False)
         except OSError:
             pass
 
@@ -73,6 +75,22 @@ class ContaLocal:
         self.token = None
         self.perfil = None
         self.gravar()
+
+    # Tutorial obrigatório: só para quem CRIA a conta (entrar outra vez, aqui ou noutro PC, não obriga)
+    def precisa_tutorial(self) -> bool:
+        return self.ligada and (self.alcunha or "").lower() in self.tutorial_por_fazer
+
+    def criou_conta(self):
+        chave = (self.alcunha or "").lower()
+        if chave and chave not in self.tutorial_por_fazer:
+            self.tutorial_por_fazer.append(chave)
+            self.gravar()
+
+    def tutorial_feito(self):
+        chave = (self.alcunha or "").lower()
+        if chave in self.tutorial_por_fazer:
+            self.tutorial_por_fazer.remove(chave)
+            self.gravar()
 
     def estado_sinc(self) -> dict:
         return self.sinc.setdefault((self.alcunha or "").lower(), {"ok": False, "versoes": {}, "mtimes": {}})
@@ -194,7 +212,7 @@ class ContaMixin:
                 if senha != senha2:
                     ecra.erro = "As duas palavras-passe não são iguais."
                     continue
-                self._conta_pedir("entrou", "conta_criar", alcunha=alcunha, senha=senha)
+                self._conta_pedir("entrou", "conta_criar", "criada", alcunha=alcunha, senha=senha)
             elif nome == "recuperar":
                 _, alcunha, codigo, senha = acao
                 self._conta_pedir("entrou", "conta_recuperar", alcunha=alcunha, codigo=codigo, senha=senha)
@@ -213,6 +231,10 @@ class ContaMixin:
                 ecra.mudar_fase("ranking")
                 self._conta_pedir("ranking", "ranking")
                 self._conta_pedir("historico", "historico")
+            elif nome == "continuar" and self.conta.precisa_tutorial():
+                # Conta acabada de criar: depois de escrever o código vai logo para o tutorial
+                self.iniciar_tutorial()
+                return
             elif nome in ("voltar_dentro", "continuar"):
                 ecra.mudar_fase("dentro" if self.conta.ligada else "fora")
                 if self.conta.ligada:
@@ -253,6 +275,10 @@ class ContaMixin:
         if oque == "entrou":
             perfil = r["perfil"]
             self.conta.entrou(perfil["alcunha"], r["token"], perfil)
+            if extra == "criada":
+                self.conta.criou_conta()          # conta nova: tem de fazer o tutorial
+            else:
+                self.conta.tutorial_feito()       # entrar outra vez numa conta nunca obriga ao tutorial
             ecra.limpar_campos()
             if r.get("recuperacao"):
                 ecra.codigo_rec = r["recuperacao"]

@@ -1291,7 +1291,7 @@ class MenuPausa:
     """
 
     def __init__(self, screen: pygame.Surface, modo_carreira: bool = False, modo_teste: bool = False,
-                 modo_online: bool = False, tutorial: bool = False):
+                 modo_online: bool = False, tutorial: bool = False, obrigatorio: bool = False):
         self.screen = screen
         self.t = 0.0
         self.modo_carreira = modo_carreira
@@ -1302,6 +1302,11 @@ class MenuPausa:
             # Online o jogo não pára (o outro jogador continua a jogar): só se pode voltar ou sair
             itens = [("CONTINUAR", "continuar", (40, 190, 100), "jogar"),
                      ("ABANDONAR O JOGO", "menu", (150, 110, 255), "casa"),
+                     ("SAIR DO JOGO", "sair", (230, 70, 70), "sair")]
+        elif obrigatorio:
+            # Tutorial da conta nova: não se pode saltar missões nem ir para o menu (só sair do jogo)
+            itens = [("CONTINUAR", "continuar", (40, 190, 100), "jogar"),
+                     ("DEFINIÇÕES", "controlos", (50, 140, 255), "engrenagem"),
                      ("SAIR DO JOGO", "sair", (230, 70, 70), "sair")]
         elif tutorial:
             itens = [("CONTINUAR", "continuar", (40, 190, 100), "jogar"),
