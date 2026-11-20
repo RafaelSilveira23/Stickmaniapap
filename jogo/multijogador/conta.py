@@ -28,11 +28,13 @@ import pygame
 
 from carreira import CAMINHO_BD, PASTA_SAVES
 from carreira_jogador import CAMINHO_BD_JOGADOR
+from conquistas import CAMINHO_CONQUISTAS, ConquistasLocal
 from rede import Servidor
 
 FICHEIRO = os.path.join(PASTA_SAVES, "conta.json")
-FICHEIROS_SAVE = {"carreira": CAMINHO_BD, "carreira_jogador": CAMINHO_BD_JOGADOR}
-NOMES_SAVE = {"carreira": "Modo carreira", "carreira_jogador": "Carreira de jogador"}
+FICHEIROS_SAVE = {"carreira": CAMINHO_BD, "carreira_jogador": CAMINHO_BD_JOGADOR, "conquistas": CAMINHO_CONQUISTAS}
+TIPOS_CARREIRA = ("carreira", "carreira_jogador")      # as conquistas não se escolhem: juntam-se
+NOMES_SAVE = {"carreira": "Modo carreira", "carreira_jogador": "Carreira de jogador", "conquistas": "Conquistas"}
 VERIFICAR_S = 4.0            # de quanto em quanto tempo se vê se os ficheiros mudaram
 DESISTIR_S = 150.0           # se o envio em fundo não acabar (sem internet), desiste
 
@@ -291,8 +293,9 @@ class ContaMixin:
             ecra.versoes_nuvem = versoes
             sinc = self.conta.estado_sinc()
             if oque == "primeira" and not sinc["ok"]:
-                locais = [t for t in versoes if self.conta.existe(t)]
-                if not versoes:
+                carreiras = [t for t in versoes if t in TIPOS_CARREIRA]
+                locais = [t for t in carreiras if self.conta.existe(t)]
+                if not carreiras:
                     sinc["ok"] = True                     # nuvem vazia: este PC passa a enviar
                     self._nuvem_t = VERIFICAR_S
                 elif not locais:
@@ -300,11 +303,15 @@ class ContaMixin:
                 else:
                     ecra.escolher = True                  # os dois têm progresso: o jogador escolhe
                 self.conta.gravar()
+                if "conquistas" in versoes and oque != "trazer":
+                    self._conta_pedir("carregado", "nuvem_carregar", "conquistas", tipo="conquistas")
             if oque == "trazer":
                 if not versoes:
                     ecra.info = "Ainda não há progresso guardado na nuvem."
                 for tipo in versoes:
                     self._conta_pedir("carregado", "nuvem_carregar", tipo, tipo=tipo)
+        elif oque == "carregado" and r.get("tipo") == "conquistas":
+            self._nuvem_juntar_conquistas(r)
         elif oque == "carregado":
             try:
                 self._fechar_carreiras()
@@ -336,6 +343,34 @@ class ContaMixin:
             ecra.historico = r.get("lista", [])
 
     # ------------------------------------------------------------------ progresso na nuvem
+    def _nuvem_juntar_conquistas(self, r: dict):
+        """
+        Conquistas da nuvem: em vez de substituir as do PC, juntam-se as duas (nenhuma se perde).
+        Se o PC tinha alguma que a nuvem não tinha, o ficheiro fica marcado para voltar a ser enviado.
+        """
+        temp = self.conquistas.ficheiro + ".nuvem"
+        try:
+            with open(temp, "wb") as f:
+                f.write(zlib.decompress(base64.b64decode(r["dados"])))
+            nuvem = ConquistasLocal._ler(temp)
+            antes = len(self.conquistas.ganhas)
+            self.conquistas.juntar(temp)
+        except (OSError, ValueError, zlib.error, KeyError):
+            return
+        finally:
+            try:
+                os.remove(temp)
+            except OSError:
+                pass
+        sinc = self.conta.estado_sinc()
+        sinc["versoes"]["conquistas"] = r["versao"]
+        igual = nuvem == (self.conquistas.ganhas, self.conquistas.contadores)
+        sinc["mtimes"]["conquistas"] = ContaLocal.mtime("conquistas") if igual else 0.0
+        self.conta.gravar()
+        novas = len(self.conquistas.ganhas) - antes
+        if novas and self.ecra_conta is not None:
+            self.ecra_conta.info = f"Vieram da nuvem {novas} conquista{'s' if novas > 1 else ''}."
+
     def _nuvem_enviar_tudo(self, manual: bool = False):
         enviou = False
         for tipo in FICHEIROS_SAVE:
@@ -358,6 +393,10 @@ class ContaMixin:
                 if r is None:
                     continue
                 tipo, mtime, _v = self._nuvem_pedidos.pop(pid)
+                if not r.get("ok"):
+                    # Não tenta outra vez até o ficheiro voltar a mudar (ex.: servidor antigo sem conquistas)
+                    self.conta.estado_sinc()["mtimes"][tipo] = mtime
+                    self.conta.gravar()
                 if r.get("ok"):
                     sinc = self.conta.estado_sinc()
                     sinc["versoes"][tipo] = r["versao"]
@@ -380,7 +419,7 @@ class ContaMixin:
         if not sinc["ok"]:
             return
         mudados = [t for t in FICHEIROS_SAVE
-                   if ContaLocal.existe(t) and ContaLocal.mtime(t) > sinc["mtimes"].get(t, 0.0) + 0.5]
+                   if ContaLocal.existe(t) and ContaLocal.mtime(t) > sinc["mtimes"].get(t, 0.0) + 0.001]
         if not mudados:
             return
         self._nuvem_srv = Servidor(token=self.conta.token)

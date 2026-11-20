@@ -41,6 +41,8 @@ from repeticao import RepeticaoMixin
 from tutorial import TutorialMixin
 from conta import ContaMixin
 from conta_menu import BotaoConta
+from conquistas import ConquistasMixin
+from conquistas_menu import EcraConquistas, BotaoConquistas
 import comando
 
 DURACAO_PARTE = 60 * 5   # 5 minutos por parte
@@ -60,7 +62,7 @@ CAMINHO_DEFINICOES = os.path.join(PASTA_SAVES, "definicoes.json")
 
 
 class Game(OnlineMixin, FaltasMixin, FintasMixin, DoisJogadoresMixin, RepeticaoMixin, TutorialMixin,
-           ContaMixin):
+           ContaMixin, ConquistasMixin):
     def __init__(self):
         pygame.init()
         definicoes = self._ler_definicoes()
@@ -111,9 +113,11 @@ class Game(OnlineMixin, FaltasMixin, FintasMixin, DoisJogadoresMixin, RepeticaoM
         #          "carreira" (ecrã do campeonato) ou "jogo"
         self.estado         = "menu_principal"
         self._conta_iniciar()               # conta do jogador e progresso na nuvem (conta.py)
+        self._cq_iniciar()                  # conquistas (conquistas.py)
         self.menu_principal = MenuPrincipal(self.screen, self.equipa_casa_id, self.equipa_fora_id,
                                             arena=self.rink._surf)
         self.menu_principal.lista.botoes.append(BotaoConta(self.conta))
+        self.menu_principal.lista.botoes.append(BotaoConquistas(self.conquistas))
         self.menu           = TeamSelectMenu(self.screen, self.equipa_casa_id, self.equipa_fora_id)
         self.ecra_controlos = EcraControlos(self.screen)
         self.ecra_controlos.vol_efeitos = som.vol_efeitos
@@ -568,6 +572,20 @@ class Game(OnlineMixin, FaltasMixin, FintasMixin, DoisJogadoresMixin, RepeticaoM
                     self._abrir_definicoes("menu_principal")
                 elif acao == "conta":
                     self.abrir_conta()
+                elif acao == "conquistas":
+                    self.ecra_conquistas = EcraConquistas(self.screen, self.conquistas, arena=self.rink._surf,
+                                                          com_conta=self.conta.ligada)
+                    self.estado = "conquistas"
+                elif acao == "sair":
+                    self.running = False
+            return
+
+        if self.estado == "conquistas":
+            for event in pygame.event.get():
+                acao = self.ecra_conquistas.handle_event(event)
+                self._som_acao(acao)
+                if acao == "voltar":
+                    self.estado = "menu_principal"
                 elif acao == "sair":
                     self.running = False
             return
@@ -1025,6 +1043,7 @@ class Game(OnlineMixin, FaltasMixin, FintasMixin, DoisJogadoresMixin, RepeticaoM
             chave = {"golo": "golos", "defesa": "defesas", "bloqueado": "defesas"}.get(r, "fora")
             self.teste[chave] += 1
             self._teste_espera = 1.6
+        self._cq_golo_pov = r == "golo"     # para a conquista «stickada certeira»
         if r != "golo":
             self._rep_cortar()              # o lance da repetição recomeça depois da stickada
         if r == "bloqueado":
@@ -1251,6 +1270,7 @@ class Game(OnlineMixin, FaltasMixin, FintasMixin, DoisJogadoresMixin, RepeticaoM
         self._atualizar_publico()
         self._atualizar_canticos(dt)
         self._online_tick(dt)                  # mensagens da rede (só no jogo online)
+        self._cq_update(dt)                    # mensagem «conquista desbloqueada»
         if self.estado != "jogo":
             self._nuvem_tick(dt)                   # progresso das carreiras para a nuvem (conta.py)
         if self.estado == "online":
@@ -1258,6 +1278,9 @@ class Game(OnlineMixin, FaltasMixin, FintasMixin, DoisJogadoresMixin, RepeticaoM
             return
         if self.estado == "conta":
             self._conta_update(dt)
+            return
+        if self.estado == "conquistas":
+            self.ecra_conquistas.update(dt)
             return
         if self.online == "convidado" and self.estado == "jogo":
             self._update_convidado(dt)         # o convidado só mostra o que o anfitrião envia
@@ -1499,6 +1522,7 @@ class Game(OnlineMixin, FaltasMixin, FintasMixin, DoisJogadoresMixin, RepeticaoM
 
     def iniciar_partida(self, casa_id: str, fora_id: str, dificuldade: str = None):
         """Inicia uma partida completa com as equipas selecionadas no menu e nível de IA."""
+        self._cq_inicio_partida()          # golos deste jogo para o hat-trick
         self.equipa_casa_id = casa_id
         self.equipa_fora_id = fora_id
         if dificuldade:
@@ -1759,6 +1783,7 @@ class Game(OnlineMixin, FaltasMixin, FintasMixin, DoisJogadoresMixin, RepeticaoM
         self.fim_jogo = False
         self.ecra_campeonato = EcraCampeonato(self.screen, self.carreira, destaque,
                                               arena=self.rink._surf, aviso=aviso)
+        self._cq_epoca(self.carreira)          # época acabada: subida, campeão, Taça Europeia
         self.estado = "carreira"
 
     def simular_jogo_carreira(self):
@@ -2029,6 +2054,7 @@ class Game(OnlineMixin, FaltasMixin, FintasMixin, DoisJogadoresMixin, RepeticaoM
         self.menu_principal = MenuPrincipal(self.screen, self.equipa_casa_id, self.equipa_fora_id,
                                             arena=self.rink._surf)
         self.menu_principal.lista.botoes.append(BotaoConta(self.conta))   # botão da conta (canto)
+        self.menu_principal.lista.botoes.append(BotaoConquistas(self.conquistas))   # por baixo da engrenagem
 
     def _atualizar_equipamentos(self):
         """Recalcula os equipamentos das duas equipas e aplica-os aos jogadores."""
@@ -2095,6 +2121,8 @@ class Game(OnlineMixin, FaltasMixin, FintasMixin, DoisJogadoresMixin, RepeticaoM
         nome = marcador.nome if marcador is not None else None
         if self.modo_jogador:
             self._cj_golo(equipa, marcador)
+        self._cq_golo(equipa, marcador)        # conquistas (primeiro golo, hat-trick, roleta, stickada...)
+        self._cq_golo_pov = False
         decorrido = (self.parte - 1) * DURACAO_PARTE + (DURACAO_PARTE - max(0.0, self.tempo_restante))
         self.marcadores.append({"equipa": equipa, "nome": nome, "minuto": int(decorrido // 60) + 1})
         if equipa == "azul":
@@ -2198,6 +2226,7 @@ class Game(OnlineMixin, FaltasMixin, FintasMixin, DoisJogadoresMixin, RepeticaoM
             self.jogo_ativo = False
             self.fim_jogo   = True
             som.tocar("apito_final")
+            self._cq_fim_jogo()                # conquistas do fim do jogo (vitória, goleada, ...)
             self.ecra_fim   = EcraFimJogo(self.screen, modo_carreira=self.modo_carreira,
                                           jornada=self._jornada_carreira,
                                           jogador=self._resumo_jogo_cj() if self.modo_jogador else None,
@@ -2217,6 +2246,8 @@ class Game(OnlineMixin, FaltasMixin, FintasMixin, DoisJogadoresMixin, RepeticaoM
             self.ecra_online.draw()
         elif self.estado == "conta":
             self.ecra_conta.draw()
+        elif self.estado == "conquistas":
+            self.ecra_conquistas.draw()
         elif self.estado == "carreira_escolha":
             self.ecra_carreira.draw()
         elif self.estado == "teste_escolha":
@@ -2243,6 +2274,7 @@ class Game(OnlineMixin, FaltasMixin, FintasMixin, DoisJogadoresMixin, RepeticaoM
                 self.ecra_fim.draw(self)
                 if self.online:
                     self._desenhar_ranking_online(self.screen)   # pontos ganhos ou perdidos
+        self._cq_desenhar(self.screen)         # «conquista desbloqueada», por cima de tudo
         self._transicao()
         pygame.display.flip()
 

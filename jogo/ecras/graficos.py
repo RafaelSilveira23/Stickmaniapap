@@ -218,6 +218,15 @@ def icone(nome: str, tamanho: int, cor=(255, 255, 255)) -> pygame.Surface:
                 meia = math.sqrt(max(0.0, 0.44 ** 2 - (y - 0.5) ** 2)) * T
                 pygame.draw.line(s, c, (m - meia, T * y), (m + meia, T * y), w)
             pygame.draw.line(s, c, (m, T * 0.06), (m, T * 0.94), w)
+        elif nome == "cadeado":
+            # Cadeado fechado (conquistas por ganhar)
+            w = int(T * 0.10)
+            pygame.draw.arc(s, c, (T * 0.28, T * 0.08, T * 0.44, T * 0.52), 0, math.pi, w)
+            pygame.draw.line(s, c, (T * 0.28 + w / 2, T * 0.34), (T * 0.28 + w / 2, T * 0.46), w)
+            pygame.draw.line(s, c, (T * 0.72 - w / 2, T * 0.34), (T * 0.72 - w / 2, T * 0.46), w)
+            pygame.draw.rect(s, c, (T * 0.18, T * 0.44, T * 0.64, T * 0.46), border_radius=int(T * 0.08))
+            pygame.draw.circle(s, (0, 0, 0, 0), (m, T * 0.63), T * 0.07)
+            pygame.draw.rect(s, (0, 0, 0, 0), (m - T * 0.03, T * 0.63, T * 0.06, T * 0.14))
         elif nome == "sair":
             # Símbolo de "desligar"
             w = int(T * 0.11)

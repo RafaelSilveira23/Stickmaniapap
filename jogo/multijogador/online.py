@@ -189,6 +189,7 @@ class OnlineMixin:
             # Fim do jogo: os dois jogos enviam o resultado; se for igual, conta para o ranking
             self._servidor._enviar({"t": "resultado", "casa": self.golos_azul, "fora": self.golos_vermelho})
             self._resultado_enviado = True
+            self._cq_fim_online(self.golos_azul, self.golos_vermelho)   # conquistas (vitória online)
         if self.estado == "jogo" and self.remate_pov is not None:
             self._online_pov_tick(dt)
         if self.online == "anfitriao" and self.estado == "jogo":

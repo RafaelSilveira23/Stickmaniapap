@@ -5,7 +5,7 @@ Projeto PAP 2026/2027 de **Rafael da Hora Silveira** e **Vasco Andreia**
 
 StickMania é um jogo de hóquei em patins para Windows, feito em **Python** com **pygame-ce**: jogo rápido,
 modo carreira com duas divisões e Taça Europeia, carreira de jogador, jogo online com contas e ranking,
-dois jogadores no mesmo computador e um tutorial para quem começa.
+dois jogadores no mesmo computador, um tutorial para quem começa e 17 conquistas para ganhar.
 
 - **Site do jogo:** https://rafaelsilveira23.github.io/Stickmaniapap/
 - **Descarregar:** [StickMania-Instalar.exe](https://github.com/RafaelSilveira23/Stickmaniapap/raw/main/download/StickMania-Instalar.exe)
@@ -50,6 +50,7 @@ Também dá para jogar com um comando (Xbox, PlayStation ou compatível).
 | **Modos** | Jogo rápido, modo carreira (2 divisões, subidas e descidas, Taça Europeia, jogos simulados), carreira de jogador com a vida fora do rinque, modo teste, tutorial com 8 missões, dois jogadores no mesmo PC |
 | **Online** | Jogo aleatório, sala privada com código e desafios pela alcunha; contas (alcunha + palavra-passe), carreiras guardadas na nuvem e ranking com pontos |
 | **Apresentação** | Câmara em perspetiva como na televisão, marcador e estatísticas, estilo arcade, repetição dos golos em câmara lenta, sons e cânticos dos clubes criados no código |
+| **Conquistas** | 17 medalhas (primeiro golo, hat-trick, roleta que dá golo, stickada, goleada, vitória online, subida de divisão, campeão, Taça Europeia...), com mensagem ao ganhar e guardadas na nuvem com a conta |
 | **Clubes** | 19 clubes (1.ª e 2.ª divisão portuguesas e 4 espanhóis) com emblemas, planteis e equipamentos com as cores de cada um |
 
 ---
@@ -64,7 +65,7 @@ stickmaniapap/
 │   ├── settings.py        tamanhos, velocidades e cores
 │   ├── caminhos.py        onde está cada pasta (junta as subpastas ao Python)
 │   ├── partida/           o que acontece no rinque
-│   ├── modos/             modo carreira, carreira de jogador, tutorial, dois jogadores
+│   ├── modos/             modo carreira, carreira de jogador, tutorial, dois jogadores, conquistas
 │   ├── clubes/            equipas, planteis, emblemas e cores
 │   ├── ecras/             menus, painel do jogo e peças da interface
 │   ├── multijogador/      jogo online e contas
@@ -98,8 +99,10 @@ stickmaniapap/
 | `modos/` | `carreira.py`, `carreira_menu.py` | Modo carreira (base de dados SQLite, simulação, Taça Europeia) |
 | | `carreira_jogador.py`, `carreira_jogador_menu.py`, `vida.py` | Carreira de jogador e vida do jogador |
 | | `tutorial.py`, `dois_jogadores.py` | Tutorial com missões e dois jogadores no mesmo PC |
+| | `conquistas.py` | Conquistas: a lista, onde se ganham e a mensagem «conquista desbloqueada» |
 | `clubes/` | `team.py`, `cores.py` | Clubes, planteis, emblemas e cores dos equipamentos |
 | `ecras/` | `menu.py`, `ui.py`, `componentes.py`, `graficos.py`, `fontes.py` | Menus, painel do jogo, botões, ícones e fontes |
+| | `conquistas_menu.py` | Ecrã das conquistas e o botão da taça no menu principal |
 | `multijogador/` | `rede.py`, `online.py`, `online_menu.py` | Ligação ao servidor e jogo online |
 | | `conta.py`, `conta_menu.py` | Conta do jogador, progresso na nuvem e ranking |
 | `som/` | `sons.py`, `canticos.py` | Sons criados por síntese e cânticos dos clubes |
@@ -121,6 +124,8 @@ importa os outros só pelo nome (por exemplo `import comando`).
   base de dados Postgres (Neon). Não se pede email.
 - **Carreiras**: guardadas em SQLite no PC (`jogo/saves`, ou `%APPDATA%\StickMania` no programa instalado)
   e, com conta, também na nuvem.
+- **Conquistas**: guardadas em `conquistas.json` na mesma pasta e, com conta, na nuvem. Nunca se substituem:
+  o jogo e o servidor juntam as do PC com as da nuvem, por isso nenhuma se perde.
 
 ---
 

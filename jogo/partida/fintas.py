@@ -115,6 +115,7 @@ class FintasMixin:
                 self._pop_finta("DESARME!", j, (255, 150, 70))
                 return
         if enganou:
+            j._roleta_ok_ms = pygame.time.get_ticks()     # para a conquista «roleta mágica»
             j._cooldown_desarme = max(j._cooldown_desarme, 0.5)
             self._pop_finta("ROLETA!", j, (255, 140, 200))
             som.tocar("publico_uh", 0.55)

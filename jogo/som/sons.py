@@ -235,6 +235,13 @@ def sintetizar_ui(tipo: str):
     if tipo == "mover":
         n = _n(0.035)
         return [0.35 * math.sin(2 * math.pi * 2200 * i / TAXA) * _decai(i / TAXA, 0.008) for i in range(n)]
+    if tipo == "conquista":
+        # Arpejo a subir (dó, mi, sol, dó) com a última nota mais comprida
+        out = []
+        for f, d in ((784, 0.07), (988, 0.07), (1175, 0.07), (1568, 0.30)):
+            n = _n(d)
+            out += [0.45 * math.sin(2 * math.pi * f * i / TAXA) * _envelope(i, n, 0.003, d * 0.7) for i in range(n)]
+        return out
     notas = (880, 1320) if tipo == "confirmar" else (1100, 740)
     out = []
     for f in notas:
@@ -263,6 +270,7 @@ def _receitas():
         "ui_mover": lambda: sintetizar_ui("mover"),
         "ui_confirmar": lambda: sintetizar_ui("confirmar"),
         "ui_voltar": lambda: sintetizar_ui("voltar"),
+        "conquista": lambda: sintetizar_ui("conquista"),
     }
 
 

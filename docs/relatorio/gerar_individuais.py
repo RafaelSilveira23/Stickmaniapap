@@ -61,6 +61,7 @@ DONO_32 = {
     "Menos atraso no online e escolha das equipas": R, "Ecrã da conta mais simples": V,
     "Imagem nítida em ecrãs com zoom": R,
     "Tutorial obrigatório para contas novas": R,
+    "Conquistas": V,
     "Gráficos": R,
     "Sons": V, "Sons no jogo": V, "Cânticos dos clubes": V, "Cânticos no jogo": V,
     "Estilo arcade": R, "Tempo de jogo e ecrã a tremer": R,

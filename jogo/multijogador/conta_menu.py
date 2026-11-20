@@ -19,7 +19,7 @@ from settings import WIDTH, HEIGHT
 from componentes import texto, fonte, ListaBotoes, painel_vidro, COR_DESTAQUE, COR_TEXTO, COR_TEXTO_SUAVE
 from graficos import icone, luz
 from menu import BotaoMenu, _fundo_arena
-from conta import FICHEIROS_SAVE, NOMES_SAVE, ContaLocal, data_curta
+from conta import TIPOS_CARREIRA, NOMES_SAVE, ContaLocal, data_curta
 
 COR_CONTA = (255, 170, 60)
 
@@ -489,7 +489,7 @@ class EcraConta:
                   (x, caixa.top + 114), ancora="midleft", negrito=False)
         texto(s, "PROGRESSO DAS CARREIRAS", 15, COR_DESTAQUE, (x, caixa.top + 160), ancora="midleft")
         sinc = self.conta.estado_sinc() if self.conta and self.conta.ligada else {"versoes": {}}
-        for i, tipo in enumerate(FICHEIROS_SAVE):
+        for i, tipo in enumerate(TIPOS_CARREIRA):
             y = caixa.top + 196 + i * 72
             texto(s, NOMES_SAVE[tipo], 16, COR_TEXTO, (x, y), ancora="midleft")
             local = data_curta(ContaLocal.mtime(tipo)) if ContaLocal.existe(tipo) else "sem progresso"

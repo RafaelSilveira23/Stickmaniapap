@@ -265,6 +265,7 @@ class TutorialMixin:
         som.tocar("golo", 0.6)
         if self._tut_obrigatorio():
             self.conta.tutorial_feito()          # a conta nova já pode jogar tudo
+        self.cq_ganhar("tutorial")
 
     def _tut_evento(self, event) -> bool:
         """Teclas próprias do tutorial. True se tratou o evento."""

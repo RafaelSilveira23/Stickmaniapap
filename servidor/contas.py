@@ -22,18 +22,21 @@ como no xadrez (sistema Elo): ganhar a quem tem mais pontos dá mais, perder com
 mais.
 """
 import asyncio
+import base64
 import hashlib
 import hmac
+import json
 import os
 import re
 import secrets
 import time
+import zlib
 
 ITERACOES = 200_000
 PONTOS_INICIAIS = 1000
 K_ELO = 32
 MAX_SAVE = 1_500_000            # bytes do save (comprimido, em base64)
-TIPOS_SAVE = ("carreira", "carreira_jogador")
+TIPOS_SAVE = ("carreira", "carreira_jogador", "conquistas")
 LETRAS_REC = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 
 _ESQUEMA = [
@@ -119,6 +122,30 @@ def validar_alcunha(alcunha: str) -> str:
 def validar_senha(senha: str):
     if not 6 <= len(str(senha)) <= 64:
         raise ErroConta("A palavra-passe tem de ter entre 6 e 64 caracteres.")
+
+
+def juntar_conquistas(antigo: str, novo: str) -> str:
+    """
+    As conquistas nunca se substituem: junta as que já estavam na nuvem com as que chegaram
+    (fica a data mais antiga de cada uma e o maior valor de cada contador).
+    """
+    def ler(dados):
+        d = json.loads(zlib.decompress(base64.b64decode(dados)))
+        return dict(d.get("ganhas", {})), dict(d.get("contadores", {}))
+    try:
+        g_novo, c_novo = ler(novo)
+    except (ValueError, TypeError, zlib.error, AttributeError):
+        raise ErroConta("As conquistas não vieram bem.")
+    try:
+        g_ant, c_ant = ler(antigo)
+    except (ValueError, TypeError, zlib.error, AttributeError):
+        return novo
+    for k, t in g_ant.items():
+        g_novo[k] = min(t, g_novo.get(k, t))
+    for k, v in c_ant.items():
+        c_novo[k] = max(v, c_novo.get(k, v))
+    bruto = json.dumps({"ganhas": g_novo, "contadores": c_novo}).encode("utf-8")
+    return base64.b64encode(zlib.compress(bruto, 9)).decode("ascii")
 
 
 def elo(pontos_a: int, pontos_b: int, resultado_a: float) -> int:
@@ -288,7 +315,10 @@ class Contas:
         if not isinstance(dados, str) or len(dados) > MAX_SAVE:
             raise ErroConta("O progresso é grande demais para guardar.")
         versao = int(versao)
-        existe = await self.bd.um("SELECT versao FROM progresso WHERE conta_id = ? AND tipo = ?", conta_id, tipo)
+        existe = await self.bd.um("SELECT versao, dados FROM progresso WHERE conta_id = ? AND tipo = ?",
+                                  conta_id, tipo)
+        if tipo == "conquistas":
+            dados = juntar_conquistas(existe["dados"] if existe else "", dados)
         if existe is None:
             await self.bd.executar("INSERT INTO progresso (conta_id, tipo, dados, versao) VALUES (?, ?, ?, ?)",
                                    conta_id, tipo, dados, versao)
