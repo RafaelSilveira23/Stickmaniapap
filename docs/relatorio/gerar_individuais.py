@@ -423,6 +423,12 @@ def gerar(aluno):
     concl = procurar(d, "O projeto permitiu-nos aplicar")
     novo_paragrafo(modelo_txt, concl._p, ["Contributo individual. ", CONTRIBUTO[aluno]])
 
+    if aluno == R:
+        # O relatório do Rafael segue o modelo de software da escola (pedido da professora)
+        sys.path.insert(0, PASTA)
+        from rafael_modelo_software import aplicar
+        aplicar(d)
+
     renumerar(d, "Figura")
     renumerar(d, "Tabela")
     caminho = os.path.join(PASTA, a["ficheiro"] + ".docx")
