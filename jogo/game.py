@@ -555,6 +555,8 @@ class Game(OnlineMixin, FaltasMixin, FintasMixin, DoisJogadoresMixin, RepeticaoM
             for event in pygame.event.get():
                 if self._convite_evento(event):
                     continue                     # convite para o tutorial (1.ª vez)
+                if self._online_convite_evento(event):
+                    continue                     # um amigo desafiou-nos (online.py)
                 acao = self.menu_principal.handle_event(event)
                 self._som_acao(acao)
                 if acao == "jogar":
@@ -1271,6 +1273,7 @@ class Game(OnlineMixin, FaltasMixin, FintasMixin, DoisJogadoresMixin, RepeticaoM
         self._atualizar_canticos(dt)
         self._online_tick(dt)                  # mensagens da rede (só no jogo online)
         self._cq_update(dt)                    # mensagem «conquista desbloqueada»
+        self._online_presenca(dt)              # com conta: fica ligado para receber desafios
         if self._online_parado():
             if self.pausado:
                 self.menu_pausa.update(dt)
@@ -2244,6 +2247,7 @@ class Game(OnlineMixin, FaltasMixin, FintasMixin, DoisJogadoresMixin, RepeticaoM
         if self.estado == "menu_principal":
             self.menu_principal.draw()
             self._desenhar_convite()
+            self._online_desenhar_convite_menu()   # desafio de um amigo
         elif self.estado == "menu_selecao":
             self.menu.draw()
         elif self.estado == "online":

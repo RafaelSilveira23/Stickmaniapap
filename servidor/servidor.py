@@ -35,7 +35,7 @@ from websockets.exceptions import ConnectionClosed
 
 from contas import BaseDados, Contas, ErroConta, TIPOS_SAVE
 
-VERSAO = 4                  # tem de ser igual à VERSAO do jogo (jogo/multijogador/rede.py)
+VERSAO = 5                  # tem de ser igual à VERSAO do jogo (jogo/multijogador/rede.py)
 LETRAS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"     # sem O/0 e I/1, que se confundem
 MAX_MENSAGEM = 2 * 1024 * 1024    # o progresso das carreiras vai numa mensagem só
 MAX_FALHAS = 5                    # tentativas erradas de entrar antes de ter de esperar
@@ -64,6 +64,7 @@ class Cliente:
         self.chave = None            # chave secreta para voltar ao jogo se a ligação cair
         self.caido_desde = None      # a ligação caiu a meio do jogo (à espera que volte)
         self.substituido = False     # voltou a ligar: esta ligação antiga já não conta
+        self.presenca = False        # é a ligação do jogo aberto (recebe desafios); as da nuvem não são
 
     async def enviar(self, msg):
         try:
@@ -201,6 +202,8 @@ class Servidor:
         if t == "jogo":
             if c.parceiro is not None:
                 await c.parceiro.enviar({"t": "jogo", "m": msg.get("m")})
+        elif t == "presenca":
+            c.presenca = True                    # esta ligação é a do jogo: os desafios vêm para aqui
         elif t == "eco":
             await c.enviar({"t": "eco"})         # o jogo usa-o para saber se a ligação dele está viva
         elif t == "retomar":
@@ -337,16 +340,23 @@ class Servidor:
         log.info("jogo a contar para o ranking: %d-%d", casa, fora)
 
     async def _desafiar(self, c: Cliente, alcunha: str):
+        """
+        O convite vai só para as ligações do JOGO do amigo (as que disseram "presenca"). As ligações
+        curtas que o jogo abre para enviar o progresso para a nuvem também têm a conta, mas ninguém
+        lá vê convites: antes, o convite podia ir parar a uma delas e perdia-se.
+        """
         alvo_min = " ".join(alcunha.split()).lower()
-        alvo = next((o for o in self.clientes if o.pronto and o.alcunha and o.alcunha.lower() == alvo_min), None)
-        if alvo is None:
-            raise ErroConta(f"{alcunha} não está online (tem de estar no ecrã JOGAR ONLINE).")
-        if alvo is c:
+        if c.alcunha and c.alcunha.lower() == alvo_min:
             raise ErroConta("Não te podes desafiar a ti próprio.")
-        if alvo.estado == "jogo":
-            raise ErroConta(f"{alvo.alcunha} está a meio de um jogo.")
-        alvo.convites.add(c)
-        await alvo.enviar({"t": "convite", "de": c.alcunha})
+        alvos = [o for o in self.clientes if o.pronto and o.presenca and o is not c
+                 and o.alcunha and o.alcunha.lower() == alvo_min]
+        if not alvos:
+            raise ErroConta(f"{alcunha} não tem o jogo aberto agora (tem de ter o jogo aberto e a conta ligada).")
+        if any(o.estado == "jogo" for o in alvos):
+            raise ErroConta(f"{alvos[0].alcunha} está a meio de um jogo.")
+        for alvo in alvos:
+            alvo.convites.add(c)
+            await alvo.enviar({"t": "convite", "de": c.alcunha})
 
     async def _responder_desafio(self, c: Cliente, de: str, aceita: bool):
         de_min = " ".join(de.split()).lower()

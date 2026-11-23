@@ -33,7 +33,7 @@ import time
 # Endereço do servidor. Para testar com o servidor no próprio PC:
 #   set STICKMANIA_SERVIDOR=ws://localhost:8765
 SERVIDOR = os.environ.get("STICKMANIA_SERVIDOR", "wss://stickmania-eu.onrender.com")
-VERSAO = 4                  # tem de ser igual à do servidor e à do outro jogo
+VERSAO = 5                  # tem de ser igual à do servidor e à do outro jogo
 TEMPO_LIGAR = 90.0          # o servidor gratuito do Render "adormece" e pode demorar ~1 min a acordar
 
 
@@ -82,7 +82,7 @@ class Servidor:
     online / a_jogar / a_procurar: contagens que o servidor envia de 2 em 2 segundos.
     """
 
-    def __init__(self, endereco: str = None, token: str = None, retomar: str = None):
+    def __init__(self, endereco: str = None, token: str = None, retomar: str = None, presenca: bool = False):
         self.endereco = endereco or SERVIDOR
         self.estado = "a_ligar"
         self.erro = ""
@@ -109,6 +109,9 @@ class Servidor:
         self.retomado = None         # None à espera; True voltou ao jogo; False o jogo já não existe
         self.t_rx = time.perf_counter()   # quando chegou a última mensagem do servidor
         self._enviar({"t": "ola", "versao": VERSAO})
+        if presenca:
+            # É a ligação do jogo aberto (não uma ligação curta da nuvem): os desafios vêm para aqui
+            self._enviar({"t": "presenca"})
         if token:
             self._enviar({"t": "conta_sessao", "token": token, "pedido": "sessao"})
         if retomar:

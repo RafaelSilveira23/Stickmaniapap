@@ -54,7 +54,7 @@ from ai import AgentIA
 from ball import REMATE_FORCA, SPIN_RATE
 from carreira import FORCA_EQUIPAS
 from menu import MenuPausa, EcraFimJogo
-from online_menu import EcraOnline
+from online_menu import EcraOnline, botoes_convite, desenhar_convite
 from rede import Servidor, VERSAO
 from remate_pov import MEIA_BOCA, RematePOV, decisao_para_rede, decisao_da_rede
 from sons import som
@@ -123,10 +123,65 @@ class OnlineMixin:
         if self._servidor is None or self._servidor.estado == "erro":
             if self._servidor is not None:
                 self._servidor.fechar()
-            self._servidor = Servidor(token=self.conta.token if self.conta.ligada else None)
+            self._servidor = Servidor(token=self.conta.token if self.conta.ligada else None, presenca=True)
             if self.ecra_online is not None:
                 self.ecra_online.servidor = self._servidor
         return self._servidor
+
+    # ------------------------------------------------------------------ desafios (convites)
+    def _online_presenca(self, dt: float):
+        """
+        Com a conta aberta, o jogo fica ligado ao servidor nos menus, para os desafios dos amigos
+        chegarem mesmo fora do ecrã JOGAR ONLINE (o convite aparece no menu principal).
+        """
+        if not self.conta.ligada or self.online or self.estado in ("jogo", "menu_selecao"):
+            return
+        self._presenca_t = getattr(self, "_presenca_t", 99.0) + dt
+        srv = self._servidor
+        if srv is None or (srv.estado == "erro" and self._presenca_t > 15.0):
+            self._presenca_t = 0.0
+            self._online_servidor()
+
+    def _online_convite_ativo(self) -> bool:
+        srv = self._servidor
+        return (self.estado == "menu_principal" and srv is not None and bool(srv.convites)
+                and self.conta.ligada and not self._convite_ativo())
+
+    def _online_responder_convite(self, nome: str, aceita: bool):
+        srv = self._online_servidor()
+        srv._enviar({"t": "aceitar" if aceita else "recusar", "de": nome})
+        if nome in srv.convites:
+            srv.convites.remove(nome)
+        if aceita:
+            if self.estado != "online":
+                self.abrir_online()
+            self.ecra_online.mudar_fase("a_ligar")
+
+    def _online_convite_evento(self, event) -> bool:
+        """Convite no menu principal: ENTER/ACEITAR aceita, ESC/RECUSAR recusa. True se tratou o evento."""
+        if not self._online_convite_ativo():
+            return False
+        nome = self._servidor.convites[0]
+        sim, nao = botoes_convite()
+        if event.type == pygame.KEYDOWN:
+            if event.key in (pygame.K_RETURN, pygame.K_KP_ENTER, pygame.K_SPACE):
+                som.ui("confirmar")
+                self._online_responder_convite(nome, True)
+            elif event.key in (pygame.K_ESCAPE, pygame.K_BACKSPACE):
+                som.ui("voltar")
+                self._online_responder_convite(nome, False)
+            return True
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            if sim.collidepoint(event.pos):
+                self._online_responder_convite(nome, True)
+            elif nao.collidepoint(event.pos):
+                self._online_responder_convite(nome, False)
+            return True
+        return event.type != pygame.QUIT
+
+    def _online_desenhar_convite_menu(self):
+        if self._online_convite_ativo():
+            desenhar_convite(self.screen, self._servidor.convites[0])
 
     def _online_eventos_ecra(self):
         ecra = self.ecra_online
@@ -161,12 +216,7 @@ class OnlineMixin:
                 ecra.erro = ""
                 ecra.mudar_fase("desafio")
             elif isinstance(acao, tuple) and acao[0] in ("aceitar", "recusar"):
-                srv = self._online_servidor()
-                srv._enviar({"t": acao[0], "de": acao[1]})
-                if acao[1] in srv.convites:
-                    srv.convites.remove(acao[1])
-                if acao[0] == "aceitar":
-                    ecra.mudar_fase("a_ligar")
+                self._online_responder_convite(acao[1], acao[0] == "aceitar")
             elif isinstance(acao, tuple) and acao[0] == "ligar":
                 codigo = acao[1]
                 if len(codigo) != 4:
@@ -376,7 +426,8 @@ class OnlineMixin:
         if s is None:
             if agora >= r["prox"]:
                 r["tent"] += 1
-                r["srv"] = Servidor(token=self.conta.token if self.conta.ligada else None, retomar=r["chave"])
+                r["srv"] = Servidor(token=self.conta.token if self.conta.ligada else None, retomar=r["chave"],
+                                    presenca=True)
             return
         if s.retomado:
             # Voltámos ao mesmo jogo: o anfitrião continua a simulação e o convidado volta a recebê-la

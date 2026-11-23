@@ -262,27 +262,12 @@ class EcraOnline:
                 pygame.draw.rect(s, COR_ONLINE, (r.centerx - 18, r.bottom - 26, 36, 5), border_radius=2)
 
     def _botoes_convite(self):
-        sim = pygame.Rect(0, 0, 220, 50)
-        sim.center = (WIDTH // 2 - 125, 400)
-        return sim, sim.move(250, 0)
+        return botoes_convite()
 
     def _desenhar_convite(self, s, nome: str):
-        sombra = pygame.Surface(s.get_size(), pygame.SRCALPHA)
-        sombra.fill((0, 0, 0, 150))
-        s.blit(sombra, (0, 0))
-        caixa = pygame.Rect(0, 0, 580, 220)
-        caixa.center = (WIDTH // 2, 340)
-        pygame.draw.rect(s, (12, 20, 44), caixa, border_radius=16)
-        pygame.draw.rect(s, (255, 120, 160), caixa, 2, border_radius=16)
-        texto(s, f"{nome} desafia-te para um jogo!", 26, (255, 170, 200), (WIDTH // 2, caixa.top + 46), sombra=True)
-        texto(s, "Conta para o ranking. Cada um escolhe a sua equipa.", 14, COR_TEXTO_SUAVE,
-              (WIDTH // 2, caixa.top + 84), negrito=False)
-        mpos = pygame.mouse.get_pos()
-        for r, txt, cor in zip(self._botoes_convite(), ("ACEITAR", "RECUSAR"), ((40, 190, 100), (230, 70, 70))):
-            pygame.draw.rect(s, cor if r.collidepoint(mpos) or txt == "ACEITAR" else (30, 40, 70), r, border_radius=12)
-            pygame.draw.rect(s, (255, 255, 255), r, 2, border_radius=12)
-            texto(s, txt, 18, (255, 255, 255), r.center)
-        texto(s, "ENTER aceitar     ESC recusar", 12, (150, 170, 215), (WIDTH // 2, caixa.bottom - 18), negrito=False)
+        desenhar_convite(s, nome)
+
+    # ------------------------------------------------------------------ fases
 
     # ------------------------------------------------------------------ fases
     def _desenhar_inicio(self, s, caixa):
@@ -291,7 +276,7 @@ class EcraOnline:
 
     def _desenhar_desafiar(self, s, caixa):
         texto(s, "Alcunha do teu amigo", 22, COR_DESTAQUE, (WIDTH // 2, caixa.top + 42))
-        texto(s, "O teu amigo tem de ter conta e estar no ecrã JOGAR ONLINE.", 14, COR_TEXTO_SUAVE,
+        texto(s, "O teu amigo tem de ter conta e o jogo aberto (o convite aparece-lhe no menu).", 14, COR_TEXTO_SUAVE,
               (WIDTH // 2, caixa.top + 78), negrito=False)
         r = pygame.Rect(0, 0, 440, 64)
         r.center = (WIDTH // 2, caixa.top + 170)
@@ -365,3 +350,30 @@ class EcraOnline:
                   (WIDTH // 2, caixa.top + 214))
         texto(s, "Vais jogar com a equipa de fora, que começa do lado esquerdo do campo.", 14, COR_TEXTO_SUAVE,
               (WIDTH // 2, caixa.top + 250), negrito=False)
+
+
+# ---------------------------------------------------------------------- convite de um amigo
+def botoes_convite():
+    sim = pygame.Rect(0, 0, 220, 50)
+    sim.center = (WIDTH // 2 - 125, 400)
+    return sim, sim.move(250, 0)
+
+
+def desenhar_convite(s, nome: str):
+    """Janela «X desafia-te para um jogo!» (no ecrã JOGAR ONLINE e no menu principal)."""
+    sombra = pygame.Surface(s.get_size(), pygame.SRCALPHA)
+    sombra.fill((0, 0, 0, 150))
+    s.blit(sombra, (0, 0))
+    caixa = pygame.Rect(0, 0, 580, 220)
+    caixa.center = (WIDTH // 2, 340)
+    pygame.draw.rect(s, (12, 20, 44), caixa, border_radius=16)
+    pygame.draw.rect(s, (255, 120, 160), caixa, 2, border_radius=16)
+    texto(s, f"{nome} desafia-te para um jogo!", 26, (255, 170, 200), (WIDTH // 2, caixa.top + 46), sombra=True)
+    texto(s, "Conta para o ranking. Cada um escolhe a sua equipa.", 14, COR_TEXTO_SUAVE,
+          (WIDTH // 2, caixa.top + 84), negrito=False)
+    mpos = pygame.mouse.get_pos()
+    for r, txt, cor in zip(botoes_convite(), ("ACEITAR", "RECUSAR"), ((40, 190, 100), (230, 70, 70))):
+        pygame.draw.rect(s, cor if r.collidepoint(mpos) or txt == "ACEITAR" else (30, 40, 70), r, border_radius=12)
+        pygame.draw.rect(s, (255, 255, 255), r, 2, border_radius=12)
+        texto(s, txt, 18, (255, 255, 255), r.center)
+    texto(s, "ENTER aceitar     ESC recusar", 12, (150, 170, 215), (WIDTH // 2, caixa.bottom - 18), negrito=False)

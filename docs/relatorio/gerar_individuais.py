@@ -62,7 +62,7 @@ DONO_32 = {
     "Imagem nítida em ecrãs com zoom": R,
     "Tutorial obrigatório para contas novas": R,
     "Conquistas": V,
-    "Voltar a ligar no jogo online": R,
+    "Voltar a ligar no jogo online": R, "Desafios que não chegavam": R,
     "Gráficos": R,
     "Sons": V, "Sons no jogo": V, "Cânticos dos clubes": V, "Cânticos no jogo": V,
     "Estilo arcade": R, "Tempo de jogo e ecrã a tremer": R,
