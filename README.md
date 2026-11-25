@@ -4,7 +4,8 @@ Projeto PAP 2026/2027 de **Rafael da Hora Silveira** e **Vasco Andreia**
 (Curso Profissional de Técnico de Gestão e Programação de Sistemas Informáticos).
 
 StickMania é um jogo de hóquei em patins para Windows, feito em **Python** com **pygame-ce**: jogo rápido,
-modo carreira com duas divisões e Taça Europeia, carreira de jogador, jogo online com contas e ranking,
+modo carreira com duas divisões e Taça Europeia, carreira de jogador, a Equipa de Sonho (fantasy online com
+os jogos reais do campeonato), jogo online com contas e ranking,
 dois jogadores no mesmo computador, um tutorial para quem começa e 17 conquistas para ganhar.
 
 - **Site do jogo:** https://rafaelsilveira23.github.io/Stickmaniapap/
@@ -47,7 +48,7 @@ Também dá para jogar com um comando (Xbox, PlayStation ou compatível).
 | | |
 |---|---|
 | **Partida** | Física da bola e dos jogadores, IA com 3 níveis, guarda-redes que sai da baliza e se atira à bola, faltas com livres, penáltis, livres diretos e cartões, fintas e roleta, remate na primeira pessoa (stickada) |
-| **Modos** | Jogo rápido, modo carreira (2 divisões, subidas e descidas, Taça Europeia, jogos simulados), carreira de jogador com a vida fora do rinque, modo teste, tutorial com 8 missões, dois jogadores no mesmo PC |
+| **Modos** | Jogo rápido, modo carreira (2 divisões, subidas e descidas, Taça Europeia, jogos simulados), carreira de jogador com a vida fora do rinque, Equipa de Sonho (fantasy online: os jogadores reais do Campeonato Placard ganham pontos com os jogos verdadeiros, lidos do portal da Federação; ligas privadas com código, leilões diários, cláusulas e propostas), modo teste, tutorial com 8 missões, dois jogadores no mesmo PC |
 | **Online** | Jogo aleatório, sala privada com código e desafios pela alcunha; contas (alcunha + palavra-passe), carreiras guardadas na nuvem e ranking com pontos |
 | **Apresentação** | Câmara em perspetiva como na televisão, marcador e estatísticas, estilo arcade, repetição dos golos em câmara lenta, sons e cânticos dos clubes criados no código |
 | **Conquistas** | 17 medalhas (primeiro golo, hat-trick, roleta que dá golo, stickada, goleada, vitória online, subida de divisão, campeão, Taça Europeia...), com mensagem ao ganhar e guardadas na nuvem com a conta |
@@ -65,7 +66,7 @@ stickmaniapap/
 │   ├── settings.py        tamanhos, velocidades e cores
 │   ├── caminhos.py        onde está cada pasta (junta as subpastas ao Python)
 │   ├── partida/           o que acontece no rinque
-│   ├── modos/             modo carreira, carreira de jogador, tutorial, dois jogadores, conquistas
+│   ├── modos/             modo carreira, carreira de jogador, Equipa de Sonho, tutorial, dois jogadores, conquistas
 │   ├── clubes/            equipas, planteis, emblemas e cores
 │   ├── ecras/             menus, painel do jogo e peças da interface
 │   ├── multijogador/      jogo online e contas
@@ -98,6 +99,7 @@ stickmaniapap/
 | | `efeitos.py`, `repeticao.py`, `comando.py` | Estilo arcade, repetição dos golos e comando |
 | `modos/` | `carreira.py`, `carreira_menu.py` | Modo carreira (base de dados SQLite, simulação, Taça Europeia) |
 | | `carreira_jogador.py`, `carreira_jogador_menu.py`, `vida.py` | Carreira de jogador e vida do jogador |
+| | `sonho_menu.py` | Equipa de Sonho: ecrãs das ligas de fantasia (os dados e as regras estão no servidor) |
 | | `tutorial.py`, `dois_jogadores.py` | Tutorial com missões e dois jogadores no mesmo PC |
 | | `conquistas.py` | Conquistas: a lista, onde se ganham e a mensagem «conquista desbloqueada» |
 | `clubes/` | `team.py`, `cores.py` | Clubes, planteis, emblemas e cores dos equipamentos |
@@ -126,6 +128,9 @@ importa os outros só pelo nome (por exemplo `import comando`).
   base de dados Postgres (Neon). Não se pede email.
 - **Carreiras**: guardadas em SQLite no PC (`jogo/saves`, ou `%APPDATA%\StickMania` no programa instalado)
   e, com conta, também na nuvem.
+- **Equipa de Sonho**: as ligas ficam no servidor (é preciso conta). O servidor lê os jogos reais do portal da
+  Federação (`servidor/fpp.py`) e trata das ligas, leilões e cláusulas (`servidor/liga_fantasy.py`). A FPP não
+  diz quem é guarda-redes: a lista está em `servidor/guarda_redes.json` (os marcados com «verificar» convém confirmar).
 - **Conquistas**: guardadas em `conquistas.json` na mesma pasta e, com conta, na nuvem. Nunca se substituem:
   o jogo e o servidor juntam as do PC com as da nuvem, por isso nenhuma se perde.
 
@@ -149,7 +154,7 @@ importa os outros só pelo nome (por exemplo `import comando`).
 | Quem | Partes |
 |---|---|
 | **Rafael da Hora Silveira** | Física da bola e dos jogadores, faltas e cartões, fintas, guarda-redes, gráficos e câmara, estilo arcade e repetição dos golos, remate na primeira pessoa e modo teste, comando e dois jogadores, jogo online, servidor e contas, aplicação para Windows e site |
-| **Vasco Andreia** | Inteligência artificial, modo carreira e base de dados, menus, interface e tutorial, sons e cânticos, carreira de jogador e vida do jogador |
+| **Vasco Andreia** | Inteligência artificial, modo carreira e base de dados, menus, interface e tutorial, sons e cânticos, carreira de jogador e vida do jogador, Equipa de Sonho |
 | **Os dois** | Ciclo principal do jogo, análise, testes e relatório |
 
 O pormenor está na secção 5.4 de cada relatório individual e no diagrama de Gantt ([docs/GANTT.md](docs/GANTT.md)).

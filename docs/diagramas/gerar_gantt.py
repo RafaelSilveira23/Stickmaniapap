@@ -87,6 +87,7 @@ TAREFAS = [
     ("", "Conquistas (medalhas, ecrã e nuvem)", date(2027, 7, 13), date(2027, 7, 19), "Concluído", VASCO),
     ("", "Online: voltar a ligar quando a internet falha", date(2027, 7, 20), date(2027, 7, 26), "Concluído", RAFAEL),
     ("", "Correção: desafios pela alcunha", date(2027, 7, 27), date(2027, 7, 28), "Concluído", RAFAEL),
+    ("", "Equipa de Sonho: fantasy com os jogos reais", date(2027, 7, 29), date(2027, 8, 4), "Concluído", VASCO),
 
     ("Novas funcionalidades", None, None, None, None, None),
     ("", "Narrador e conquistas", date(2026, 11, 16), date(2026, 12, 31), "Planeado", DOIS),

@@ -43,6 +43,7 @@ from conta import ContaMixin
 from conta_menu import BotaoConta
 from conquistas import ConquistasMixin
 from conquistas_menu import EcraConquistas, BotaoConquistas
+from sonho_menu import SonhoMixin
 import comando
 
 DURACAO_PARTE = 60 * 5   # 5 minutos por parte
@@ -62,7 +63,7 @@ CAMINHO_DEFINICOES = os.path.join(PASTA_SAVES, "definicoes.json")
 
 
 class Game(OnlineMixin, FaltasMixin, FintasMixin, DoisJogadoresMixin, RepeticaoMixin, TutorialMixin,
-           ContaMixin, ConquistasMixin):
+           ContaMixin, ConquistasMixin, SonhoMixin):
     def __init__(self):
         pygame.init()
         definicoes = self._ler_definicoes()
@@ -114,6 +115,7 @@ class Game(OnlineMixin, FaltasMixin, FintasMixin, DoisJogadoresMixin, RepeticaoM
         self.estado         = "menu_principal"
         self._conta_iniciar()               # conta do jogador e progresso na nuvem (conta.py)
         self._cq_iniciar()                  # conquistas (conquistas.py)
+        self._sonho_iniciar()               # modo Equipa de Sonho (sonho_menu.py)
         self.menu_principal = MenuPrincipal(self.screen, self.equipa_casa_id, self.equipa_fora_id,
                                             arena=self.rink._surf)
         self.menu_principal.lista.botoes.append(BotaoConta(self.conta))
@@ -567,6 +569,8 @@ class Game(OnlineMixin, FaltasMixin, FintasMixin, DoisJogadoresMixin, RepeticaoM
                     self.abrir_escolha_carreira()
                 elif acao == "carreira_jogador":
                     self.abrir_carreira_jogador()
+                elif acao == "sonho":
+                    self.abrir_sonho()
                 elif acao == "teste":
                     self.ecra_teste = EcraEscolhaTeste(self.screen, arena=self.rink._surf)
                     self.estado = "teste_escolha"
@@ -642,6 +646,10 @@ class Game(OnlineMixin, FaltasMixin, FintasMixin, DoisJogadoresMixin, RepeticaoM
                     self.estado = "jogo" if self._origem_controlos == "pausa" else "menu_principal"
                 elif acao == "sair":
                     self.running = False
+            return
+
+        if self.estado in ("sonho", "sonho_ligas"):
+            self._sonho_eventos()                  # Equipa de Sonho (sonho_menu.py)
             return
 
         if self.estado == "carreira_escolha":
@@ -1300,6 +1308,9 @@ class Game(OnlineMixin, FaltasMixin, FintasMixin, DoisJogadoresMixin, RepeticaoM
             return
         if self.estado == "menu_selecao":
             self.menu.update(dt)
+            return
+        if self.estado in ("sonho", "sonho_ligas"):
+            self._sonho_update(dt)
             return
         if self.estado == "carreira_escolha":
             self.ecra_carreira.update(dt)
@@ -2256,6 +2267,8 @@ class Game(OnlineMixin, FaltasMixin, FintasMixin, DoisJogadoresMixin, RepeticaoM
             self.ecra_conta.draw()
         elif self.estado == "conquistas":
             self.ecra_conquistas.draw()
+        elif self.estado in ("sonho", "sonho_ligas"):
+            self._sonho_draw()
         elif self.estado == "carreira_escolha":
             self.ecra_carreira.draw()
         elif self.estado == "teste_escolha":
@@ -2295,7 +2308,7 @@ class Game(OnlineMixin, FaltasMixin, FintasMixin, DoisJogadoresMixin, RepeticaoM
         ecras = {"menu_principal": "menu_principal", "menu_selecao": "menu", "carreira_escolha": "ecra_carreira",
                  "carreira": "ecra_campeonato", "cj_criar": "ecra_cj_criar", "cj": "ecra_cj",
                  "controlos": "ecra_controlos", "online": "ecra_online", "teste_escolha": "ecra_teste",
-                 "conta": "ecra_conta"}
+                 "conta": "ecra_conta", "sonho": "ecra_sonho", "sonho_ligas": "ecra_sonho_ligas"}
         obj = getattr(self, ecras.get(self.estado, ""), None)
         return (self.estado, id(obj), self.pausado, self.fim_jogo, self.remate_pov is not None)
 

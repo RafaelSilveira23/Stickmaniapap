@@ -243,18 +243,22 @@ class MenuPrincipal:
         self.arena = arena
         bw, x = 460, WIDTH // 2 - 230
         self.engrenagem = BotaoEngrenagem((WIDTH - 50, 48))
+        # Seis modos (54 px de altura, um a cada 58 px) e o SAIR por baixo
+        modos = [
+            ("JOGO RÁPIDO", "Escolhe dois clubes e joga uma partida", "jogar", (40, 190, 100), "jogar"),
+            ("JOGAR ONLINE", "Jogo aleatório ou sala privada com um amigo", "online", (40, 200, 210), "globo"),
+            ("MODO CARREIRA", "Duas divisões, Taça Europeia e subidas de divisão", "carreira", (255, 175, 40),
+             "trofeu"),
+            ("CARREIRA DE JOGADOR", "Cria o teu jogador e joga só com ele", "carreira_jogador", (255, 110, 160),
+             "jogador"),
+            ("EQUIPA DE SONHO", "Fantasy online com os jogos reais do campeonato", "sonho",
+             (255, 205, 60), "estrela"),
+            ("MODO TESTE", "Tutorial com missões e treinos de remates, passes e fintas", "teste", (80, 170, 255),
+             "alvo"),
+        ]
         self.lista = ListaBotoes([
-            BotaoMenu((x, 242, bw, 60), "JOGO RÁPIDO", "Escolhe dois clubes e joga uma partida",
-                      "jogar", (40, 190, 100), "jogar"),
-            BotaoMenu((x, 310, bw, 60), "JOGAR ONLINE", "Jogo aleatório ou sala privada com um amigo",
-                      "online", (40, 200, 210), "globo"),
-            BotaoMenu((x, 378, bw, 60), "MODO CARREIRA", "Duas divisões, Taça Europeia e subidas de divisão",
-                      "carreira", (255, 175, 40), "trofeu"),
-            BotaoMenu((x, 446, bw, 60), "CARREIRA DE JOGADOR", "Cria o teu jogador e joga só com ele",
-                      "carreira_jogador", (255, 110, 160), "jogador"),
-            BotaoMenu((x, 514, bw, 60), "MODO TESTE", "Tutorial com missões e treinos de remates, passes e fintas",
-                      "teste", (80, 170, 255), "alvo"),
-            BotaoMenu((x + 90, 584, bw - 180, 44), "SAIR", "", "sair", (230, 70, 70), "sair", seta=False, tamanho=19),
+            *[BotaoMenu((x, 232 + i * 58, bw, 54), t, d, a, c, ic) for i, (t, d, a, c, ic) in enumerate(modos)],
+            BotaoMenu((x + 90, 584, bw - 180, 42), "SAIR", "", "sair", (230, 70, 70), "sair", seta=False, tamanho=19),
             self.engrenagem,
         ])
         # Posição final de cada botão (entram a deslizar, um a seguir ao outro, quando o menu abre)
@@ -385,7 +389,7 @@ class MenuPrincipal:
             self.lista.draw(s)
 
         texto(s, "↑ ↓  escolher     ENTER  confirmar", 12, (120, 145, 195),
-              (WIDTH // 2, 652), negrito=False)
+              (WIDTH // 2, 648), negrito=False)
         # Rodapé
         pygame.draw.line(s, (40, 60, 105), (WIDTH // 2 - 220, HEIGHT - 42), (WIDTH // 2 + 220, HEIGHT - 42), 1)
         texto(s, "Projeto PAP  •  Vasco Andreia e Rafael Silveira  •  2026/2027", 13, (110, 130, 175),

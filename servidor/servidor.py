@@ -10,6 +10,8 @@ Faz quatro coisas:
      simula nada: quem simula o jogo é o anfitrião, como no modo online por endereço);
   5. contas (contas.py): entrar com alcunha e palavra-passe, guardar o progresso das carreiras
      na nuvem, ranking dos jogos online e desafios a um amigo pela alcunha;
+  7. EQUIPA DE SONHO (liga_fantasy.py): ligas privadas de fantasia com os jogos reais do
+     campeonato, lidos do portal da Federação (fpp.py);
   6. voltar a ligar: se a internet de um jogador cai a meio da partida, o jogo fica guardado
      ESPERA_RETOMAR segundos. Cada jogador recebe uma chave secreta quando é emparelhado; um jogo
      que volta a ligar com essa chave ("retomar") volta para o mesmo jogo, no lugar da ligação antiga.
@@ -34,6 +36,7 @@ from websockets.asyncio.server import serve
 from websockets.exceptions import ConnectionClosed
 
 from contas import BaseDados, Contas, ErroConta, TIPOS_SAVE
+from liga_fantasy import LigaFantasy, ErroLiga
 
 VERSAO = 5                  # tem de ser igual à VERSAO do jogo (jogo/multijogador/rede.py)
 LETRAS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"     # sem O/0 e I/1, que se confundem
@@ -81,6 +84,7 @@ class Servidor:
         self.retomas = {}            # chave secreta -> cliente que está no jogo com essa chave
         self.inicio = time.time()
         self.contas = None           # fica None se a base de dados não abrir (o online continua)
+        self.fantasy = None          # Equipa de Sonho (liga_fantasy.py), com a mesma base de dados
 
     # ------------------------------------------------------------------ contagens
     def contagem(self) -> dict:
@@ -241,7 +245,7 @@ class Servidor:
         elif t == "sair_jogo":
             await self.sair_do_jogo(c)
         elif isinstance(t, str) and t.startswith(("conta_", "nuvem_", "ranking", "historico", "resultado",
-                                                  "desafiar", "aceitar", "recusar")):
+                                                  "desafiar", "aceitar", "recusar", "fantasy_")):
             await self.mensagem_conta(c, t, msg)
 
     # ------------------------------------------------------------------ contas (contas.py)
@@ -311,11 +315,48 @@ class Servidor:
                 await resposta({})
             elif t in ("aceitar", "recusar"):
                 await self._responder_desafio(c, str(msg.get("de", "")), t == "aceitar")
-        except ErroConta as e:
+            elif t.startswith("fantasy_"):
+                await resposta(await self._fantasy(c, t, msg))
+        except (ErroConta, ErroLiga) as e:
             await erro(str(e))
         except Exception:
             log.exception("erro nas contas")
             await erro("Houve um problema no servidor. Tenta outra vez.")
+
+    # ------------------------------------------------------------------ Equipa de Sonho (liga_fantasy.py)
+    async def _fantasy(self, c: Cliente, t: str, msg: dict) -> dict:
+        f = self.fantasy
+        if f is None:
+            raise ErroLiga("A Equipa de Sonho não está disponível neste momento.")
+        if f.precisa_atualizar():
+            asyncio.create_task(f.atualizar_fpp())     # em fundo: o jogo não fica à espera da FPP
+        eu = c.conta_id
+        liga = int(msg.get("liga", 0) or 0)
+        fed = int(msg.get("fed", 0) or 0)
+        if t == "fantasy_ligas":
+            return {"ligas": await f.minhas_ligas(eu), "a_atualizar": f.a_atualizar()}
+        if t == "fantasy_criar":
+            return {"liga": dict(await f.criar_liga(eu, str(msg.get("nome", ""))))}
+        if t == "fantasy_entrar":
+            return {"liga": dict(await f.entrar_liga(eu, str(msg.get("codigo", ""))))}
+        if t == "fantasy_estado":
+            return {"estado": await f.estado(liga, eu)}
+        if t == "fantasy_jogador":
+            return {"jogador": await f.jogador(fed)}
+        acoes = {
+            "fantasy_titular": lambda: f.titular(liga, eu, fed),
+            "fantasy_licitar": lambda: f.licitar(liga, eu, fed, int(msg.get("valor", 0))),
+            "fantasy_retirar": lambda: f.retirar(liga, eu, fed),
+            "fantasy_vender": lambda: f.vender(liga, eu, fed),
+            "fantasy_subir_clausula": lambda: f.subir_clausula(liga, eu, fed),
+            "fantasy_pagar_clausula": lambda: f.pagar_clausula(liga, eu, fed),
+            "fantasy_propor": lambda: f.propor(liga, eu, fed, int(msg.get("valor", 0))),
+            "fantasy_responder": lambda: f.responder(liga, eu, int(msg.get("proposta", 0)), bool(msg.get("aceitar"))),
+        }
+        if t not in acoes:
+            raise ErroLiga("Pedido desconhecido.")
+        texto = await acoes[t]()
+        return {"mensagem": texto, "estado": await f.estado(liga, eu)}
 
     def _entrou(self, c: Cliente, perfil: dict):
         c.conta_id, c.alcunha = perfil["id"], perfil["alcunha"]
@@ -417,6 +458,10 @@ async def main():
         bd = BaseDados()
         await bd.abrir()
         servidor.contas = Contas(bd)
+        servidor.fantasy = LigaFantasy(bd, ler_fpp=os.environ.get("STICKMANIA_SEM_FPP") != "1")
+        await servidor.fantasy.criar_tabelas()
+        if servidor.fantasy.ler_fpp:
+            asyncio.create_task(servidor.fantasy.atualizar_fpp(forcar=True))   # jogos reais da FPP
         log.info("contas: %s", "Postgres" if bd.pg else "SQLite " + bd.ficheiro)
     except Exception:
         log.exception("as contas não estão disponíveis (o jogo online continua a funcionar)")

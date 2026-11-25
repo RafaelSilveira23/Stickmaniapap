@@ -62,6 +62,8 @@ DONO_32 = {
     "Imagem nítida em ecrãs com zoom": R,
     "Tutorial obrigatório para contas novas": R,
     "Conquistas": V,
+    "Equipa de Sonho": V, "Jogos reais da Federação": V, "Pontos de cada jogador": V,
+    "Ligas, mercado e cláusulas": V, "Cinco de cada jornada": V,
     "Voltar a ligar no jogo online": R, "Desafios que não chegavam": R,
     "Gráficos": R,
     "Sons": V, "Sons no jogo": V, "Cânticos dos clubes": V, "Cânticos no jogo": V,
@@ -92,6 +94,7 @@ DONO_34 = {
     "Porquê SQLite": V, "Regras do modo carreira": V, "Porquê eliminatórias de um só jogo": V, "Porquê sons sintetizados": V, "Porquê cânticos feitos por código": V, "Flash branco no remate": R,
     "Quatro jogadores de campo": V, "Afinar a simulação com dados": V,
     "Porquê um anfitrião com autoridade": R, "Porquê uma aplicação com um servidor próprio": R, "Quem decide a stickada no online": R,
+    "Dados reais sem uma API": V,
 }
 
 # Tabela da divisão de tarefas (secção 5.4)
@@ -101,6 +104,8 @@ DIVISAO = [
     ("Sons e cânticos dos clubes", "sons.py, canticos.py", V),
     ("Base de dados (SQLite)", "carreira.py, carreira_jogador.py (parte da base de dados)", V),
     ("Carreira de jogador e vida do jogador", "carreira_jogador.py, carreira_jogador_menu.py, vida.py", V),
+    ("Equipa de Sonho (fantasy online com os jogos reais da Federação)",
+     "sonho_menu.py, servidor/fpp.py, servidor/liga_fantasy.py", V),
     ("Remate na primeira pessoa e modo teste", "remate_pov.py, pavilhao_pov.py", R),
     ("Física da bola e dos jogadores, regras", "ball.py, player.py, baliza.py", R),
     ("Fintas, guarda-redes (movimento e estiradas), comando e dois jogadores",
@@ -123,8 +128,8 @@ QUEM = {V: "Vasco Andreia", R: "Rafael da Hora Silveira", C: "Os dois"}
 # O que cada um fez, em poucas palavras (para a secção 3.2.1)
 LISTA = {
     V: "a inteligência artificial dos jogadores, o modo carreira com a base de dados, os menus e a "
-       "interface com as estatísticas da partida e o tutorial, os sons e os cânticos dos clubes e a carreira de jogador "
-       "com a vida do jogador",
+       "interface com as estatísticas da partida e o tutorial, os sons e os cânticos dos clubes, a carreira de jogador "
+       "com a vida do jogador e o modo Equipa de Sonho",
     R: "a física da bola e dos jogadores, as faltas e os cartões, as fintas, o guarda-redes, os gráficos "
        "com a câmara em perspetiva, o estilo arcade, o remate na primeira pessoa com o modo teste, o comando, "
        "o jogo online com o servidor do jogo e a aplicação para Windows com o instalador",
@@ -189,13 +194,16 @@ RESUMO = {
          "em cada jogo e propostas de outros clubes no fim. Fora do rinque tem uma vida (vida.py): forma, "
          "moral, confiança do treinador, fama, estudos e dinheiro, eventos com escolhas e consequências, "
          "pessoas com quem se relaciona e conquistas."),
+        ("Equipa de Sonho.", "Um jogo de fantasia online: os jogadores reais do campeonato ganham pontos "
+         "com os jogos verdadeiros, lidos do portal da Federação pelo servidor (fpp.py). Em ligas privadas entre "
+         "amigos há leilões diários com ofertas secretas, cláusulas e propostas (liga_fantasy.py e sonho_menu.py)."),
     ],
 }
 
 CONTRIBUTO = {
     V: "No StickMania, o Vasco Andreia programou a inteligência artificial dos jogadores, a base de "
-       "dados, os menus e a interface com o tutorial, os sons e os cânticos dos clubes e a carreira de jogador com a vida "
-       "do jogador. Nestas partes, as maiores dificuldades foram pôr a IA a jogar de forma credível sem ser "
+       "dados, os menus e a interface com o tutorial, os sons e os cânticos dos clubes, a carreira de jogador com a vida "
+       "do jogador e o modo Equipa de Sonho. Nestas partes, as maiores dificuldades foram pôr a IA a jogar de forma credível sem ser "
        "perfeita, simular os jogos do campeonato com resultados realistas e criar os sons e os cânticos só "
        "com o código. O ciclo principal do jogo, a análise, os testes e o relatório foram feitos em conjunto "
        "com o Rafael da Hora Silveira.",
